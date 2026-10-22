@@ -31,7 +31,7 @@
   var els = {
     titlebar: $("titlebar"), scroller: $("scroller"),
     meta: $("meta"), addBtn: $("add-btn"), menuBtn: $("menu-btn"), menu: $("menu"),
-    banner: $("banner"), bannerText: $("banner-text"), bannerClose: $("banner-close"),
+    banner: $("banner"), bannerText: $("banner-text"), bannerAction: $("banner-action"), bannerClose: $("banner-close"),
     editorSlot: $("editor-slot"), editor: $("editor"), editorTitle: $("editor-title"),
     fTitle: $("f-title"), fCat: $("f-cat"), fText: $("f-text"), fFiles: $("f-files"),
     saveBtn: $("save-btn"), cancelBtn: $("cancel-btn"), formMsg: $("form-msg"),
@@ -127,8 +127,13 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { els.toast.classList.remove("show"); }, long ? 5200 : 2400);
   }
-  function showBanner(text) {
+  // action: optional { label, close, onclick } for a button next to the text.
+  function showBanner(text, action) {
     els.bannerText.textContent = text;
+    els.bannerAction.hidden = !action;
+    els.bannerAction.textContent = action ? action.label : "";
+    els.bannerAction.onclick = action ? action.onclick : null;
+    els.bannerClose.textContent = (action && action.close) || "Понятно";
     els.banner.hidden = false;
   }
 
@@ -751,6 +756,25 @@
         render();
         if (r.added) toast("Добавлено: " + r.added + " " + plural(r.added, "промт", "промта", "промтов") + (r.skipped ? ". Уже были в таблице: " + r.skipped : ""), true);
         else toast("Новых промтов в файле нет: все уже есть в таблице", true);
+      });
+    } else if (a === "check-updates") {
+      call(api.checkUpdates()).then(function (r) { if (r) toast("Проверяю обновления…"); });
+    }
+  });
+
+  /* ---------- updates ---------- */
+  api.onUpdate(function (u) {
+    if (u.kind === "downloading") toast("Вышла версия " + u.version + ", скачиваю её…", true);
+    else if (u.kind === "latest") toast("У вас последняя версия", true);
+    else if (u.kind === "error") toast("Не получилось проверить обновления. Проверьте интернет.", true);
+    else if (u.kind === "ready") {
+      showBanner("Скачана новая версия Snowball.ai " + u.version + ". Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.", {
+        label: "Перезапустить и обновить",
+        close: "Позже",
+        onclick: function () {
+          if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
+          call(api.installUpdate());
+        }
       });
     }
   });

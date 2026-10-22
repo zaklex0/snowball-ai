@@ -28,7 +28,7 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
             Добавить промт
           </button>
-          <button type="button" class="btn btn-ghost btn-icon" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Папка, сохранение в файл, тема">
+          <button type="button" class="btn btn-ghost btn-icon" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Папка, сохранение в файл, тема, обновления">
             <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
             <span class="sr-only">Меню</span>
           </button>
@@ -69,12 +69,18 @@
                 <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
               </button>
             </div>
+            <hr>
+            <button type="button" role="menuitem" data-action="check-updates">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4.5h-4.5"/></svg>
+              Проверить обновления
+            </button>
           </div>
         </div>
       </header>
 
       <div class="banner" id="banner" role="status" hidden>
         <p id="banner-text"></p>
+        <button type="button" class="btn-mini" id="banner-action" hidden></button>
         <button type="button" class="link-btn" id="banner-close">Понятно</button>
       </div>
 

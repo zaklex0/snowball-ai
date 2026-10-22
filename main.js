@@ -215,6 +215,30 @@ function createWindow() {
   win.on('closed', () => { win = null; });
 }
 
+/* ---------- updates ---------- */
+// The installed program checks GitHub Releases on start and every few hours. A new version is
+// downloaded in the background and installed on restart, or when the program is closed.
+let updater = null;
+let updateReady = null;   // version that is downloaded and waits for a restart
+let manualCheck = false;  // the user asked from the menu, so report "no update" and errors too
+
+function sendUpdate(u) { if (win && !win.isDestroyed()) win.webContents.send('update', u); }
+
+function checkUpdates() { updater.checkForUpdates().catch(() => { /* reported by the 'error' event */ }); }
+
+function setupUpdates() {
+  if (!app.isPackaged) return;
+  updater = require('electron-updater').autoUpdater;
+  updater.autoDownload = true;
+  updater.autoInstallOnAppQuit = true;
+  updater.on('update-available', (i) => { if (manualCheck) sendUpdate({ kind: 'downloading', version: i.version }); });
+  updater.on('update-not-available', () => { if (manualCheck) sendUpdate({ kind: 'latest' }); manualCheck = false; });
+  updater.on('update-downloaded', (i) => { updateReady = i.version; manualCheck = false; sendUpdate({ kind: 'ready', version: i.version }); });
+  updater.on('error', (e) => { console.error('update', e); if (manualCheck) sendUpdate({ kind: 'error' }); manualCheck = false; });
+  setTimeout(checkUpdates, 10 * 1000);
+  setInterval(checkUpdates, 4 * 60 * 60 * 1000);
+}
+
 nativeTheme.on('updated', () => {
   if (!win || win.isDestroyed()) return;
   win.setBackgroundColor(bgColor());
@@ -301,6 +325,21 @@ handle('set-theme', async (theme) => {
   applyTheme();
   saveSettings();
   return { ok: true, info: info() };
+});
+
+handle('check-updates', async () => {
+  if (!updater) return { ok: false, error: 'Обновления проверяются только в установленной программе.' };
+  if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady }); return { ok: true }; }
+  manualCheck = true;
+  checkUpdates();
+  return { ok: true };
+});
+
+handle('install-update', async () => {
+  if (!updater || !updateReady) return { ok: false, error: 'Обновление ещё не скачано.' };
+  saveSettings(true);
+  setImmediate(() => updater.quitAndInstall(true, true));
+  return { ok: true };
 });
 
 handle('open-data-dir', async () => {
@@ -390,6 +429,7 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     createWindow();
+    setupUpdates();
   });
 
   app.on('before-quit', () => saveSettings(true));

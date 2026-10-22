@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('vsApi', {
   showFile: (promptId, fileId) => ipcRenderer.invoke('show-file', promptId, fileId),
   copyText: (text) => ipcRenderer.invoke('copy-text', text),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
+  checkUpdates: () => ipcRenderer.invoke('check-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
   changeDataDir: () => ipcRenderer.invoke('change-data-dir'),
   exportJson: () => ipcRenderer.invoke('export'),
@@ -23,5 +25,10 @@ contextBridge.exposeInMainWorld('vsApi', {
     const listener = (_e, prompts) => fn(prompts);
     ipcRenderer.on('data-changed', listener);
     return () => ipcRenderer.removeListener('data-changed', listener);
+  },
+  onUpdate: (fn) => {
+    const listener = (_e, u) => fn(u);
+    ipcRenderer.on('update', listener);
+    return () => ipcRenderer.removeListener('update', listener);
   }
 });

@@ -185,6 +185,8 @@ h1 .brand { color: var(--accent-strong); }
   border-radius: 14px; padding: 12px 14px; font-size: 14px;
 }
 .banner p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.banner .btn-mini { flex: none; background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.banner .btn-mini:hover { background: var(--accent-hover); border-color: transparent; }
 
 /* Editor */
 .editor {
