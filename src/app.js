@@ -662,6 +662,7 @@
       els.dirLine.replaceChildren("Промты и файлы хранятся в папке ", h("code", { text: state.info.dataDir }), " ",
         h("button", { type: "button", class: "link-btn", onclick: function () { call(api.openDataDir()); } }, "Открыть"),
         state.info.version ? " · Версия " + state.info.version : "");
+      markTheme(state.info.theme);
     }
 
     if (loading) {
@@ -710,6 +711,17 @@
     if (e.key === "Escape") { e.preventDefault(); setMenu(false); els.menuBtn.focus(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+  function markTheme(theme) {
+    els.menu.querySelectorAll("button[data-theme]").forEach(function (b) {
+      b.setAttribute("aria-checked", String(b.dataset.theme === (theme || "system")));
+    });
+  }
+  // Theme items keep the menu open, so the change can be seen right away.
+  els.menu.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-theme]");
+    if (!b) return;
+    call(api.setTheme(b.dataset.theme)).then(function (r) { if (r) markTheme(r.info.theme); });
   });
   els.menu.addEventListener("click", function (e) {
     var b = e.target.closest("button[data-action]");

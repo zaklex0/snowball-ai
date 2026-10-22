@@ -10,6 +10,7 @@ const APP_TITLE = 'Snowball.ai';
 const LEGACY_TITLES = ['Промты Snowball.ai', 'Промты VideoSmile'];
 const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 36;
+const THEMES = ['system', 'light', 'dark'];
 
 // The first prompt saved in the web version, carried over on first launch.
 const SEED = () => [{
@@ -119,6 +120,11 @@ async function openStore() {
 }
 
 /* ---------- window ---------- */
+// 'system' follows Windows; the page's prefers-color-scheme and the title bar follow this too.
+function applyTheme() {
+  nativeTheme.themeSource = THEMES.includes(settings.theme) ? settings.theme : 'system';
+}
+
 function overlayColors() {
   return nativeTheme.shouldUseDarkColors
     ? { color: '#2C201B', symbolColor: '#F5E6DC', height: TITLEBAR_HEIGHT }
@@ -232,7 +238,7 @@ function handle(name, fn) {
   });
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion() };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: nativeTheme.themeSource };
 }
 
 handle('load', async () => {
@@ -288,6 +294,14 @@ handle('show-file', async (promptId, fileId) => {
 });
 
 handle('copy-text', async (text) => { clipboard.writeText(String(text || '')); return { ok: true }; });
+
+handle('set-theme', async (theme) => {
+  if (!THEMES.includes(theme)) return { ok: false, error: 'Такой темы нет.' };
+  settings.theme = theme;
+  applyTheme();
+  saveSettings();
+  return { ok: true, info: info() };
+});
 
 handle('open-data-dir', async () => {
   const err = await shell.openPath(store.dir);
@@ -366,6 +380,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     loadSettings();
+    applyTheme();
     try { await migrateLegacy(); } catch (e) { console.error('migrate', e); }
     try {
       await openStore();

@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   openFile: (promptId, fileId) => ipcRenderer.invoke('open-file', promptId, fileId),
   showFile: (promptId, fileId) => ipcRenderer.invoke('show-file', promptId, fileId),
   copyText: (text) => ipcRenderer.invoke('copy-text', text),
+  setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
   changeDataDir: () => ipcRenderer.invoke('change-data-dir'),
   exportJson: () => ipcRenderer.invoke('export'),

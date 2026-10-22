@@ -173,6 +173,10 @@ h1 .brand { color: var(--accent-strong); }
 .menu button:hover, .menu button:focus-visible { background: var(--surface-2); outline: none; }
 .menu button svg { width: 17px; height: 17px; color: var(--ink-soft); flex: none; }
 .menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+.menu [role="group"] { display: grid; gap: 2px; }
+.menu-label { padding: 4px 11px 2px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+.menu button .tick { margin-left: auto; color: var(--accent-strong); visibility: hidden; }
+.menu button[aria-checked="true"] .tick { visibility: visible; }
 
 /* Banner */
 .banner {
