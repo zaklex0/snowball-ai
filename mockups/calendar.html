@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет календаря — Snowball.ai</title>
+<!-- A mockup only: the real styles of the program plus the calendar parts below. Not loaded by the app. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+  :root {
+    --busy-1: color-mix(in srgb, var(--cat-static-dot) 16%, var(--surface));
+    --busy-2: color-mix(in srgb, var(--cat-static-dot) 32%, var(--surface));
+    --busy-3: color-mix(in srgb, var(--cat-static-dot) 52%, var(--surface));
+    --off-bg: color-mix(in srgb, var(--cat-system-dot) 14%, var(--surface));
+    --holiday-bg: color-mix(in srgb, var(--cat-system-dot) 26%, var(--surface));
+    --off-ink: var(--cat-system-ink);
+    --ev-task: var(--accent); --ev-task-bg: color-mix(in srgb, var(--accent) 26%, var(--surface));
+    --ev-meet: var(--cat-video-dot); --ev-meet-bg: var(--cat-video-bg);
+    --ev-call: #9B6FD0; --ev-call-bg: color-mix(in srgb, #9B6FD0 20%, var(--surface));
+  }
+  .mock-tag { display: inline-flex; gap: 6px; align-items: center; font-size: 12.5px; color: var(--ink-soft); background: var(--surface); border: 1px dashed var(--ink-soft); border-radius: 999px; padding: 3px 10px; }
+
+  .cal { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 1100px) { .cal { grid-template-columns: minmax(0, 1fr); } }
+
+  .month { padding: 18px 18px 16px; display: grid; gap: 12px; }
+  .month-head { display: flex; align-items: center; gap: 8px; }
+  .month-title { flex: 1; margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 22px; letter-spacing: -0.01em; }
+  .icon-btn { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+  .icon-btn:hover { background: var(--surface-2); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+  .wd { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); padding: 0 4px 2px; }
+  .wd.off { color: var(--off-ink); }
+  .day {
+    position: relative; min-height: 92px; padding: 7px 8px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--surface); text-align: left; display: grid; align-content: start; gap: 3px; color: var(--ink);
+    transition: transform .12s, box-shadow .12s;
+  }
+  .day:hover { transform: translateY(-1px); box-shadow: 0 6px 16px -10px rgba(120, 70, 50, .45); }
+  .day .num { font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .day .hol { font-size: 10.5px; line-height: 1.25; color: var(--off-ink); font-weight: 500; }
+  .day .ev { font-size: 11.5px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; gap: 4px; align-items: center; }
+  .day .ev i { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--c); }
+  .day .more { font-size: 11px; color: var(--ink-soft); }
+  .day.other { opacity: .42; }
+  /* weekend or holiday: red; busy: green, the more the deeper; busy weekend/holiday: red with a green frame */
+  .day.off { background: var(--off-bg); border-color: color-mix(in srgb, var(--cat-system-dot) 30%, var(--line)); }
+  .day.off .num { color: var(--off-ink); }
+  .day.holiday { background: var(--holiday-bg); }
+  .day.b1 { background: var(--busy-1); }
+  .day.b2 { background: var(--busy-2); }
+  .day.b3 { background: var(--busy-3); }
+  .day.off.b1, .day.off.b2, .day.off.b3 { background: var(--off-bg); }
+  .day.holiday.b1, .day.holiday.b2, .day.holiday.b3 { background: var(--holiday-bg); }
+  .day.off.b1 { border: 2px solid var(--busy-2); }
+  .day.off.b2 { border: 2px solid var(--busy-3); }
+  .day.off.b3 { border: 3px solid var(--cat-static-dot); }
+  .day.today .num { display: inline-grid; place-items: center; width: 24px; height: 24px; margin: -2px 0 0 -3px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+  .day.sel { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+
+  .legend2 { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12.5px; color: var(--ink-soft); }
+  .legend2 span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend2 i { width: 16px; height: 16px; border-radius: 5px; display: block; border: 1px solid var(--line); }
+
+  .dayp { padding: 18px; display: grid; gap: 14px; position: sticky; top: 14px; }
+  .dayp-head { display: flex; align-items: flex-start; gap: 10px; }
+  .dayp-title { flex: 1; margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 19px; letter-spacing: -0.01em; }
+  .dayp-sub { margin: 2px 0 0; font-size: 13px; color: var(--ink-soft); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; border-radius: 999px; padding: 3px 10px; background: var(--cat-system-bg); color: var(--cat-system-ink); }
+  .timeline { position: relative; display: grid; max-height: 520px; overflow-y: auto; padding-right: 4px; }
+  .hour { display: grid; grid-template-columns: 46px 1fr; min-height: 46px; border-top: 1px solid var(--line); }
+  .hour .t { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; padding-top: 3px; }
+  .hour .slot { position: relative; padding: 4px 0; display: grid; gap: 4px; cursor: pointer; border-radius: 8px; }
+  .hour .slot:hover { background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+  .hour .slot:hover::after { content: "+ дело на это время"; position: absolute; right: 6px; top: 6px; font-size: 11.5px; color: var(--ink-soft); }
+  .hour .slot:has(.evb):hover::after { content: none; }
+  .evb {
+    border-radius: 10px; padding: 7px 10px; background: var(--bg-c); border-left: 4px solid var(--c);
+    display: grid; gap: 2px; cursor: pointer;
+  }
+  .evb:hover { filter: saturate(1.15); }
+  .evb .row1 { display: flex; gap: 8px; align-items: baseline; }
+  .evb .tm { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .evb .ttl { font-size: 14px; font-weight: 500; flex: 1; min-width: 0; }
+  .evb .kind { font-size: 11.5px; color: var(--ink-soft); }
+  .evb .note { font-size: 12.5px; color: var(--ink-soft); }
+  .now-line { position: absolute; left: 46px; right: 0; height: 0; border-top: 2px solid var(--danger); }
+  .now-line::before { content: ""; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--danger); }
+  .t-task { --c: var(--ev-task); --bg-c: var(--ev-task-bg); }
+  .t-meet { --c: var(--ev-meet); --bg-c: var(--ev-meet-bg); }
+  .t-call { --c: var(--ev-call); --bg-c: var(--ev-call-bg); }
+  .empty-day { font-size: 14px; color: var(--ink-soft); margin: 0; }
+
+  .evform { display: grid; gap: 12px; padding: 14px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); }
+  .evform h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .evform .row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .evform .row .field { flex: 1 1 120px; }
+  .kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+  .kinds label { position: relative; }
+  .kinds input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+  .kinds span { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); font-size: 13.5px; background: var(--surface); }
+  .kinds span::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+  .kinds input:checked + span { background: var(--bg-c); border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+  select.input { appearance: auto; }
+
+  .assist { padding: 18px 20px; display: grid; gap: 14px; }
+  .assist .examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .bubble-demo { justify-self: end; }
+  .notes { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink); }
+  .notes b { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar"><img src="../assets/icon.png" alt=""><span>Snowball.ai — макет календаря</span></div>
+  <div class="shell">
+    <nav class="side" aria-label="Разделы">
+      <div class="side-group">
+        <button type="button" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg><span>Промты</span></button>
+        <button type="button" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg><span>Скиллы</span><span class="soon">скоро</span></button>
+        <button type="button" class="nav-item" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Календарь</span></button>
+        <button type="button" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg><span>Ассистент</span></button>
+      </div>
+      <div class="side-group side-bottom">
+        <button type="button" class="nav-item"><span>Статистика</span></button>
+      </div>
+    </nav>
+
+    <main class="scroller">
+      <div class="page">
+        <section class="view">
+          <header class="top">
+            <div class="top-text">
+              <p class="eyebrow">Ваши дела</p>
+              <h1>Календарь</h1>
+              <p class="meta" id="meta"></p>
+            </div>
+            <div class="top-actions">
+              <span class="mock-tag">Это макет: данные выдуманы, ничего не сохраняется</span>
+              <button type="button" class="btn btn-primary" id="add-top">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                Добавить дело
+              </button>
+            </div>
+          </header>
+
+          <div class="cal">
+            <section class="card month" aria-label="Месяц">
+              <div class="month-head">
+                <h2 class="month-title" id="month-title"></h2>
+                <button type="button" class="btn btn-ghost" id="today-btn">Сегодня</button>
+                <button type="button" class="icon-btn" id="prev" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg></button>
+                <button type="button" class="icon-btn" id="next" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg></button>
+              </div>
+              <div class="grid" id="grid"></div>
+              <div class="legend2">
+                <span><i style="background:var(--surface)"></i>Обычный день</span>
+                <span><i style="background:var(--busy-1)"></i><i style="background:var(--busy-2)"></i><i style="background:var(--busy-3)"></i>Есть дела: чем больше, тем ярче</span>
+                <span><i style="background:var(--off-bg)"></i>Выходной</span>
+                <span><i style="background:var(--holiday-bg)"></i>Праздник</span>
+                <span><i style="background:var(--off-bg);border:2px solid var(--busy-3)"></i>Выходной или праздник с делами</span>
+              </div>
+            </section>
+
+            <section class="card dayp" aria-live="polite">
+              <div class="dayp-head">
+                <div style="flex:1">
+                  <h2 class="dayp-title" id="day-title"></h2>
+                  <p class="dayp-sub" id="day-sub"></p>
+                </div>
+                <button type="button" class="btn btn-ghost" id="add-day">+ Дело</button>
+              </div>
+              <div id="day-hol"></div>
+              <form class="evform" id="evform" hidden>
+                <h3 id="evform-title">Новое дело</h3>
+                <div class="field"><label class="field-label" for="ev-title">Что</label><input class="input" id="ev-title" placeholder="Например: созвон с монтажёром"></div>
+                <div class="row">
+                  <div class="field"><label class="field-label" for="ev-date">День</label><input class="input" id="ev-date" type="date"></div>
+                  <div class="field"><label class="field-label" for="ev-from">С</label><input class="input" id="ev-from" type="time" value="15:00"></div>
+                  <div class="field"><label class="field-label" for="ev-to">До</label><input class="input" id="ev-to" type="time" value="15:30"></div>
+                </div>
+                <div class="field"><span class="field-label">Тип</span>
+                  <div class="kinds">
+                    <label class="t-task"><input type="radio" name="kind" value="task" checked><span>Задача</span></label>
+                    <label class="t-meet"><input type="radio" name="kind" value="meet"><span>Встреча</span></label>
+                    <label class="t-call"><input type="radio" name="kind" value="call"><span>Звонок</span></label>
+                  </div>
+                </div>
+                <div class="row">
+                  <div class="field"><label class="field-label" for="ev-remind">Напомнить</label>
+                    <select class="input" id="ev-remind"><option>Не напоминать</option><option selected>За 15 минут</option><option>За 30 минут</option><option>За час</option><option>За день</option></select>
+                  </div>
+                </div>
+                <div class="field"><label class="field-label" for="ev-note">Заметка</label><textarea class="textarea textarea-note" id="ev-note" rows="2" placeholder="Ссылка на созвон, что обсудить"></textarea></div>
+                <div class="editor-actions">
+                  <button type="submit" class="btn btn-primary">Сохранить</button>
+                  <button type="button" class="btn btn-ghost" id="ev-cancel">Отмена</button>
+                  <button type="button" class="link-btn danger" id="ev-del" hidden>Удалить дело</button>
+                </div>
+              </form>
+              <div class="timeline" id="timeline"></div>
+            </section>
+          </div>
+
+          <section class="card assist" aria-labelledby="as-title">
+            <h2 class="card-title" id="as-title">Ассистент и календарь</h2>
+            <p class="set-text">В чате можно попросить: «поставь созвон с монтажёром на 3 марта в 15:00» или «удали съёмку в четверг». Ассистент видит календарь, но ничего не меняет сам: он показывает карточку, и дело добавится или удалится только после вашей кнопки.</p>
+            <div class="examples">
+              <div class="msg-main" style="flex:none">
+                <div class="rt"><p>Записал бы так. Проверьте и нажмите <strong>«Добавить»</strong>:</p></div>
+                <div class="act-card">
+                  <div class="act-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;color:var(--accent-strong)"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Добавить в календарь «Созвон с монтажёром»?</span></div>
+                  <div class="act-meta"><span class="chip t-call" style="--chip-bg:var(--ev-call-bg);--chip-ink:var(--ink);--dot:var(--ev-call)">Звонок</span></div>
+                  <div class="act-text" style="font-family:var(--font-body)">Вторник, 3 марта · 15:00–15:30 · напомнить за 15 минут</div>
+                  <div class="act-buttons"><button type="button" class="btn btn-primary">Добавить</button><button type="button" class="btn btn-ghost">Отмена</button></div>
+                </div>
+              </div>
+              <div class="msg-main" style="flex:none">
+                <div class="rt"><p>В четверг, 5 марта, у вас одна съёмка. Удалить её?</p></div>
+                <div class="act-card">
+                  <div class="act-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;color:var(--danger)"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg><span>Удалить из календаря «Съёмка рилс»?</span></div>
+                  <div class="act-text" style="font-family:var(--font-body)">Четверг, 5 марта · 10:00–12:00</div>
+                  <div class="act-buttons"><button type="button" class="btn btn-primary" style="background:var(--danger);color:#fff">Удалить</button><button type="button" class="btn btn-ghost">Отмена</button></div>
+                </div>
+              </div>
+            </div>
+            <ul class="notes">
+              <li><b>Добавить и удалить</b> ассистент может только через такие карточки. Посмотреть, что стоит на день или неделю, он может и без подтверждения.</li>
+              <li><b>Напоминания</b>: перед делом Windows покажет уведомление, как об ответах ассистента. Работает, пока программа открыта (можно свёрнутой).</li>
+              <li><b>Праздники</b> — официальные выходные дни России, вместе с переносами.</li>
+            </ul>
+          </section>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  var MONTHS_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+  var WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+  var KINDS = { task: "Задача", meet: "Встреча", call: "Звонок" };
+  // Official days off in Russia, 2026 (holidays and moved days off). The real calendar will carry every year.
+  var HOLIDAYS = {
+    "2026-01-01": "Новогодние каникулы", "2026-01-02": "Новогодние каникулы", "2026-01-03": "Новогодние каникулы", "2026-01-04": "Новогодние каникулы",
+    "2026-01-05": "Новогодние каникулы", "2026-01-06": "Новогодние каникулы", "2026-01-07": "Рождество", "2026-01-08": "Новогодние каникулы",
+    "2026-01-09": "Перенесённый выходной", "2026-02-23": "День защитника Отечества", "2026-03-08": "Международный женский день",
+    "2026-03-09": "Перенесённый выходной", "2026-05-01": "Праздник Весны и Труда", "2026-05-09": "День Победы", "2026-05-11": "Перенесённый выходной",
+    "2026-06-12": "День России", "2026-11-04": "День народного единства", "2026-12-31": "Перенесённый выходной"
+  };
+  var TODAY = new Date(2026, 9, 23);
+  var ev = function (d, from, to, title, kind, note) { return { d: d, from: from, to: to, title: title, kind: kind, note: note || "" }; };
+  var EVENTS = [
+    ev("2026-10-23", "11:00", "12:00", "Записать урок по Seedance", "task"),
+    ev("2026-10-23", "18:00", "18:30", "Созвон с Аней", "call"),
+    ev("2026-10-24", "12:00", "14:00", "Съёмка для портфолио", "task"),
+    ev("2026-10-28", "10:00", "11:00", "Планёрка", "meet"),
+    ev("2026-11-02", "10:00", "12:00", "Съёмка рилс", "task"),
+    ev("2026-11-03", "10:00", "11:00", "Встреча с заказчиком", "meet", "Обсудить ролик для запуска курса"),
+    ev("2026-11-03", "13:00", "14:00", "Записать урок по Seedance", "task"),
+    ev("2026-11-03", "15:00", "15:30", "Созвон с монтажёром", "call", "Ссылка в Telegram"),
+    ev("2026-11-03", "19:00", "19:30", "Отправить промты ученикам", "task"),
+    ev("2026-11-04", "13:00", "15:00", "Семейный обед", "meet"),
+    ev("2026-11-07", "11:00", "13:00", "Съёмка на природе", "task"),
+    ev("2026-11-07", "16:00", "16:20", "Позвонить маме", "call"),
+    ev("2026-11-10", "12:00", "13:00", "Разбор работ учеников", "meet"),
+    ev("2026-11-12", "10:00", "11:00", "Сдать превью", "task"),
+    ev("2026-11-12", "17:00", "17:30", "Созвон с дизайнером", "call"),
+    ev("2026-11-17", "09:30", "10:00", "Планёрка", "meet"),
+    ev("2026-11-17", "11:00", "13:00", "Монтаж выпуска", "task"),
+    ev("2026-11-17", "15:00", "15:15", "Звонок в банк", "call"),
+    ev("2026-11-21", "12:00", "13:00", "Стрим с ответами", "meet"),
+    ev("2026-11-26", "10:00", "11:00", "Встреча с командой", "meet"),
+    ev("2026-11-26", "12:00", "13:00", "Промты для рекламы", "task"),
+    ev("2026-11-26", "14:00", "14:30", "Созвон с клиентом", "call"),
+    ev("2026-11-26", "16:00", "17:00", "Записать урок", "task"),
+    ev("2026-11-26", "19:00", "20:00", "Вебинар", "meet")
+  ];
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+  var key = function (d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+  var parse = function (k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); };
+  var view = new Date(2026, 10, 1);
+  var selected = "2026-11-03";
+  var editing = null;
+  var $ = function (id) { return document.getElementById(id); };
+  function h(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+  function eventsOf(k) { return EVENTS.filter(function (e) { return e.d === k; }).sort(function (a, b) { return a.from.localeCompare(b.from); }); }
+  function isOff(d) { var w = (d.getDay() + 6) % 7; return w >= 5 || !!HOLIDAYS[key(d)]; }
+  function busyLevel(n) { return n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : 3; }
+  function plural(n, a, b, c) { var m = n % 10, mm = n % 100; return m === 1 && mm !== 11 ? a : m >= 2 && m <= 4 && (mm < 12 || mm > 14) ? b : c; }
+
+  function renderMonth() {
+    $("month-title").textContent = MONTHS[view.getMonth()] + " " + view.getFullYear();
+    var g = $("grid");
+    g.replaceChildren();
+    ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].forEach(function (w, i) { g.append(h("div", "wd" + (i >= 5 ? " off" : ""), w)); });
+    var first = new Date(view.getFullYear(), view.getMonth(), 1);
+    var start = new Date(first); start.setDate(1 - ((first.getDay() + 6) % 7));
+    var count = 0;
+    for (var i = 0; i < 42; i++) {
+      var d = new Date(start); d.setDate(start.getDate() + i);
+      if (i === 35 && d.getMonth() !== view.getMonth()) break;
+      var k = key(d), list = eventsOf(k), hol = HOLIDAYS[k];
+      if (d.getMonth() === view.getMonth()) count += list.length;
+      var cls = "day";
+      if (d.getMonth() !== view.getMonth()) cls += " other";
+      if (isOff(d)) cls += " off";
+      if (hol) cls += " holiday";
+      if (busyLevel(list.length)) cls += " b" + busyLevel(list.length);
+      if (k === key(TODAY)) cls += " today";
+      if (k === selected) cls += " sel";
+      var b = h("button", cls);
+      b.type = "button";
+      b.title = (hol ? hol + ". " : "") + (list.length ? list.length + " " + plural(list.length, "дело", "дела", "дел") : "Свободно");
+      b.append(h("span", "num", String(d.getDate())));
+      if (hol) b.append(h("span", "hol", hol));
+      list.slice(0, hol ? 1 : 2).forEach(function (e) {
+        var r = h("span", "ev t-" + e.kind); r.append(h("i"), document.createTextNode(e.from + " " + e.title)); b.append(r);
+      });
+      var shown = hol ? 1 : 2;
+      if (list.length > shown) b.append(h("span", "more", "ещё " + (list.length - shown)));
+      (function (k) { b.addEventListener("click", function () { selected = k; closeForm(); render(); }); })(k);
+      g.append(b);
+    }
+    $("meta").textContent = count ? "В этом месяце " + count + " " + plural(count, "дело", "дела", "дел") : "В этом месяце дел нет";
+  }
+
+  function renderDay() {
+    var d = parse(selected), list = eventsOf(selected), hol = HOLIDAYS[selected];
+    $("day-title").textContent = WEEKDAYS[(d.getDay() + 6) % 7] + ", " + d.getDate() + " " + MONTHS_GEN[d.getMonth()];
+    $("day-sub").textContent = list.length ? list.length + " " + plural(list.length, "дело", "дела", "дел") : "Свободный день";
+    var holBox = $("day-hol"); holBox.replaceChildren();
+    if (hol) holBox.append(h("span", "badge", hol));
+    else if (isOff(d)) holBox.append(h("span", "badge", "Выходной"));
+    var tl = $("timeline"); tl.replaceChildren();
+    for (var hr = 7; hr <= 23; hr++) {
+      var row = h("div", "hour"), slot = h("div", "slot");
+      row.append(h("span", "t", pad(hr) + ":00"), slot);
+      list.filter(function (e) { return +e.from.slice(0, 2) === hr; }).forEach(function (e) {
+        var bl = h("div", "evb t-" + e.kind), r1 = h("div", "row1");
+        r1.append(h("span", "tm", e.from + "–" + e.to), h("span", "ttl", e.title), h("span", "kind", KINDS[e.kind]));
+        bl.append(r1);
+        if (e.note) bl.append(h("span", "note", e.note));
+        bl.addEventListener("click", function (x) { x.stopPropagation(); openForm(e); });
+        slot.append(bl);
+      });
+      (function (hr) { slot.addEventListener("click", function () { openForm(null, pad(hr) + ":00"); }); })(hr);
+      tl.append(row);
+    }
+    if (selected === key(TODAY)) {
+      var line = h("div", "now-line"); line.style.top = ((14.25 - 7) * 46) + "px"; tl.append(line);
+    }
+  }
+
+  function openForm(e, time) {
+    editing = e;
+    $("evform").hidden = false;
+    $("evform-title").textContent = e ? "Изменить дело" : "Новое дело";
+    $("ev-title").value = e ? e.title : "";
+    $("ev-date").value = e ? e.d : selected;
+    $("ev-from").value = e ? e.from : (time || "15:00");
+    $("ev-to").value = e ? e.to : (time ? pad(+time.slice(0, 2) + 1) + ":00" : "15:30");
+    $("ev-note").value = e ? e.note : "";
+    document.querySelector('input[name="kind"][value="' + (e ? e.kind : "task") + '"]').checked = true;
+    $("ev-del").hidden = !e;
+    $("ev-title").focus();
+  }
+  function closeForm() { $("evform").hidden = true; editing = null; }
+  $("evform").addEventListener("submit", function (x) {
+    x.preventDefault();
+    var t = $("ev-title").value.trim();
+    if (!t) { $("ev-title").focus(); return; }
+    var data = { d: $("ev-date").value || selected, from: $("ev-from").value || "09:00", to: $("ev-to").value || "", title: t,
+      kind: document.querySelector('input[name="kind"]:checked').value, note: $("ev-note").value.trim() };
+    if (editing) Object.assign(editing, data); else EVENTS.push(data);
+    selected = data.d;
+    var nd = parse(selected); view = new Date(nd.getFullYear(), nd.getMonth(), 1);
+    closeForm(); render();
+  });
+  $("ev-cancel").addEventListener("click", closeForm);
+  $("ev-del").addEventListener("click", function () { if (editing) EVENTS.splice(EVENTS.indexOf(editing), 1); closeForm(); render(); });
+  $("add-day").addEventListener("click", function () { openForm(null); });
+  $("add-top").addEventListener("click", function () { openForm(null); });
+  $("prev").addEventListener("click", function () { view = new Date(view.getFullYear(), view.getMonth() - 1, 1); renderMonth(); });
+  $("next").addEventListener("click", function () { view = new Date(view.getFullYear(), view.getMonth() + 1, 1); renderMonth(); });
+  $("today-btn").addEventListener("click", function () { view = new Date(TODAY.getFullYear(), TODAY.getMonth(), 1); selected = key(TODAY); closeForm(); render(); });
+  function render() { renderMonth(); renderDay(); }
+  render();
+})();
+</script>
+</body>
+</html>

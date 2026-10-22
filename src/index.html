@@ -26,9 +26,9 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>
           <span>Скиллы</span><span class="soon">скоро</span>
         </button>
-        <button type="button" class="nav-item" data-page="calendar" title="Календарь — скоро">
+        <button type="button" class="nav-item" data-page="calendar" title="Календарь">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
-          <span>Календарь</span><span class="soon">скоро</span>
+          <span>Календарь</span>
         </button>
         <button type="button" class="nav-item" data-page="assistant" title="Ассистент">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg>
@@ -242,17 +242,77 @@
         <section class="view" id="view-calendar" aria-labelledby="calendar-title" hidden>
           <header class="top">
             <div class="top-text">
-              <p class="eyebrow">Скоро</p>
+              <p class="eyebrow">Ваши дела</p>
               <h1 id="calendar-title">Календарь</h1>
+              <p class="meta" id="cal-meta"></p>
+            </div>
+            <div class="top-actions">
+              <button type="button" class="btn btn-primary" id="cal-add">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Добавить дело
+              </button>
             </div>
           </header>
-          <section class="card">
-            <div class="state">
-              <div class="dots" aria-hidden="true"><i class="cat-static"></i><i class="cat-video"></i><i class="cat-system"></i></div>
-              <h2>Здесь появится календарь</h2>
-              <p>Задачи на день, встречи и звонки. Добавлять их можно будет самому или попросить ассистента.</p>
-            </div>
-          </section>
+
+          <div class="cal">
+            <section class="card cal-month" aria-labelledby="cal-title">
+              <div class="cal-month-head">
+                <h2 class="cal-month-title" id="cal-title"></h2>
+                <button type="button" class="btn btn-ghost" id="cal-today">Сегодня</button>
+                <button type="button" class="cal-icon-btn" id="cal-prev" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+                <button type="button" class="cal-icon-btn" id="cal-next" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+              </div>
+              <div class="cal-grid" id="cal-grid"></div>
+              <div class="cal-legend" aria-hidden="true">
+                <span><i class="lg-free"></i>Обычный день</span>
+                <span><i class="lg-b1"></i><i class="lg-b2"></i><i class="lg-b3"></i>Есть дела: чем больше, тем ярче</span>
+                <span><i class="lg-off"></i>Выходной</span>
+                <span><i class="lg-hol"></i>Праздник</span>
+                <span><i class="lg-offbusy"></i>Выходной или праздник с делами</span>
+              </div>
+            </section>
+
+            <section class="card cal-day" aria-labelledby="cal-day-title">
+              <div class="cal-day-head">
+                <div class="cal-day-text">
+                  <h2 class="cal-day-title" id="cal-day-title"></h2>
+                  <p class="cal-day-sub" id="cal-day-sub"></p>
+                </div>
+                <button type="button" class="btn btn-ghost" id="cal-day-add">+ Дело</button>
+              </div>
+              <div id="cal-day-badge"></div>
+              <form class="cal-form" id="cal-form" novalidate hidden>
+                <h3 id="cal-form-title">Новое дело</h3>
+                <div class="field"><label class="field-label" for="cf-title">Что</label><input class="input" id="cf-title" maxlength="300" autocomplete="off" placeholder="Например: созвон с монтажёром"></div>
+                <div class="cal-form-row">
+                  <div class="field"><label class="field-label" for="cf-date">День</label><input class="input" id="cf-date" type="date"></div>
+                  <div class="field"><label class="field-label" for="cf-from">С</label><input class="input" id="cf-from" type="time"></div>
+                  <div class="field"><label class="field-label" for="cf-to">До</label><input class="input" id="cf-to" type="time"></div>
+                </div>
+                <div class="field"><span class="field-label" id="cf-kind-label">Тип</span>
+                  <div class="cal-kinds" id="cf-kind" role="radiogroup" aria-labelledby="cf-kind-label">
+                    <label class="ev-task"><input type="radio" name="cf-kind" value="task"><span>Задача</span></label>
+                    <label class="ev-meet"><input type="radio" name="cf-kind" value="meet"><span>Встреча</span></label>
+                    <label class="ev-call"><input type="radio" name="cf-kind" value="call"><span>Звонок</span></label>
+                  </div>
+                </div>
+                <div class="field"><label class="field-label" for="cf-remind">Напомнить</label>
+                  <select class="input" id="cf-remind">
+                    <option value="0">Не напоминать</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option><option value="60">За час</option><option value="1440">За день</option>
+                  </select>
+                </div>
+                <div class="field"><label class="field-label" for="cf-note">Заметка</label><textarea class="textarea textarea-note" id="cf-note" rows="2" placeholder="Ссылка на созвон, что обсудить"></textarea></div>
+                <div class="editor-actions">
+                  <button type="submit" class="btn btn-primary" id="cf-save">Сохранить</button>
+                  <button type="button" class="btn btn-ghost" id="cf-cancel">Отмена</button>
+                  <button type="button" class="link-btn danger" id="cf-delete" hidden>Удалить дело</button>
+                  <span class="form-msg" id="cf-msg" role="status"></span>
+                </div>
+              </form>
+              <div class="cal-timeline" id="cal-timeline"></div>
+            </section>
+          </div>
+          <p class="foot cal-foot">Красным отмечены выходные и официальные праздники России. Напоминания приходят уведомлением Windows, пока программа открыта (можно свёрнутой). Ассистент может предложить добавить или удалить дело, но меняет календарь только после вашей кнопки.</p>
         </section>
 
         <section class="view view-chat" id="view-assistant" aria-labelledby="assistant-title" hidden>
@@ -276,7 +336,7 @@
 
           <div class="test-note" id="chat-mode" role="note">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3.5h6M10 3.5v5.5L4.8 18a2 2 0 0 0 1.7 3h11a2 2 0 0 0 1.7-3L14 9V3.5"/><path d="M7.5 15h9"/></svg>
-            <p><b>Тестовый режим: отвечает заглушка, а не Claude.</b> Ответы заготовлены заранее, чтобы посмотреть, как всё будет работать. Карточки «Создать» сохраняют промты по-настоящему. <button type="button" class="link-btn" id="chat-connect">Подключить Claude</button></p>
+            <p><b>Тестовый режим: отвечает заглушка, а не ChatGPT или Claude.</b> Ответы заготовлены заранее, чтобы посмотреть, как всё будет работать. Карточки «Создать» и «Добавить» меняют данные по-настоящему. <button type="button" class="link-btn" id="chat-connect">Подключить ChatGPT или Claude</button></p>
           </div>
 
           <div class="chat-layout">
@@ -327,23 +387,71 @@
               <h1 id="settings-title">Настройки</h1>
             </div>
           </header>
-          <section class="card set-card" aria-labelledby="set-claude-title">
+          <section class="card set-card set-provider" data-provider="openai" aria-labelledby="set-openai-title">
             <div class="set-head">
-              <h2 class="card-title" id="set-claude-title">Ассистент Claude</h2>
-              <span class="set-status" id="set-status"></span>
+              <h2 class="card-title" id="set-openai-title">ChatGPT</h2>
+              <span class="set-status"></span>
             </div>
-            <p class="set-text">Чтобы в «Ассистенте» отвечал настоящий Claude, нужен свой API-ключ Anthropic. Его создают на сайте <b>console.anthropic.com</b> в разделе API Keys. Оплата там отдельная от подписки Claude.ai: деньги списываются за каждый ответ с баланса на сайте. Пока ключа нет, отвечает заглушка.</p>
-            <form class="set-key" id="set-key-form" novalidate>
-              <label class="field-label" for="set-key">API-ключ</label>
+            <p class="set-text">Чтобы в «Ассистенте» отвечал ChatGPT, нужен свой API-ключ OpenAI. Его создают на сайте <b>platform.openai.com</b> в разделе API keys. Оплата там отдельная от подписки ChatGPT Plus: деньги списываются за каждый ответ с баланса в разделе Billing.</p>
+            <form class="set-key" novalidate>
+              <label class="field-label" for="set-key-openai">API-ключ</label>
               <div class="set-key-row">
-                <input class="input" id="set-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
-                <button type="submit" class="btn btn-primary" id="set-check">Проверить ключ</button>
-                <button type="button" class="btn btn-ghost" id="set-delete" hidden>Удалить ключ</button>
+                <input class="input set-key-input" id="set-key-openai" type="password" autocomplete="off" spellcheck="false" placeholder="sk-…" data-placeholder="sk-…">
+                <button type="submit" class="btn btn-primary set-check">Проверить ключ</button>
+                <button type="button" class="btn btn-ghost set-delete" hidden>Удалить ключ</button>
               </div>
-              <span class="form-msg" id="set-msg" role="status"></span>
-              <span class="files-hint">Ключ хранится только на этом компьютере, зашифрованным средствами Windows, отдельно от папки с промтами. В файл с промтами и в другие программы он не попадает.</span>
+              <span class="form-msg set-msg" role="status"></span>
             </form>
-            <p class="files-hint">Модель и глубину размышлений выбирают кнопкой в поле ввода «Ассистента», как в самом Claude.</p>
+            <div class="set-spend" hidden>
+              <p class="set-spend-line"></p>
+              <form class="set-balance" novalidate>
+                <label class="field-label" for="set-bal-openai">Сколько вы положили на счёт, $</label>
+                <div class="set-key-row">
+                  <input class="input set-bal-input" id="set-bal-openai" type="text" inputmode="decimal" autocomplete="off" placeholder="Например, 10">
+                  <button type="submit" class="btn btn-ghost">Запомнить</button>
+                  <a class="btn btn-ghost" href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noopener">Точный баланс на сайте</a>
+                </div>
+                <span class="form-msg set-bal-msg" role="status"></span>
+                <span class="files-hint">Узнать остаток по ключу сервисы не дают, поэтому программа сама считает, сколько стоили её ответы. Это примерная сумма: траты в других программах и на сайте сюда не попадают.</span>
+              </form>
+            </div>
+          </section>
+          <section class="card set-card set-provider" data-provider="anthropic" aria-labelledby="set-anthropic-title">
+            <div class="set-head">
+              <h2 class="card-title" id="set-anthropic-title">Claude</h2>
+              <span class="set-status"></span>
+            </div>
+            <p class="set-text">Чтобы отвечал Claude, нужен свой API-ключ Anthropic. Его создают на сайте <b>console.anthropic.com</b> в разделе API Keys. Оплата там отдельная от подписки Claude.ai.</p>
+            <form class="set-key" novalidate>
+              <label class="field-label" for="set-key-anthropic">API-ключ</label>
+              <div class="set-key-row">
+                <input class="input set-key-input" id="set-key-anthropic" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…" data-placeholder="sk-ant-…">
+                <button type="submit" class="btn btn-primary set-check">Проверить ключ</button>
+                <button type="button" class="btn btn-ghost set-delete" hidden>Удалить ключ</button>
+              </div>
+              <span class="form-msg set-msg" role="status"></span>
+            </form>
+            <div class="set-spend" hidden>
+              <p class="set-spend-line"></p>
+              <form class="set-balance" novalidate>
+                <label class="field-label" for="set-bal-anthropic">Сколько вы положили на счёт, $</label>
+                <div class="set-key-row">
+                  <input class="input set-bal-input" id="set-bal-anthropic" type="text" inputmode="decimal" autocomplete="off" placeholder="Например, 10">
+                  <button type="submit" class="btn btn-ghost">Запомнить</button>
+                  <a class="btn btn-ghost" href="https://console.anthropic.com/settings/billing" target="_blank" rel="noopener">Точный баланс на сайте</a>
+                </div>
+                <span class="form-msg set-bal-msg" role="status"></span>
+                <span class="files-hint">Узнать остаток по ключу сервисы не дают, поэтому программа сама считает, сколько стоили её ответы. Это примерная сумма: траты в других программах и на сайте сюда не попадают.</span>
+              </form>
+            </div>
+          </section>
+          <section class="card set-card">
+            <p class="set-text">Ключи хранятся только на этом компьютере, зашифрованными средствами Windows, отдельно от папки с промтами. В файл с промтами и в другие программы они не попадают. Пока нет ни одного ключа, в «Ассистенте» отвечает заглушка.</p>
+            <p class="set-text">Модель и глубину размышлений выбирают кнопкой «Модель» в поле ввода «Ассистента».</p>
+            <label class="set-check-row">
+              <input type="checkbox" id="set-notify">
+              <span><b>Уведомлять об ответах ассистента</b><span class="muted">Когда окно свёрнуто или закрыто другим окном, Windows покажет уведомление, а кнопка программы на панели задач замигает.</span></span>
+            </label>
           </section>
           <section class="card set-card">
             <p class="set-text">Тема, папка с промтами и проверка обновлений — в меню профиля внизу слева. Позже здесь появятся настройки календаря и других разделов.</p>

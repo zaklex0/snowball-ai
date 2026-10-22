@@ -27,13 +27,27 @@ contextBridge.exposeInMainWorld('vsApi', {
   assistantStop: (id) => ipcRenderer.invoke('assistant-stop', id),
   assistantReset: () => ipcRenderer.invoke('assistant-reset'),
   assistantDecide: (actionId, accept) => ipcRenderer.invoke('assistant-decide', actionId, accept),
+  calSave: (ev) => ipcRenderer.invoke('cal-save', ev),
+  calDelete: (id) => ipcRenderer.invoke('cal-delete', id),
+  onCalendarOpen: (fn) => {
+    const listener = (_e, date) => fn(date);
+    ipcRenderer.on('calendar-open', listener);
+    return () => ipcRenderer.removeListener('calendar-open', listener);
+  },
   chatList: () => ipcRenderer.invoke('chat-list'),
   chatGet: (id) => ipcRenderer.invoke('chat-get', id),
   chatSave: (chat) => ipcRenderer.invoke('chat-save', chat),
   chatDelete: (id) => ipcRenderer.invoke('chat-delete', id),
-  assistantCheckKey: (key) => ipcRenderer.invoke('assistant-check-key', key),
-  assistantDeleteKey: () => ipcRenderer.invoke('assistant-delete-key'),
+  assistantCheckKey: (provider, key) => ipcRenderer.invoke('assistant-check-key', provider, key),
+  assistantDeleteKey: (provider) => ipcRenderer.invoke('assistant-delete-key', provider),
   assistantSetOptions: (opts) => ipcRenderer.invoke('assistant-set-options', opts),
+  assistantSetBalance: (provider, amount) => ipcRenderer.invoke('assistant-set-balance', provider, amount),
+  setNotify: (on) => ipcRenderer.invoke('set-notify', on),
+  onAssistantOpen: (fn) => {
+    const listener = () => fn();
+    ipcRenderer.on('assistant-open', listener);
+    return () => ipcRenderer.removeListener('assistant-open', listener);
+  },
   onAssistant: (fn) => {
     const listener = (_e, a) => fn(a);
     ipcRenderer.on('assistant', listener);

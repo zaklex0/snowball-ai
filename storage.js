@@ -7,6 +7,7 @@
 //   <dir>/avatar.png            — the avatar, already cropped to a square
 //   <dir>/activity.json         — actions per day for the statistics page
 //   <dir>/chats.json            — the assistant's conversations
+//   <dir>/calendar.json         — things planned in the calendar
 // This module only uses Node's fs/path, so it can be tested without Electron.
 
 const fs = require('fs');
@@ -23,6 +24,7 @@ const PROFILE_FILE = 'profile.json';
 const AVATAR_FILE = 'avatar.png';
 const ACTIVITY_FILE = 'activity.json';
 const CHATS_FILE = 'chats.json';
+const CALENDAR_FILE = 'calendar.json';
 // What counts as an action on the statistics page. Deleting and importing do not count.
 const ACTIONS = ['created', 'edited', 'files', 'copied'];
 const NAME_MAX = 32;
@@ -162,15 +164,42 @@ function normalizeActivity(a) {
   return { format: 'snowball-activity', version: 1, since: num(a && a.since), days };
 }
 
+// One thing in the calendar. date is the local day, from/to are "HH:MM" (to may be empty),
+// remind is minutes before the start (0 = no reminder).
+const EVENT_KINDS = ['task', 'meet', 'call'];
+const REMINDS = [0, 15, 30, 60, 1440];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+function normalizeEvent(e, fallbackTime) {
+  if (!e || typeof e !== 'object' || !DATE_RE.test(str(e.date))) return null;
+  const now = fallbackTime || Date.now();
+  const from = TIME_RE.test(str(e.from)) ? e.from : '09:00';
+  const to = TIME_RE.test(str(e.to)) && e.to > from ? e.to : '';
+  const remind = REMINDS.includes(Number(e.remind)) ? Number(e.remind) : 0;
+  return {
+    id: ID_RE.test(str(e.id)) ? e.id : newId('e'),
+    date: e.date, from, to,
+    title: str(e.title, 300).trim() || 'Без названия',
+    kind: EVENT_KINDS.includes(e.kind) ? e.kind : 'task',
+    note: str(e.note, 5000).trim(),
+    remind,
+    createdAt: num(e.createdAt) || now,
+    updatedAt: num(e.updatedAt) || num(e.createdAt) || now
+  };
+}
+
 // A suggested change in a chat ("Создать промт …?") and what the user answered.
 const ACTION_STATUSES = ['done', 'canceled', 'stale'];
 function normalizeAction(a) {
   if (!a || typeof a !== 'object') return null;
-  return {
+  const out = {
     id: str(a.id, 64), kind: str(a.kind, 40), title: str(a.title, 300), category: str(a.category, 60), text: str(a.text, 200000),
     // A card nobody answered cannot be answered after a restart: main.js has forgotten it.
     status: ACTION_STATUSES.includes(a.status) ? a.status : 'stale'
   };
+  // Calendar cards also carry the event they add or delete.
+  if (a.event && typeof a.event === 'object') out.event = normalizeEvent(a.event);
+  return out;
 }
 function normalizeChat(c) {
   if (!c || typeof c !== 'object' || !ID_RE.test(str(c.id))) return null;
@@ -206,6 +235,7 @@ class Store {
     this.profile = normalizeProfile(null);
     this.activity = normalizeActivity(null);
     this.chats = [];
+    this.events = [];
     this.queue = Promise.resolve();
   }
 
@@ -216,6 +246,7 @@ class Store {
   get avatarPath() { return path.join(this.dir, AVATAR_FILE); }
   get activityPath() { return path.join(this.dir, ACTIVITY_FILE); }
   get chatsPath() { return path.join(this.dir, CHATS_FILE); }
+  get calendarPath() { return path.join(this.dir, CALENDAR_FILE); }
   promptDir(id) {
     if (!ID_RE.test(id)) throw new Error('bad id');
     return path.join(this.filesRoot, id);
@@ -239,6 +270,8 @@ class Store {
     this.profile = normalizeProfile(await readJson(this.profilePath));
     const chats = await readJson(this.chatsPath);
     this.chats = chats && Array.isArray(chats.chats) ? chats.chats.map(normalizeChat).filter(Boolean) : [];
+    const cal = await readJson(this.calendarPath);
+    this.events = cal && Array.isArray(cal.events) ? cal.events.map((e) => normalizeEvent(e)).filter(Boolean) : [];
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
     this.activity = this.backfillActivity();
@@ -298,6 +331,38 @@ class Store {
       }
       p.welcomed = true;
       await writeJson(this.profilePath, p);
+    });
+  }
+
+  /* ---------- calendar ---------- */
+  // Sorted by day and time.
+  calendarView() {
+    return this.events.slice().sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
+  }
+  findEvent(id) { return this.events.find((e) => e.id === id) || null; }
+  writeCalendar() { return writeJson(this.calendarPath, { format: 'snowball-calendar', version: 1, events: this.events }); }
+
+  // A new event (no id or an unknown one) or a change to an existing one.
+  saveEvent(input) {
+    return this.run(async () => {
+      const prev = input && input.id ? this.findEvent(input.id) : null;
+      const now = Date.now();
+      const ev = normalizeEvent(Object.assign({}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now }));
+      if (!ev) throw Object.assign(new Error('bad event'), { userMessage: 'Не получилось сохранить дело: проверьте день и время.' });
+      if (prev) this.events[this.events.indexOf(prev)] = ev;
+      else { if (this.findEvent(ev.id)) ev.id = newId('e'); this.events.push(ev); }
+      await this.writeCalendar();
+      return ev;
+    });
+  }
+
+  deleteEvent(id) {
+    return this.run(async () => {
+      const ev = this.findEvent(id);
+      if (!ev) return null;
+      this.events = this.events.filter((e) => e.id !== id);
+      await this.writeCalendar();
+      return ev;
     });
   }
 
@@ -563,11 +628,11 @@ class Store {
   }
 }
 
-// Copies the data (prompts.json, profile, statistics, chats and the files folder) into another folder.
+// Copies the data (prompts.json, profile, statistics, chats, calendar and the files folder) into another folder.
 async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
   await fsp.copyFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
-  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE]) {
+  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE, CALENDAR_FILE]) {
     if (await exists(path.join(fromDir, name))) await fsp.copyFile(path.join(fromDir, name), path.join(toDir, name));
   }
   const files = path.join(fromDir, FILES_DIR);
@@ -576,4 +641,4 @@ async function copyDataTo(fromDir, toDir) {
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }
 
-module.exports = { Store, copyDataTo, hasData, sanitizeName, kindOf, parseData, dayKey, DATA_FILE, FILES_DIR, NAME_MAX };
+module.exports = { Store, copyDataTo, hasData, sanitizeName, kindOf, parseData, dayKey, normalizeEvent, DATA_FILE, FILES_DIR, NAME_MAX };

@@ -25,9 +25,11 @@
     info: null,
     profile: null,        // { name, welcomed, avatar }
     activity: null,       // { since, days: { "2026-10-22": { created, edited, files, copied } } }
+    events: [],           // calendar: { id, date "2026-11-03", from "15:00", to, title, kind, note, remind }
     query: "",
     type: "all",
     expanded: new Set(),
+    notesOpen: new Set(),   // prompts whose comment is shown in full
     confirmId: null,
     editingId: null,
     editorOpen: false,
@@ -59,11 +61,14 @@
     settingsVersion: $("settings-version"),
     chat: $("chat"), chatEmpty: $("chat-empty"), chatIdeas: $("chat-ideas"), chatNew: $("chat-new"),
     composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"),
-    chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"),
+    calMeta: $("cal-meta"), calAdd: $("cal-add"), calTitle: $("cal-title"), calToday: $("cal-today"), calPrev: $("cal-prev"), calNext: $("cal-next"),
+    calGrid: $("cal-grid"), calDayTitle: $("cal-day-title"), calDaySub: $("cal-day-sub"), calDayAdd: $("cal-day-add"), calDayBadge: $("cal-day-badge"),
+    calForm: $("cal-form"), calFormTitle: $("cal-form-title"), cfTitle: $("cf-title"), cfDate: $("cf-date"), cfFrom: $("cf-from"), cfTo: $("cf-to"),
+    cfKind: $("cf-kind"), cfRemind: $("cf-remind"), cfNote: $("cf-note"), cfSave: $("cf-save"), cfCancel: $("cf-cancel"), cfDelete: $("cf-delete"), cfMsg: $("cf-msg"),
+    calTimeline: $("cal-timeline"),
+    chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"),
     chatHistory: $("chat-history"), chatHistoryBtn: $("chat-history-btn"), chatList: $("chat-list"),
     modelBtn: $("model-btn"), modelBtnText: $("model-btn-text"), modelMenu: $("model-menu"),
-    setStatus: $("set-status"), setKeyForm: $("set-key-form"), setKey: $("set-key"), setCheck: $("set-check"),
-    setDelete: $("set-delete"), setMsg: $("set-msg"),
     profileDlg: $("profile-dlg"), pdForm: $("pd-form"), pdTitle: $("pd-title"), pdText: $("pd-text"),
     pdAvatar: $("pd-avatar"), pdPick: $("pd-pick"), pdRemove: $("pd-remove"), pdName: $("pd-name"),
     pdSave: $("pd-save"), pdCancel: $("pd-cancel"), pdMsg: $("pd-msg")
@@ -82,6 +87,9 @@
     left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>',
     right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>',
+    bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>'
   };
@@ -230,6 +238,7 @@
       if (r.info) state.info = r.info;
       if (r.profile) state.profile = r.profile;
       if (r.activity) state.activity = r.activity;
+      if (r.events) state.events = r.events;
       return r;
     }, function () {
       toast("Не получилось. Попробуйте ещё раз.", true);
@@ -282,6 +291,17 @@
       var over = t.scrollHeight > t.clientHeight + 4;
       if (wasOpen) t.classList.remove("is-collapsed");
       p.classList.toggle("can-toggle", over);
+      // A comment longer than three lines folds; a short one stays as it is.
+      var n = p.querySelector(".prompt-note");
+      if (!n) continue;
+      var noteOpen = n.classList.contains("open");
+      if (noteOpen) n.classList.remove("open");
+      var nt = n.querySelector(".prompt-note-text");
+      var noteOver = nt.scrollHeight > nt.clientHeight + 4;
+      if (noteOpen) n.classList.add("open");
+      n.classList.toggle("can-toggle", noteOver);
+      if (noteOver) { n.setAttribute("role", "button"); n.tabIndex = 0; n.setAttribute("aria-expanded", String(noteOpen)); }
+      else { n.removeAttribute("role"); n.removeAttribute("tabindex"); n.removeAttribute("aria-expanded"); }
     }
   }
   var measureQueued = false;
@@ -678,12 +698,34 @@
     }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
     var count = item.text.length;
     var files = item.files.length ? h("div", { class: "files" }, item.files.map(function (f) { return rowTile(item, f); })) : null;
-    var comment = item.comment ? h("div", { class: "prompt-note" }, icon("note"), h("div", { class: "prompt-note-text", text: item.comment })) : null;
+    var comment = item.comment ? commentBlock(item) : null;
     return h("div", { class: "prompt" }, box, comment,
       h("div", { class: "prompt-bar" }, toggle,
         h("span", { class: "chars", text: fmtNum(count) + " " + plural(count, "символ", "символа", "символов") }),
         h("span", { class: "spacer" }), note, attach, copy),
       files);
+  }
+
+  // Shows three lines of the comment; a click (or Enter) opens the rest and closes it again.
+  function commentBlock(item) {
+    var el = h("div", { class: "prompt-note" + (state.notesOpen.has(item.id) ? " open" : ""), title: "Нажмите, чтобы развернуть или свернуть комментарий" },
+      icon("note"), h("div", { class: "prompt-note-text", text: item.comment }));
+    var toggleNote = function () {
+      if (!el.classList.contains("can-toggle")) return;
+      var open = !state.notesOpen.has(item.id);
+      if (open) state.notesOpen.add(item.id); else state.notesOpen.delete(item.id);
+      el.classList.toggle("open", open);
+      el.setAttribute("aria-expanded", String(open));
+    };
+    el.addEventListener("click", function () {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && String(sel).length) return;   // selecting text to copy it should not fold the comment
+      toggleNote();
+    });
+    el.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleNote(); }
+    });
+    return el;
   }
 
   function row(item) {
@@ -781,6 +823,7 @@
     if (viewerState) renderViewerIfChanged();
     renderChrome();
     if (state.page === "stats") renderStats();
+    if (state.page === "calendar") renderCalendar();
   }
 
   /* ---------- pages and sidebar ---------- */
@@ -1018,6 +1061,7 @@
         api.assistantReset();
         clearChat();
         refreshChats();
+        closeEventForm();
         state.expanded.clear();
         tileCache.clear();
         render();
@@ -1087,6 +1131,199 @@
       });
     }
   });
+
+  /* ---------- calendar ---------- */
+  var KINDS = [{ id: "task", label: "Задача" }, { id: "meet", label: "Встреча" }, { id: "call", label: "Звонок" }];
+  var REMIND_LABELS = { 15: "за 15 минут", 30: "за 30 минут", 60: "за час", 1440: "за день" };
+  var WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  var MONTHS_NOM = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  // Official days off in Russia. The holidays are the same every year; moved days off come from the government
+  // decree for each year (2027: decree of 17.09.2026 No. 1187) and have to be added here when a new one comes out.
+  var HOLIDAYS = {
+    "01-01": "Новогодние каникулы", "01-02": "Новогодние каникулы", "01-03": "Новогодние каникулы", "01-04": "Новогодние каникулы",
+    "01-05": "Новогодние каникулы", "01-06": "Новогодние каникулы", "01-07": "Рождество", "01-08": "Новогодние каникулы",
+    "02-23": "День защитника Отечества", "03-08": "Международный женский день", "05-01": "Праздник Весны и Труда",
+    "05-09": "День Победы", "06-12": "День России", "11-04": "День народного единства"
+  };
+  var MOVED_OFF = {
+    2026: ["01-09", "03-09", "05-11", "12-31"],
+    2027: ["02-22", "05-03", "05-10", "06-14", "11-05", "12-31"]
+  };
+  var cal = { view: null, selected: null, editing: null, confirmDelete: false };
+
+  function keyToDate(k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function holidayName(d) {
+    var md = pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    if (HOLIDAYS[md]) return HOLIDAYS[md];
+    return (MOVED_OFF[d.getFullYear()] || []).indexOf(md) !== -1 ? "Перенесённый выходной" : null;
+  }
+  function isDayOff(d) { return d.getDay() === 0 || d.getDay() === 6 || !!holidayName(d); }
+  function eventsOn(k) { return state.events.filter(function (e) { return e.date === k; }); }
+  function busyLevel(n) { return n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : 3; }
+  function kindOfEvent(e) { return byKind(e.kind) || KINDS[0]; }
+  function byKind(id) { return KINDS.find(function (k) { return k.id === id; }) || null; }
+  function weekdayName(d) { return WEEKDAYS[(d.getDay() + 6) % 7]; }
+  // "Вторник, 3 ноября" (with the year when it is not this year).
+  function longDay(k) {
+    var d = keyToDate(k), name = weekdayName(d);
+    return name.charAt(0).toUpperCase() + name.slice(1) + ", " + fmtDay(d, d.getFullYear() !== new Date().getFullYear());
+  }
+  function timeRange(e) { return e.from + (e.to ? "–" + e.to : ""); }
+
+  function ensureCal() {
+    if (cal.view) return;
+    var t = today();
+    cal.view = new Date(t.getFullYear(), t.getMonth(), 1);
+    cal.selected = dayKey(t);
+  }
+  function renderMonth() {
+    var y = cal.view.getFullYear(), m = cal.view.getMonth();
+    els.calTitle.textContent = MONTHS_NOM[m] + " " + y;
+    var kids = WEEKDAYS_SHORT.map(function (w, i) { return h("div", { class: "cal-wd" + (i >= 5 ? " off" : ""), text: w }); });
+    var first = new Date(y, m, 1);
+    var start = addDays(first, -((first.getDay() + 6) % 7));
+    var todayKey = dayKey(today());
+    var count = 0;
+    for (var i = 0; i < 42; i++) {
+      var d = addDays(start, i);
+      if (i === 35 && d.getMonth() !== m) break;
+      var k = dayKey(d), list = eventsOn(k), hol = holidayName(d);
+      if (d.getMonth() === m) count += list.length;
+      var cls = "cal-cell";
+      if (d.getMonth() !== m) cls += " other";
+      if (isDayOff(d)) cls += " off";
+      if (hol) cls += " holiday";
+      if (busyLevel(list.length)) cls += " b" + busyLevel(list.length);
+      if (k === todayKey) cls += " today";
+      if (k === cal.selected) cls += " sel";
+      var shown = hol ? 1 : 2;
+      var tip = (hol ? hol + ". " : "") + (list.length ? list.length + " " + plural(list.length, "дело", "дела", "дел") : "Свободно");
+      kids.push(h("button", { type: "button", class: cls, title: tip, "aria-label": fmtDay(d) + ". " + tip, "aria-pressed": String(k === cal.selected),
+        onclick: (function (k) { return function () { selectDay(k); }; })(k) },
+        h("span", { class: "num", text: String(d.getDate()) }),
+        hol ? h("span", { class: "hol", text: hol }) : null,
+        list.slice(0, shown).map(function (e) { return h("span", { class: "ev ev-" + kindOfEvent(e).id }, h("i"), e.from + " " + e.title); }),
+        list.length > shown ? h("span", { class: "more", text: "ещё " + (list.length - shown) }) : null));
+    }
+    els.calGrid.replaceChildren.apply(els.calGrid, kids);
+    els.calMeta.textContent = count ? "В этом месяце " + count + " " + plural(count, "дело", "дела", "дел") : "В этом месяце дел нет";
+  }
+  function eventBlock(e) {
+    var k = kindOfEvent(e);
+    return h("button", { type: "button", class: "cal-ev ev-" + k.id, title: "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
+      h("span", { class: "row1" }, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: e.title }), h("span", { class: "kind", text: k.label })),
+      e.note ? h("span", { class: "note", text: e.note }) : null,
+      e.remind ? h("span", { class: "bell", text: "Напомнить " + (REMIND_LABELS[e.remind] || "") }) : null);
+  }
+  function renderDay() {
+    var k = cal.selected, d = keyToDate(k), list = eventsOn(k), hol = holidayName(d);
+    els.calDayTitle.textContent = longDay(k);
+    els.calDaySub.textContent = list.length ? list.length + " " + plural(list.length, "дело", "дела", "дел") : "Свободный день";
+    if (hol || isDayOff(d)) els.calDayBadge.replaceChildren(h("span", { class: "cal-badge", text: hol || "Выходной" }));
+    else els.calDayBadge.replaceChildren();
+    var firstHour = Math.min(7, list.length ? +list[0].from.slice(0, 2) : 7);
+    var rows = [];
+    for (var hr = firstHour; hr <= 23; hr++) {
+      var inHour = list.filter(function (e) { return +e.from.slice(0, 2) === hr; });
+      rows.push(h("div", { class: "cal-hour" }, h("span", { class: "t", text: pad2(hr) + ":00" }),
+        h("div", { class: "slot" + (inHour.length ? "" : " empty"), title: inHour.length ? null : "Добавить дело на " + pad2(hr) + ":00",
+          onclick: (function (hr) { return function () { openEventForm(null, pad2(hr) + ":00"); }; })(hr) },
+          inHour.map(eventBlock))));
+    }
+    els.calTimeline.replaceChildren.apply(els.calTimeline, rows);
+    var now = new Date();
+    if (k === dayKey(now) && now.getHours() >= firstHour) {
+      var line = h("div", { class: "cal-now", "aria-hidden": "true" });
+      line.style.top = ((now.getHours() - firstHour + now.getMinutes() / 60) * 46) + "px";
+      els.calTimeline.append(line);
+    }
+  }
+  function renderCalendar() {
+    ensureCal();
+    renderMonth();
+    renderDay();
+  }
+  function selectDay(k) {
+    if (cal.editing !== null && !els.calForm.hidden && k !== cal.selected) closeEventForm();
+    cal.selected = k;
+    var d = keyToDate(k);
+    cal.view = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderCalendar();
+  }
+  function openCalendarDay(k) {
+    ensureCal();
+    setPage("calendar");
+    selectDay(k);
+  }
+
+  // e: an event to change, or null for a new one (time: the hour that was clicked).
+  function openEventForm(e, time) {
+    ensureCal();
+    cal.editing = e ? e.id : "";
+    cal.confirmDelete = false;
+    els.calForm.hidden = false;
+    els.calFormTitle.textContent = e ? "Изменить дело" : "Новое дело";
+    els.cfTitle.value = e ? e.title : "";
+    els.cfDate.value = e ? e.date : cal.selected;
+    els.cfFrom.value = e ? e.from : (time || "10:00");
+    els.cfTo.value = e ? e.to : (time ? pad2(Math.min(23, +time.slice(0, 2) + 1)) + ":00" : "");
+    els.cfRemind.value = String(e ? e.remind : 0);
+    els.cfNote.value = e ? e.note : "";
+    els.cfKind.querySelectorAll("input").forEach(function (i) { i.checked = i.value === (e ? e.kind : "task"); });
+    els.cfDelete.hidden = !e;
+    els.cfDelete.textContent = "Удалить дело";
+    els.cfMsg.textContent = "";
+    els.cfSave.disabled = false;
+    try { els.calForm.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); } catch (x) {}
+    els.cfTitle.focus({ preventScroll: true });
+  }
+  function closeEventForm() {
+    els.calForm.hidden = true;
+    cal.editing = null;
+    cal.confirmDelete = false;
+  }
+  els.calForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (els.cfSave.disabled) return;
+    var title = els.cfTitle.value.trim();
+    if (!title) { els.cfMsg.textContent = "Напишите, что за дело."; els.cfTitle.focus(); return; }
+    if (!els.cfDate.value) { els.cfMsg.textContent = "Выберите день."; els.cfDate.focus(); return; }
+    if (!els.cfFrom.value) { els.cfMsg.textContent = "Укажите время начала."; els.cfFrom.focus(); return; }
+    if (els.cfTo.value && els.cfTo.value <= els.cfFrom.value) { els.cfMsg.textContent = "Окончание должно быть позже начала."; els.cfTo.focus(); return; }
+    var checked = els.cfKind.querySelector("input:checked");
+    var isNew = !cal.editing;
+    var ev = { id: cal.editing || undefined, date: els.cfDate.value, from: els.cfFrom.value, to: els.cfTo.value, title: title,
+      kind: checked ? checked.value : "task", remind: +els.cfRemind.value, note: els.cfNote.value.trim() };
+    els.cfSave.disabled = true;
+    call(api.calSave(ev)).then(function (r) {
+      els.cfSave.disabled = false;
+      if (!r) return;
+      closeEventForm();
+      selectDay(r.date);
+      toast(isNew ? "Дело добавлено" : "Изменения сохранены");
+    });
+  });
+  els.cfDelete.addEventListener("click", function () {
+    if (!cal.editing) return;
+    if (!cal.confirmDelete) { cal.confirmDelete = true; els.cfDelete.textContent = "Точно удалить? Нажмите ещё раз"; return; }
+    call(api.calDelete(cal.editing)).then(function (r) {
+      if (!r) return;
+      closeEventForm();
+      renderCalendar();
+      toast("Дело удалено");
+    });
+  });
+  els.cfCancel.addEventListener("click", closeEventForm);
+  els.calForm.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeEventForm(); } });
+  els.calAdd.addEventListener("click", function () { openEventForm(null); });
+  els.calDayAdd.addEventListener("click", function () { openEventForm(null); });
+  els.calPrev.addEventListener("click", function () { ensureCal(); cal.view = new Date(cal.view.getFullYear(), cal.view.getMonth() - 1, 1); renderMonth(); });
+  els.calNext.addEventListener("click", function () { ensureCal(); cal.view = new Date(cal.view.getFullYear(), cal.view.getMonth() + 1, 1); renderMonth(); });
+  els.calToday.addEventListener("click", function () { selectDay(dayKey(today())); });
+  // A click on a reminder notification opens that day.
+  api.onCalendarOpen(function (date) { openCalendarDay(date); });
+  // The red "now" line moves on its own.
+  setInterval(function () { if (state.page === "calendar" && els.calForm.hidden) renderDay(); }, 60 * 1000);
 
   /* ---------- assistant ---------- */
   // The open conversation lives here; after every finished message it is saved to chats.json (the "История" list).
@@ -1189,7 +1426,35 @@
     msg.foot.hidden = !kids.length;
   }
 
+  function calendarCard(msg, a) {
+    var e = a.event || {};
+    var adding = a.kind === "calendar-add";
+    var k = kindOfEvent(e);
+    var kids = [
+      h("div", { class: "act-head" }, h("span", { class: "ico", html: adding ? ICONS.calendar : ICONS.trash, "aria-hidden": "true" }),
+        h("span", { text: (adding ? "Добавить в календарь «" : "Удалить из календаря «") + (e.title || a.title) + "»?" })),
+      h("div", { class: "act-meta" }, h("span", { class: "chip ev-" + k.id, text: k.label })),
+      h("div", { class: "act-when", text: (e.date ? longDay(e.date) : "") + (e.from ? " · " + timeRange(e) : "") +
+        (e.remind ? " · напомнить " + (REMIND_LABELS[e.remind] || "") : "") + (e.note ? " · " + e.note : "") })
+    ];
+    if (a.status === "done") {
+      kids.push(h("div", { class: "act-done" }, icon("check"), h("span", { text: adding ? "Дело добавлено в календарь" : "Дело удалено из календаря" }),
+        h("button", { type: "button", class: "link-btn", onclick: function () { openCalendarDay(e.date); } }, "Открыть календарь")));
+    } else if (a.status === "canceled") {
+      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Отменено, календарь не изменился" })));
+    } else if (a.status === "stale") {
+      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Карточка устарела. Попросите ассистента ещё раз, если нужно" })));
+    } else {
+      var busy = a.status === "busy";
+      kids.push(h("div", { class: "act-buttons" },
+        h("button", { type: "button", class: "btn " + (adding ? "btn-primary" : "btn-danger"), disabled: busy, onclick: function () { decide(msg, a, true); } },
+          busy ? "Секунду…" : adding ? "Добавить" : "Удалить"),
+        h("button", { type: "button", class: "btn btn-ghost", disabled: busy, onclick: function () { decide(msg, a, false); } }, "Отмена")));
+    }
+    return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
+  }
   function actionCard(msg, a) {
+    if (a.kind === "calendar-add" || a.kind === "calendar-delete") return calendarCard(msg, a);
     var cat = categoryOf(a.category);
     var kids = [
       h("div", { class: "act-head" }, icon("spark"), h("span", { text: "Создать промт «" + a.title + "»?" })),
@@ -1220,7 +1485,12 @@
     renderActions(msg);
     call(api.assistantDecide(a.id, accept)).then(function (r) {
       a.status = r ? (accept ? "done" : "canceled") : null;
-      if (r && accept) { render(); toast("Промт «" + a.title + "» добавлен"); }
+      if (r && accept) {
+        render();
+        if (a.kind === "calendar-add") toast("Дело «" + a.title + "» добавлено в календарь");
+        else if (a.kind === "calendar-delete") toast("Дело «" + a.title + "» удалено");
+        else toast("Промт «" + a.title + "» добавлен");
+      }
       renderActions(msg);
       persist();
     });
@@ -1262,8 +1532,20 @@
   }
 
   // What main.js gets: finished messages only, without the empty answers that failed or were stopped at once.
+  function cardOutcome(a) {
+    var e = a.event || {};
+    var what = a.kind === "calendar-add" ? "Добавить в календарь «" + e.title + "» " + e.date + " " + timeRange(e)
+      : a.kind === "calendar-delete" ? "Удалить из календаря «" + e.title + "» " + e.date + " " + timeRange(e)
+      : "Создать промт «" + a.title + "»";
+    var how = a.status === "done" ? "пользователь подтвердил, сделано" : a.status === "canceled" ? "пользователь отменил" : "пользователь не ответил";
+    return "[Карточка: " + what + " — " + how + "]";
+  }
   function history() {
-    return chat.messages.filter(function (m) { return m.text && !m.streaming; }).map(function (m) { return { role: m.role, content: m.text }; });
+    return chat.messages.filter(function (m) { return (m.text || (m.actions && m.actions.length)) && !m.streaming; }).map(function (m) {
+      var content = m.text;
+      if (m.actions && m.actions.length) content = (content ? content + "\n\n" : "") + m.actions.map(cardOutcome).join("\n");
+      return { role: m.role, content: content };
+    });
   }
   function startReply() {
     var msg = addMessage("assistant", "");
@@ -1438,8 +1720,17 @@
       else if (e.kind === "done") finish(msg);
       else if (e.kind === "error") finish(msg, e.error || "Ассистент не ответил. Попробуйте ещё раз.", true);
     });
+    if ((e.kind === "done" || e.kind === "error") && e.assistant && state.info) {
+      state.info.assistant = e.assistant;
+      renderAssistantSettings();
+    }
+    if ((e.kind === "done" || e.kind === "error") && state.page !== "assistant" && document.hasFocus()) {
+      toast(e.kind === "done" ? "Ассистент ответил" : "Ассистент не смог ответить");
+    }
   }
   api.onAssistant(onAssistantEvent);
+  // A click on the Windows notification about an answer.
+  api.onAssistantOpen(function () { setPage("assistant"); scrollChat(); });
 
   function growInput() {
     var t = els.chatInput;
@@ -1469,12 +1760,19 @@
   refreshChats();
 
   /* ---------- assistant settings ---------- */
-  // The key itself never comes back from main.js: the page only knows whether one is saved.
+  // Keys themselves never come back from main.js: the page only knows which ones are saved.
+  var PROVIDERS = {
+    openai: { name: "ChatGPT", owner: "OpenAI" },
+    anthropic: { name: "Claude", owner: "Anthropic" }
+  };
   var MODELS = [
-    { id: "claude-opus-5-5", name: "Claude Opus 5.5", short: "Opus 5.5", text: "Основная: лучше всего пишет и улучшает промты" },
-    { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", short: "Haiku 5.5", text: "Быстрая и примерно в 40 раз дешевле Opus" }
+    { id: "gpt-6.1-sol", provider: "openai", name: "GPT-6.1 Sol", short: "GPT-6.1 Sol", text: "Основная: почти как Astra, но в 5 раз дешевле" },
+    { id: "gpt-6-luna", provider: "openai", name: "GPT-6 Luna", short: "GPT-6 Luna", text: "Самая дешёвая, в 20 раз дешевле Sol. Для проверок" },
+    { id: "gpt-6-astra", provider: "openai", name: "GPT-6 Astra", short: "GPT-6 Astra", text: "Самая сильная и самая дорогая" },
+    { id: "claude-opus-5-5", provider: "anthropic", name: "Claude Opus 5.5", short: "Opus 5.5", text: "Лучше всего пишет и улучшает промты" },
+    { id: "claude-haiku-5-5", provider: "anthropic", name: "Claude Haiku 5.5", short: "Haiku 5.5", text: "Быстрая и примерно в 40 раз дешевле Opus" }
   ];
-  // How long Claude thinks before answering (effort in the API). Deeper is slower and costs more.
+  // How long the model thinks before answering (reasoning effort in the API). Deeper is slower and costs more.
   var EFFORTS = [
     { id: "low", name: "Быстро", text: "Отвечает сразу, почти не раздумывая. Дешевле всего" },
     { id: "medium", name: "Средне", text: "Подходит для большинства задач" },
@@ -1483,39 +1781,88 @@
     { id: "max", name: "Максимум", text: "Думает, сколько нужно. Самый медленный и дорогой" }
   ];
   function byId(list, id) { return list.find(function (x) { return x.id === id; }) || null; }
+  function assistantState() { return (state.info && state.info.assistant) || { keys: {} }; }
+  function hasKeyFor(provider) { return !!assistantState().keys[provider]; }
+
+  // One card per service on the settings page: status, key field, "Проверить ключ" and "Удалить ключ".
+  var keyCards = Array.prototype.slice.call(document.querySelectorAll(".set-provider")).map(function (card) {
+    return {
+      provider: card.dataset.provider, card: card,
+      status: card.querySelector(".set-status"), form: card.querySelector(".set-key"), input: card.querySelector(".set-key-input"),
+      check: card.querySelector(".set-check"), del: card.querySelector(".set-delete"), msg: card.querySelector(".set-msg"),
+      spend: card.querySelector(".set-spend"), spendLine: card.querySelector(".set-spend-line"),
+      balForm: card.querySelector(".set-balance"), balInput: card.querySelector(".set-bal-input"), balMsg: card.querySelector(".set-bal-msg")
+    };
+  });
+  function keyCard(provider) { return keyCards.find(function (c) { return c.provider === provider; }); }
+  function goToKey(provider) {
+    setPage("settings");
+    var c = keyCard(provider || "openai");
+    if (!c) return;
+    try { c.card.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); } catch (e) {}
+    c.input.focus({ preventScroll: true });
+  }
+
+  function fmtUsd(n) {
+    if (!(n > 0)) return "$0";
+    if (n < 0.01) return "меньше $0.01";
+    return "$" + n.toFixed(2).replace(/\.00$/, "");
+  }
   function renderAssistantSettings() {
     var a = state.info && state.info.assistant;
     if (!a) return;
     var model = byId(MODELS, a.model), effort = byId(EFFORTS, a.effort);
+    var sp = model && a.spend && a.spend[model.provider];
     els.chatMode.hidden = a.hasKey;
     els.chatMeta.hidden = !a.hasKey;
-    els.chatMeta.textContent = a.hasKey ? "Отвечает " + (model ? model.name : a.model) + "." : "";
+    els.chatMeta.textContent = a.hasKey ? "Отвечает " + (model ? model.name : a.model) +
+      (sp && sp.left !== null ? " · на счёте осталось примерно " + fmtUsd(sp.left) : "") + "." : "";
+    els.setNotify.checked = a.notify !== false;
     els.modelBtnText.textContent = (model ? model.short : a.model) + " · " + (effort ? effort.name : a.effort);
     if (!els.modelMenu.hidden) renderModelMenu();
-    els.setStatus.textContent = a.hasKey ? "Ключ сохранён" : "Ключа нет, отвечает заглушка";
-    els.setStatus.classList.toggle("on", a.hasKey);
-    els.setDelete.hidden = !a.hasKey;
-    els.setKey.placeholder = a.hasKey ? "Ключ сохранён. Вставьте новый, чтобы заменить" : "sk-ant-…";
+    keyCards.forEach(function (c) {
+      var has = !!a.keys[c.provider];
+      c.status.textContent = has ? "Ключ сохранён" : "Ключа нет";
+      c.status.classList.toggle("on", has);
+      c.del.hidden = !has;
+      c.input.placeholder = has ? "Ключ сохранён. Вставьте новый, чтобы заменить" : c.input.dataset.placeholder;
+      var sp = (a.spend && a.spend[c.provider]) || { month: 0, amount: null, left: null };
+      c.spend.hidden = !has && !(sp.month > 0);
+      var line = ["Потрачено через Snowball в этом месяце: ", h("b", { text: "≈ " + fmtUsd(sp.month) })];
+      if (sp.amount !== null) line.push(" · На счёте осталось примерно ", h("b", { text: fmtUsd(sp.left) }), " из " + fmtUsd(sp.amount));
+      c.spendLine.replaceChildren.apply(c.spendLine, line);
+      if (document.activeElement !== c.balInput) c.balInput.value = sp.amount !== null ? String(sp.amount).replace(".", ",") : "";
+    });
   }
 
   /* ---------- "Модель" button in the message box ---------- */
-  function modelOption(kind, item, checked) {
-    return h("button", { type: "button", class: "mm-item", role: "menuitemradio", "aria-checked": String(checked),
-      onclick: function () { pickOption(kind, item); } },
-      h("span", { class: "mm-text" }, h("span", { class: "mm-name", text: item.name }), h("span", { class: "mm-sub", text: item.text })),
+  function modelOption(kind, item, checked, disabled) {
+    return h("button", { type: "button", class: "mm-item" + (disabled ? " off" : ""), role: "menuitemradio", "aria-checked": String(checked),
+      "aria-disabled": disabled ? "true" : null,
+      onclick: function () {
+        if (disabled) { setModelMenu(false); goToKey(item.provider); return; }
+        pickOption(kind, item);
+      } },
+      h("span", { class: "mm-text" }, h("span", { class: "mm-name", text: item.name }),
+        h("span", { class: "mm-sub", text: disabled ? "Нужен ключ " + PROVIDERS[item.provider].owner + ": добавьте его в «Настройках»" : item.text })),
       h("span", { class: "mm-tick", html: ICONS.check, "aria-hidden": "true" }));
   }
   function renderModelMenu() {
-    var a = (state.info && state.info.assistant) || {};
+    var a = assistantState();
     var kids = [];
     if (!a.hasKey) {
-      kids.push(h("div", { class: "mm-note" }, "Сейчас отвечает заглушка, выбор заработает с ключом Claude. ",
-        h("button", { type: "button", class: "link-btn", onclick: function () { setModelMenu(false); setPage("settings"); els.setKey.focus(); } }, "Подключить")));
+      kids.push(h("div", { class: "mm-note" }, "Сейчас отвечает заглушка. Выбор заработает, когда добавите ключ ChatGPT или Claude. ",
+        h("button", { type: "button", class: "link-btn", onclick: function () { setModelMenu(false); goToKey("openai"); } }, "Подключить")));
     }
-    kids.push(h("div", { class: "mm-label", text: "Модель" }));
-    MODELS.forEach(function (m) { kids.push(modelOption("model", m, m.id === a.model)); });
+    Object.keys(PROVIDERS).forEach(function (pr, i) {
+      if (i) kids.push(h("hr"));
+      kids.push(h("div", { class: "mm-label", text: PROVIDERS[pr].name }));
+      MODELS.filter(function (m) { return m.provider === pr; }).forEach(function (m) {
+        kids.push(modelOption("model", m, a.hasKey && m.id === a.model, a.hasKey && !hasKeyFor(pr)));
+      });
+    });
     kids.push(h("hr"), h("div", { class: "mm-label", text: "Размышления" }));
-    EFFORTS.forEach(function (e) { kids.push(modelOption("effort", e, e.id === a.effort)); });
+    EFFORTS.forEach(function (e) { kids.push(modelOption("effort", e, e.id === a.effort, false)); });
     els.modelMenu.replaceChildren.apply(els.modelMenu, kids);
   }
   function setModelMenu(open) {
@@ -1547,40 +1894,57 @@
     else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
   });
-  function setKeyMsg(text, neutral) {
-    els.setMsg.textContent = text || "";
-    els.setMsg.classList.toggle("neutral", !!neutral);
-  }
-  els.setKeyForm.addEventListener("submit", function (e) {
-    e.preventDefault();
-    if (els.setCheck.disabled) return;
-    var key = els.setKey.value.trim();
-    var a = state.info && state.info.assistant;
-    if (!key && !(a && a.hasKey)) { setKeyMsg("Вставьте ключ в поле."); els.setKey.focus(); return; }
-    els.setCheck.disabled = true;
-    setKeyMsg("Проверяю ключ, это займёт пару секунд…", true);
-    api.assistantCheckKey(key).then(function (r) {
-      els.setCheck.disabled = false;
-      if (!r || !r.ok) { setKeyMsg((r && r.error) || "Не получилось проверить ключ. Попробуйте ещё раз."); return; }
-      state.info = r.info;
-      els.setKey.value = "";
-      render();
-      if (r.warning) setKeyMsg((r.saved ? "Ключ сохранён, но " : "Ключ верный, но ") + r.warning.charAt(0).toLowerCase() + r.warning.slice(1));
-      else setKeyMsg(r.saved ? "Ключ работает и сохранён. Теперь в «Ассистенте» отвечает Claude." : "Ключ работает.", true);
-    }, function () {
-      els.setCheck.disabled = false;
-      setKeyMsg("Не получилось проверить ключ. Попробуйте ещё раз.");
+
+  keyCards.forEach(function (c) {
+    var name = PROVIDERS[c.provider].name;
+    var say = function (text, neutral) { c.msg.textContent = text || ""; c.msg.classList.toggle("neutral", !!neutral); };
+    c.form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (c.check.disabled) return;
+      var key = c.input.value.trim();
+      if (!key && !hasKeyFor(c.provider)) { say("Вставьте ключ в поле."); c.input.focus(); return; }
+      c.check.disabled = true;
+      say("Проверяю ключ, это займёт пару секунд…", true);
+      api.assistantCheckKey(c.provider, key).then(function (r) {
+        c.check.disabled = false;
+        if (!r || !r.ok) { say((r && r.error) || "Не получилось проверить ключ. Попробуйте ещё раз."); return; }
+        state.info = r.info;
+        c.input.value = "";
+        render();
+        if (r.warning) say((r.saved ? "Ключ сохранён, но " : "Ключ верный, но ") + r.warning.charAt(0).toLowerCase() + r.warning.slice(1));
+        else say(r.saved ? "Ключ работает и сохранён. Теперь в «Ассистенте» можно выбрать " + name + " кнопкой «Модель»." : "Ключ работает.", true);
+      }, function () {
+        c.check.disabled = false;
+        say("Не получилось проверить ключ. Попробуйте ещё раз.");
+      });
     });
-  });
-  els.setDelete.addEventListener("click", function () {
-    call(api.assistantDeleteKey()).then(function (r) {
-      if (!r) return;
-      render();
-      setKeyMsg("Ключ удалён. Ассистент снова отвечает заглушкой.", true);
+    c.del.addEventListener("click", function () {
+      call(api.assistantDeleteKey(c.provider)).then(function (r) {
+        if (!r) return;
+        render();
+        say(assistantState().hasKey ? "Ключ удалён." : "Ключ удалён. Ассистент снова отвечает заглушкой.", true);
+      });
     });
+    c.input.addEventListener("input", function () { if (c.msg.textContent) say(""); });
+    // How much the user put on the account: from now on the program subtracts what its answers cost.
+    c.balForm.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var v = c.balInput.value.trim();
+      api.assistantSetBalance(c.provider, v === "" ? null : v).then(function (r) {
+        c.balMsg.classList.toggle("neutral", !!(r && r.ok));
+        if (!r || !r.ok) { c.balMsg.textContent = (r && r.error) || "Не получилось сохранить."; return; }
+        state.info = r.info;
+        c.balInput.blur();
+        render();
+        c.balMsg.textContent = v === "" ? "Сумма забыта." : "Запомнил. Дальше программа будет вычитать из неё стоимость ответов.";
+      }, function () { c.balMsg.textContent = "Не получилось сохранить."; });
+    });
+    c.balInput.addEventListener("input", function () { c.balMsg.textContent = ""; });
   });
-  els.setKey.addEventListener("input", function () { if (els.setMsg.textContent) setKeyMsg(""); });
-  els.chatConnect.addEventListener("click", function () { setPage("settings"); els.setKey.focus(); });
+  els.setNotify.addEventListener("change", function () {
+    call(api.setNotify(els.setNotify.checked)).then(function (r) { if (r) renderAssistantSettings(); });
+  });
+  els.chatConnect.addEventListener("click", function () { goToKey("openai"); });
 
   /* ---------- drag and drop ---------- */
   function hasFiles(e) {
