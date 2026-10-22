@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   saveProfile: (input) => ipcRenderer.invoke('save-profile', input),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
   changeDataDir: () => ipcRenderer.invoke('change-data-dir'),

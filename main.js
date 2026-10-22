@@ -202,11 +202,14 @@ function createWindow() {
 }
 
 /* ---------- updates ---------- */
-// The installed program checks GitHub Releases on start and every few hours. A new version is
-// downloaded in the background and installed on restart, or when the program is closed.
+// The installed program checks GitHub Releases on start and every few hours. When a new version
+// exists it asks first; only after "Скачать" it downloads, then installs on restart or when the program is closed.
 let updater = null;
+let updateFound = null;   // newer version on GitHub, not downloaded yet
+let downloading = false;
 let updateReady = null;   // version that is downloaded and waits for a restart
 let manualCheck = false;  // the user asked from the menu, so report "no update" and errors too
+let lastPercent = -1;
 
 function sendUpdate(u) { if (win && !win.isDestroyed()) win.webContents.send('update', u); }
 
@@ -215,12 +218,30 @@ function checkUpdates() { updater.checkForUpdates().catch(() => { /* reported by
 function setupUpdates() {
   if (!app.isPackaged) return;
   updater = require('electron-updater').autoUpdater;
-  updater.autoDownload = true;
+  updater.autoDownload = false;
   updater.autoInstallOnAppQuit = true;
-  updater.on('update-available', (i) => { if (manualCheck) sendUpdate({ kind: 'downloading', version: i.version }); });
+  updater.on('update-available', (i) => {
+    updateFound = i.version;
+    if (!downloading) sendUpdate({ kind: 'available', version: i.version, manual: manualCheck });
+    manualCheck = false;
+  });
   updater.on('update-not-available', () => { if (manualCheck) sendUpdate({ kind: 'latest' }); manualCheck = false; });
-  updater.on('update-downloaded', (i) => { updateReady = i.version; manualCheck = false; sendUpdate({ kind: 'ready', version: i.version }); });
-  updater.on('error', (e) => { console.error('update', e); if (manualCheck) sendUpdate({ kind: 'error' }); manualCheck = false; });
+  updater.on('download-progress', (p) => {
+    const percent = Math.floor(p.percent || 0);
+    if (percent !== lastPercent) { lastPercent = percent; sendUpdate({ kind: 'progress', version: updateFound, percent }); }
+  });
+  updater.on('update-downloaded', (i) => {
+    downloading = false;
+    updateReady = i.version;
+    manualCheck = false;
+    sendUpdate({ kind: 'ready', version: i.version });
+  });
+  updater.on('error', (e) => {
+    console.error('update', e);
+    if (downloading) { downloading = false; sendUpdate({ kind: 'download-error', version: updateFound }); }
+    else if (manualCheck) sendUpdate({ kind: 'error' });
+    manualCheck = false;
+  });
   setTimeout(checkUpdates, 10 * 1000);
   setInterval(checkUpdates, 4 * 60 * 60 * 1000);
 }
@@ -358,8 +379,20 @@ handle('set-theme', async (theme) => {
 handle('check-updates', async () => {
   if (!updater) return { ok: false, error: 'Обновления проверяются только в установленной программе.' };
   if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady }); return { ok: true }; }
+  if (downloading) { sendUpdate({ kind: 'progress', version: updateFound, percent: Math.max(0, lastPercent) }); return { ok: true }; }
   manualCheck = true;
   checkUpdates();
+  return { ok: true };
+});
+
+// The user agreed to download the version that the last check found.
+handle('download-update', async () => {
+  if (!updater || !updateFound) return { ok: false, error: 'Сначала проверьте обновления.' };
+  if (!downloading && !updateReady) {
+    downloading = true;
+    lastPercent = -1;
+    updater.downloadUpdate().catch(() => { /* reported by the 'error' event */ });
+  }
   return { ok: true };
 });
 

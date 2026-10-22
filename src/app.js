@@ -20,7 +20,7 @@
 
   var state = {
     loaded: false,
-    page: "prompts",      // "prompts" | "stats" | "settings"
+    page: "prompts",      // a key of els.views: "prompts", "skills", "calendar", "assistant", "stats", "settings"
     items: [],
     info: null,
     profile: null,        // { name, welcomed, avatar }
@@ -48,7 +48,10 @@
     viewer: $("viewer"), viewerTitle: $("viewer-title"), viewerBody: $("viewer-body"),
     viewerOpen: $("viewer-open"), viewerShow: $("viewer-show"), viewerClose: $("viewer-close"),
     navItems: Array.prototype.slice.call(document.querySelectorAll(".nav-item[data-page]")),
-    views: { prompts: $("view-prompts"), stats: $("view-stats"), settings: $("view-settings") },
+    views: {
+      prompts: $("view-prompts"), skills: $("view-skills"), calendar: $("view-calendar"), assistant: $("view-assistant"),
+      stats: $("view-stats"), settings: $("view-settings")
+    },
     sideAvatar: $("side-avatar"), sideName: $("side-name"),
     menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
     statsAvatar: $("stats-avatar"), statsName: $("stats-name"), statsSince: $("stats-since"), statsEdit: $("stats-edit"),
@@ -184,13 +187,15 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { els.toast.classList.remove("show"); }, long ? 5200 : 2400);
   }
-  // action: optional { label, close, onclick } for a button next to the text.
+  // action: optional { label, onclick } for a button next to the text, { close, onclose } for the close link.
+  var bannerOnClose = null;
   function showBanner(text, action) {
     els.bannerText.textContent = text;
-    els.bannerAction.hidden = !action;
-    els.bannerAction.textContent = action ? action.label : "";
-    els.bannerAction.onclick = action ? action.onclick : null;
+    els.bannerAction.hidden = !(action && action.label);
+    els.bannerAction.textContent = (action && action.label) || "";
+    els.bannerAction.onclick = (action && action.onclick) || null;
     els.bannerClose.textContent = (action && action.close) || "Понятно";
+    bannerOnClose = (action && action.onclose) || null;
     els.banner.hidden = false;
   }
 
@@ -1016,8 +1021,38 @@
   });
 
   /* ---------- updates ---------- */
+  // A new version is downloaded only after the user presses "Скачать".
+  var upd = { dismissed: null, progressHidden: false };
+  function startDownload(version) {
+    call(api.downloadUpdate()).then(function (r) {
+      if (!r) return;
+      upd.progressHidden = false;
+      showUpdateProgress(version, 0);
+    });
+  }
+  function showUpdateProgress(version, percent) {
+    if (upd.progressHidden) return;
+    showBanner("Скачиваю Snowball.ai " + version + "… " + percent + "%. Можно продолжать работать, программа сообщит, когда всё будет готово.", {
+      close: "Скрыть", onclose: function () { upd.progressHidden = true; }
+    });
+  }
   api.onUpdate(function (u) {
-    if (u.kind === "downloading") toast("Вышла версия " + u.version + ", скачиваю её…", true);
+    if (u.kind === "available") {
+      // The background check asks once per version; "Проверить обновления" always asks.
+      if (!u.manual && upd.dismissed === u.version) return;
+      showBanner("Вышла новая версия Snowball.ai " + u.version + ". Скачать её? Это займёт около минуты, а установится она после перезапуска.", {
+        label: "Скачать",
+        close: "Не сейчас",
+        onclick: function () { startDownload(u.version); },
+        onclose: function () { upd.dismissed = u.version; }
+      });
+    }
+    else if (u.kind === "progress") showUpdateProgress(u.version, u.percent);
+    else if (u.kind === "download-error") {
+      showBanner("Не получилось скачать Snowball.ai " + u.version + ". Проверьте интернет и попробуйте ещё раз.", {
+        label: "Попробовать ещё раз", close: "Не сейчас", onclick: function () { startDownload(u.version); }
+      });
+    }
     else if (u.kind === "latest") toast("У вас последняя версия", true);
     else if (u.kind === "error") toast("Не получилось проверить обновления. Проверьте интернет.", true);
     else if (u.kind === "ready") {
@@ -1095,7 +1130,12 @@
   buildCategoryPicker();
   els.addBtn.addEventListener("click", function () { openEditor(null); });
   els.cancelBtn.addEventListener("click", function () { closeEditor(true); });
-  els.bannerClose.addEventListener("click", function () { els.banner.hidden = true; });
+  els.bannerClose.addEventListener("click", function () {
+    els.banner.hidden = true;
+    var fn = bannerOnClose;
+    bannerOnClose = null;
+    if (fn) fn();
+  });
   els.editor.addEventListener("submit", submitEditor);
   els.editor.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeEditor(true); }
