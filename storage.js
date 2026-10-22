@@ -3,6 +3,9 @@
 //   <dir>/prompts.json          — all prompts (readable in any text editor)
 //   <dir>/prompts.backup.json   — the previous version, refreshed on every save
 //   <dir>/Файлы/<promptId>/...  — files attached to each prompt
+//   <dir>/profile.json          — nickname and whether the welcome screen was shown
+//   <dir>/avatar.png            — the avatar, already cropped to a square
+//   <dir>/activity.json         — actions per day for the statistics page
 // This module only uses Node's fs/path, so it can be tested without Electron.
 
 const fs = require('fs');
@@ -15,6 +18,12 @@ const FORMAT = 'snowball';
 const DATA_FILE = 'prompts.json';
 const BACKUP_FILE = 'prompts.backup.json';
 const FILES_DIR = 'Файлы';
+const PROFILE_FILE = 'profile.json';
+const AVATAR_FILE = 'avatar.png';
+const ACTIVITY_FILE = 'activity.json';
+// What counts as an action on the statistics page. Deleting and importing do not count.
+const ACTIONS = ['created', 'edited', 'files', 'copied'];
+const NAME_MAX = 32;
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
 const VIDEO_EXT = new Set(['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.mkv']);
@@ -116,6 +125,40 @@ async function retry(fn) {
   throw last;
 }
 
+// Local calendar day, so an action at 23:50 lands on the day the user saw it.
+function dayKey(t) {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function readJson(file) {
+  try { return JSON.parse(String(await fsp.readFile(file, 'utf8')).replace(/^﻿/, '')); } catch (e) { return null; }
+}
+async function writeJson(file, value) {
+  const tmp = file + '.tmp';
+  await fsp.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8');
+  try { await retry(() => fsp.rename(tmp, file)); } catch (e) {
+    await retry(() => fsp.writeFile(file, JSON.stringify(value, null, 2), 'utf8'));
+    await fsp.rm(tmp, { force: true });
+  }
+}
+
+function normalizeProfile(p) {
+  p = p && typeof p === 'object' ? p : {};
+  return { name: str(p.name, NAME_MAX).trim(), welcomed: !!p.welcomed, avatarAt: num(p.avatarAt) };
+}
+function normalizeActivity(a) {
+  const days = {};
+  const src = a && typeof a === 'object' && a.days && typeof a.days === 'object' ? a.days : {};
+  Object.keys(src).forEach((k) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !src[k] || typeof src[k] !== 'object') return;
+    const day = {};
+    ACTIONS.forEach((n) => { const v = Math.max(0, Math.round(num(src[k][n]))); if (v) day[n] = v; });
+    if (Object.keys(day).length) days[k] = day;
+  });
+  return { format: 'snowball-activity', version: 1, since: num(a && a.since), days };
+}
+
 async function uniqueTarget(dir, name) {
   const ext = path.extname(name);
   const stem = name.slice(0, name.length - ext.length);
@@ -131,12 +174,17 @@ class Store {
     this.data = null;
     this.mtimeMs = 0;
     this.notice = null;      // 'created' | 'restored' | 'reset'
+    this.profile = normalizeProfile(null);
+    this.activity = normalizeActivity(null);
     this.queue = Promise.resolve();
   }
 
   get dataPath() { return path.join(this.dir, DATA_FILE); }
   get backupPath() { return path.join(this.dir, BACKUP_FILE); }
   get filesRoot() { return path.join(this.dir, FILES_DIR); }
+  get profilePath() { return path.join(this.dir, PROFILE_FILE); }
+  get avatarPath() { return path.join(this.dir, AVATAR_FILE); }
+  get activityPath() { return path.join(this.dir, ACTIVITY_FILE); }
   promptDir(id) {
     if (!ID_RE.test(id)) throw new Error('bad id');
     return path.join(this.filesRoot, id);
@@ -150,6 +198,77 @@ class Store {
   }
 
   async init(seed) {
+    await this.initData(seed);
+    await this.loadExtras();
+    return this;
+  }
+
+  // Profile and statistics live beside prompts.json and never block opening the prompts.
+  async loadExtras() {
+    this.profile = normalizeProfile(await readJson(this.profilePath));
+    const raw = await readJson(this.activityPath);
+    if (raw) { this.activity = normalizeActivity(raw); return; }
+    this.activity = this.backfillActivity();
+    try { await writeJson(this.activityPath, this.activity); } catch (e) { /* statistics are a convenience */ }
+  }
+
+  // First start with statistics: rebuild what the prompts remember (creation, last edit, attached files).
+  backfillActivity() {
+    const a = normalizeActivity(null);
+    let since = Date.now();
+    const add = (t, kind, n) => {
+      if (!t) return;
+      const day = a.days[dayKey(t)] || (a.days[dayKey(t)] = {});
+      day[kind] = (day[kind] || 0) + (n || 1);
+    };
+    this.data.prompts.forEach((p) => {
+      since = Math.min(since, p.createdAt || since);
+      add(p.createdAt, 'created');
+      if (p.updatedAt - p.createdAt > 60 * 1000) add(p.updatedAt, 'edited');
+      p.files.forEach((f) => add(f.addedAt, 'files'));
+    });
+    a.since = since;
+    return a;
+  }
+
+  // Called from inside run(), so it must not queue itself.
+  async bump(kind, n) {
+    if (!ACTIONS.includes(kind) || !(n > 0)) return;
+    const key = dayKey(Date.now());
+    const day = this.activity.days[key] || (this.activity.days[key] = {});
+    day[kind] = (day[kind] || 0) + n;
+    if (!this.activity.since) this.activity.since = Date.now();
+    try { await writeJson(this.activityPath, this.activity); } catch (e) { /* statistics are a convenience */ }
+  }
+
+  recordCopy() { return this.run(() => this.bump('copied', 1)); }
+
+  activityView() { return { since: this.activity.since, days: this.activity.days }; }
+
+  profileView() {
+    const p = this.profile;
+    const avatar = p.avatarAt && fs.existsSync(this.avatarPath) ? pathToFileURL(this.avatarPath).href + '?v=' + p.avatarAt : null;
+    return { name: p.name, welcomed: p.welcomed, avatar };
+  }
+
+  // input: { name?, avatar?: PNG Buffer | null (remove) | undefined (keep) }
+  saveProfile(input) {
+    return this.run(async () => {
+      const p = this.profile;
+      if (input && typeof input.name === 'string') p.name = str(input.name, NAME_MAX).trim();
+      if (input && input.avatar === null && p.avatarAt) {
+        if (await exists(this.avatarPath)) { try { await this.trash(this.avatarPath); } catch (e) { await fsp.rm(this.avatarPath, { force: true }); } }
+        p.avatarAt = 0;
+      } else if (input && Buffer.isBuffer(input.avatar)) {
+        await retry(() => fsp.writeFile(this.avatarPath, input.avatar));
+        p.avatarAt = Date.now();
+      }
+      p.welcomed = true;
+      await writeJson(this.profilePath, p);
+    });
+  }
+
+  async initData(seed) {
     await fsp.mkdir(this.dir, { recursive: true });
     let raw = null;
     try { raw = await fsp.readFile(this.dataPath, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
@@ -284,18 +403,26 @@ class Store {
       const errors = [];
       let prompt = item.id ? this.find(item.id) : null;
       const now = Date.now();
+      const isNew = !prompt;
       if (!prompt) {
         prompt = normalizePrompt({ id: item.id, createdAt: now, updatedAt: now });
         if (this.find(prompt.id)) prompt.id = newId('p');
         this.data.prompts.push(prompt);
       }
+      const before = JSON.stringify([prompt.title, prompt.type, prompt.text, prompt.files.map((f) => f.id)]);
       prompt.title = str(item.title, 300).trim();
       prompt.type = str(item.type, 60).trim();
       prompt.text = str(item.text, 2000000);
-      prompt.updatedAt = now;
       await this.removeFiles(prompt, input && input.removeFileIds);
+      const kept = prompt.files.length;
       await this.copyIn(prompt, input && input.addFiles, errors);
+      // "Сохранить" without real changes keeps the date and does not count as an edit.
+      const changed = isNew || before !== JSON.stringify([prompt.title, prompt.type, prompt.text, prompt.files.map((f) => f.id)]);
+      if (!changed) return { id: prompt.id, errors };
+      prompt.updatedAt = now;
       await this.write();
+      await this.bump(isNew ? 'created' : 'edited', 1);
+      await this.bump('files', prompt.files.length - kept);
       return { id: prompt.id, errors };
     });
   }
@@ -307,7 +434,11 @@ class Store {
       const errors = [];
       const before = prompt.files.length;
       await this.copyIn(prompt, sources, errors);
-      if (prompt.files.length !== before) { prompt.updatedAt = Date.now(); await this.write(); }
+      if (prompt.files.length !== before) {
+        prompt.updatedAt = Date.now();
+        await this.write();
+        await this.bump('files', prompt.files.length - before);
+      }
       return { added: prompt.files.length - before, errors };
     });
   }
@@ -368,14 +499,17 @@ class Store {
   }
 }
 
-// Copies the data (prompts.json and the files folder) into another folder.
+// Copies the data (prompts.json, profile, statistics and the files folder) into another folder.
 async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
   await fsp.copyFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
+  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE]) {
+    if (await exists(path.join(fromDir, name))) await fsp.copyFile(path.join(fromDir, name), path.join(toDir, name));
+  }
   const files = path.join(fromDir, FILES_DIR);
   if (await exists(files)) await fsp.cp(files, path.join(toDir, FILES_DIR), { recursive: true, force: false, errorOnExist: false });
 }
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }
 
-module.exports = { Store, copyDataTo, hasData, sanitizeName, kindOf, parseData, DATA_FILE, FILES_DIR };
+module.exports = { Store, copyDataTo, hasData, sanitizeName, kindOf, parseData, dayKey, DATA_FILE, FILES_DIR, NAME_MAX };

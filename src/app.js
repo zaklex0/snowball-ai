@@ -12,11 +12,19 @@
   var IMAGE_EXT = ["png", "jpg", "jpeg", "webp", "gif", "bmp", "avif", "svg", "ico"];
   var VIDEO_EXT = ["mp4", "webm", "mov", "m4v", "ogv", "mkv"];
   var AUDIO_EXT = ["mp3", "wav", "ogg", "m4a", "flac", "aac", "opus"];
+  // Kinds of actions counted on the statistics page (storage.js counts them).
+  var ACTIONS = ["created", "edited", "files", "copied"];
+  var MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+  var MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+  var WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 
   var state = {
     loaded: false,
+    page: "prompts",      // "prompts" | "stats" | "settings"
     items: [],
     info: null,
+    profile: null,        // { name, welcomed, avatar }
+    activity: null,       // { since, days: { "2026-10-22": { created, edited, files, copied } } }
     query: "",
     type: "all",
     expanded: new Set(),
@@ -38,7 +46,17 @@
     toolbar: $("toolbar"), search: $("search"), filters: $("filters"),
     table: $("table"), rows: $("rows"), stateBox: $("state"), dirLine: $("dir-line"), toast: $("toast"),
     viewer: $("viewer"), viewerTitle: $("viewer-title"), viewerBody: $("viewer-body"),
-    viewerOpen: $("viewer-open"), viewerShow: $("viewer-show"), viewerClose: $("viewer-close")
+    viewerOpen: $("viewer-open"), viewerShow: $("viewer-show"), viewerClose: $("viewer-close"),
+    navItems: Array.prototype.slice.call(document.querySelectorAll(".nav-item[data-page]")),
+    views: { prompts: $("view-prompts"), stats: $("view-stats"), settings: $("view-settings") },
+    sideAvatar: $("side-avatar"), sideName: $("side-name"),
+    menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
+    statsAvatar: $("stats-avatar"), statsName: $("stats-name"), statsSince: $("stats-since"), statsEdit: $("stats-edit"),
+    metrics: $("metrics"), heat: $("heat"), heatTip: $("heat-tip"), breakdown: $("breakdown"),
+    settingsVersion: $("settings-version"),
+    profileDlg: $("profile-dlg"), pdForm: $("pd-form"), pdTitle: $("pd-title"), pdText: $("pd-text"),
+    pdAvatar: $("pd-avatar"), pdPick: $("pd-pick"), pdRemove: $("pd-remove"), pdName: $("pd-name"),
+    pdSave: $("pd-save"), pdCancel: $("pd-cancel"), pdMsg: $("pd-msg")
   };
   var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -52,7 +70,8 @@
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
     left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>',
-    right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>'
+    right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>'
   };
 
   /* ---------- helpers ---------- */
@@ -120,6 +139,44 @@
   }
   function findItem(id) { return state.items.find(function (i) { return i.id === id; }) || null; }
 
+  /* ---------- dates ---------- */
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  // Same day key as storage.js: the local calendar day.
+  function dayKey(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function fmtDay(d, withYear) { return d.getDate() + " " + MONTHS[d.getMonth()] + (withYear ? " " + d.getFullYear() : ""); }
+  function fmtWhen(t) {
+    var d = new Date(t), now = new Date();
+    var time = d.getHours() + ":" + pad2(d.getMinutes());
+    if (dayKey(d) === dayKey(now)) return "сегодня в " + time;
+    if (dayKey(d) === dayKey(addDays(now, -1))) return "вчера в " + time;
+    return fmtDay(d, d.getFullYear() !== now.getFullYear());
+  }
+  // The later of the two dates: last edit if there was one, otherwise creation.
+  function whenLine(item) {
+    var edited = item.updatedAt - item.createdAt > 60 * 1000;
+    var t = edited ? item.updatedAt : item.createdAt;
+    return h("div", { class: "when", title: new Date(t).toLocaleString("ru-RU") }, (edited ? "Изменён " : "Создан ") + fmtWhen(t));
+  }
+
+  /* ---------- profile ---------- */
+  function initials(name) {
+    var words = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return "";
+    var first = function (w) { return Array.from(w)[0]; };
+    return (words.length > 1 ? first(words[0]) + first(words[1]) : first(words[0])).toUpperCase();
+  }
+  // Shows the picture, or the first letters of the nickname, or a person icon when there is neither.
+  function fillAvatar(el, src, name) {
+    var key = src ? "img:" + src : "txt:" + initials(name);
+    if (el.dataset.key === key) return;
+    el.dataset.key = key;
+    if (src) el.replaceChildren(h("img", { src: src, alt: "", draggable: "false" }));
+    else if (initials(name)) el.textContent = initials(name);
+    else el.innerHTML = ICONS.user;
+  }
+  function displayName() { return (state.profile && state.profile.name) || "Без ника"; }
+
   var toastTimer = null;
   function toast(msg, long) {
     els.toast.textContent = msg;
@@ -156,6 +213,8 @@
       }
       if (r.prompts) setItems(r.prompts);
       if (r.info) state.info = r.info;
+      if (r.profile) state.profile = r.profile;
+      if (r.activity) state.activity = r.activity;
       return r;
     }, function () {
       toast("Не получилось. Попробуйте ещё раз.", true);
@@ -177,9 +236,12 @@
     }, 1800);
   }
   function copyPrompt(item, btn) {
-    api.copyText(item.text).then(function (r) {
-      if (r && r.ok) markCopied(btn);
-      else toast("Не получилось скопировать. Выделите текст и нажмите Ctrl + C.");
+    api.copyText(item.text, item.id).then(function (r) {
+      if (r && r.ok) {
+        markCopied(btn);
+        // Only the profile counters change: re-rendering the rows would reset the "Скопировано" button.
+        if (r.activity) { state.activity = r.activity; renderChrome(); }
+      } else toast("Не получилось скопировать. Выделите текст и нажмите Ctrl + C.");
     }, function () { toast("Не получилось скопировать. Выделите текст и нажмите Ctrl + C."); });
   }
 
@@ -611,6 +673,7 @@
     return h("tr", { "data-id": item.id, class: state.dropRowId === item.id ? "drop-target" : null },
       h("td", { class: "c-name" },
         h("div", { class: "name", text: item.title || "Без названия" }),
+        whenLine(item),
         actions(item)),
       h("td", { class: "c-type" }, item.type ? typeChip(item.type) : h("span", { class: "muted", text: "—" })),
       h("td", { class: "c-prompt" }, promptBlock(item))
@@ -668,6 +731,7 @@
         h("button", { type: "button", class: "link-btn", onclick: function () { call(api.openDataDir()); } }, "Открыть"),
         state.info.version ? " · Версия " + state.info.version : "");
       markTheme(state.info.theme);
+      els.settingsVersion.textContent = state.info.version ? "Версия " + state.info.version : "";
     }
 
     if (loading) {
@@ -694,7 +758,194 @@
     placeEditor();
     restoreFocus(focus);
     if (viewerState) renderViewerIfChanged();
+    renderChrome();
+    if (state.page === "stats") renderStats();
   }
+
+  /* ---------- pages and sidebar ---------- */
+  function setPage(page) {
+    setMenu(false);
+    if (state.page === page) return;
+    state.page = page;
+    els.scroller.scrollTop = 0;
+    render();
+  }
+  function renderChrome() {
+    var p = state.profile || {};
+    [els.sideAvatar, els.menuAvatar, els.statsAvatar].forEach(function (el) { fillAvatar(el, p.avatar, p.name); });
+    els.sideName.textContent = displayName();
+    els.menuName.textContent = displayName();
+    var year = activityStats().year;
+    els.menuSub.textContent = fmtNum(year) + " " + plural(year, "действие", "действия", "действий") + " за год";
+    els.navItems.forEach(function (b) {
+      if (b.dataset.page === state.page) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    Object.keys(els.views).forEach(function (k) { els.views[k].hidden = k !== state.page; });
+  }
+
+  /* ---------- statistics ---------- */
+  function dayTotal(day) {
+    if (!day) return 0;
+    return ACTIONS.reduce(function (s, k) { return s + (day[k] || 0); }, 0);
+  }
+  function heatLevel(n) { return n <= 0 ? 0 : n <= 2 ? 1 : n <= 5 ? 2 : n <= 9 ? 3 : 4; }
+  function today() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+
+  function activityStats() {
+    var days = (state.activity && state.activity.days) || {};
+    var end = today();
+    var res = { year: 0, activeDays: 0, current: 0, best: 0, by: {} };
+    ACTIONS.forEach(function (k) { res.by[k] = 0; });
+    for (var d = addDays(end, -364); d <= end; d = addDays(d, 1)) {
+      var day = days[dayKey(d)], n = dayTotal(day);
+      if (!n) continue;
+      res.year += n;
+      res.activeDays++;
+      ACTIONS.forEach(function (k) { res.by[k] += day[k] || 0; });
+    }
+    // A streak is still alive if today has no actions yet but yesterday had.
+    var c = dayTotal(days[dayKey(end)]) ? end : addDays(end, -1);
+    while (dayTotal(days[dayKey(c)])) { res.current++; c = addDays(c, -1); }
+    var run = 0, prev = null;
+    Object.keys(days).filter(function (k) { return dayTotal(days[k]); }).sort().forEach(function (k) {
+      var parts = k.split("-");
+      var d0 = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+      run = prev && dayKey(addDays(prev, 1)) === k ? run + 1 : 1;
+      res.best = Math.max(res.best, run);
+      prev = d0;
+    });
+    return res;
+  }
+
+  function dayTip(d, day) {
+    var n = dayTotal(day);
+    var head = fmtDay(d, true) + ", " + WEEKDAYS[(d.getDay() + 6) % 7];
+    if (!n) return head + ": нет действий";
+    var parts = [];
+    if (day.created) parts.push("создано " + day.created);
+    if (day.edited) parts.push("правок " + day.edited);
+    if (day.files) parts.push("файлов " + day.files);
+    if (day.copied) parts.push("скопировано " + day.copied);
+    return head + ": " + n + " " + plural(n, "действие", "действия", "действий") + " (" + parts.join(", ") + ")";
+  }
+
+  // 53 weeks, Monday on top, this week in the last column — like the contribution graph on GitHub.
+  function renderHeat() {
+    var days = (state.activity && state.activity.days) || {};
+    var end = today();
+    var start = addDays(end, -((end.getDay() + 6) % 7) - 52 * 7);
+    var kids = [];
+    var place = function (el, col, row) { el.style.gridColumn = String(col); el.style.gridRow = String(row); return el; };
+    ["Пн", "", "Ср", "", "Пт", "", ""].forEach(function (l, i) { if (l) kids.push(place(h("span", { class: "w", text: l }), 1, i + 2)); });
+    var months = [];
+    for (var w = 0; w < 53; w++) {
+      var monday = addDays(start, w * 7);
+      if (!months.length || months[months.length - 1].month !== monday.getMonth()) months.push({ week: w, month: monday.getMonth() });
+      for (var r = 0; r < 7; r++) {
+        var d = addDays(monday, r);
+        var day = days[dayKey(d)];
+        var cell = h("span", { class: "d l" + heatLevel(dayTotal(day)) + (d > end ? " future" : "") });
+        if (d <= end) { cell.dataset.tip = dayTip(d, day); cell.title = cell.dataset.tip; }
+        kids.push(place(cell, w + 2, r + 2));
+      }
+    }
+    // The first month label is dropped when the next one starts too close to fit both.
+    months.forEach(function (m, i) {
+      if (i === 0 && months[1] && months[1].week - m.week < 3) return;
+      var label = h("span", { class: "m", text: MONTHS_SHORT[m.month] });
+      label.style.gridColumn = (m.week + 2) + " / span 3";
+      label.style.gridRow = "1";
+      kids.push(label);
+    });
+    els.heat.replaceChildren.apply(els.heat, kids);
+  }
+
+  function metric(label, value, sub) {
+    return h("div", { class: "metric" }, h("span", { class: "k", text: label }), h("span", { class: "v", text: value }), sub ? h("span", { class: "s", text: sub }) : null);
+  }
+  function renderStats() {
+    var s = activityStats();
+    var p = state.profile || {};
+    els.statsName.textContent = displayName();
+    var since = state.activity && state.activity.since;
+    els.statsSince.textContent = since ? "В Snowball.ai с " + MONTHS[new Date(since).getMonth()] + " " + new Date(since).getFullYear() : "";
+    var total = state.items.length;
+    els.metrics.replaceChildren(
+      metric("Действий за год", fmtNum(s.year)),
+      metric("Активных дней", fmtNum(s.activeDays)),
+      metric("Дней подряд", fmtNum(s.current), "Лучшая серия: " + fmtNum(s.best)),
+      metric("Промтов в базе", fmtNum(total))
+    );
+    var chip = function (label, n) { return h("span", { class: "bchip" }, label + " ", h("b", { text: fmtNum(n) })); };
+    els.breakdown.replaceChildren(
+      chip("Создано промтов", s.by.created), chip("Правок", s.by.edited),
+      chip("Прикреплено файлов", s.by.files), chip("Скопировано", s.by.copied));
+    renderHeat();
+    fillAvatar(els.statsAvatar, p.avatar, p.name);
+  }
+  els.heat.addEventListener("mouseover", function (e) {
+    var t = e.target && e.target.dataset && e.target.dataset.tip;
+    if (t) els.heatTip.textContent = t;
+  });
+  els.navItems.forEach(function (b) { b.addEventListener("click", function () { setPage(b.dataset.page); }); });
+
+  /* ---------- profile window ---------- */
+  // avatar: undefined = keep the saved one, null = remove it, string = a new picture (data URL).
+  var pd = { avatar: undefined, welcome: false };
+  function pdAvatar() { return pd.avatar === undefined ? (state.profile && state.profile.avatar) || null : pd.avatar; }
+  function renderPdAvatar() {
+    fillAvatar(els.pdAvatar, pdAvatar(), els.pdName.value);
+    els.pdRemove.hidden = !pdAvatar();
+  }
+  // welcome: the first-start version with "Пропустить" instead of "Отмена".
+  function openProfile(welcome) {
+    setMenu(false);
+    pd.avatar = undefined;
+    pd.welcome = !!welcome;
+    els.pdTitle.textContent = welcome ? "Добро пожаловать в Snowball.ai" : "Профиль";
+    els.pdText.textContent = welcome ? "Как вас называть? Ник и аватарка видны внизу слева, поменять их можно в любой момент." : "";
+    els.pdSave.textContent = welcome ? "Начать" : "Сохранить";
+    els.pdCancel.textContent = welcome ? "Пропустить" : "Отмена";
+    els.pdName.value = (state.profile && state.profile.name) || "";
+    els.pdMsg.textContent = "";
+    els.pdSave.disabled = false;
+    renderPdAvatar();
+    if (!els.profileDlg.open) els.profileDlg.showModal();
+    els.pdName.focus();
+  }
+  function closeProfile() {
+    if (!pd.welcome) { els.profileDlg.close(); return; }
+    // Skipping the welcome still remembers it was shown, so it does not come back on every start.
+    call(api.saveProfile({})).then(function () { els.profileDlg.close(); render(); });
+  }
+  els.pdName.addEventListener("input", function () { els.pdMsg.textContent = ""; renderPdAvatar(); });
+  els.pdPick.addEventListener("click", function () {
+    call(api.pickAvatar()).then(function (r) {
+      if (!r || r.canceled) return;
+      pd.avatar = r.avatar;
+      renderPdAvatar();
+    });
+  });
+  els.pdRemove.addEventListener("click", function () { pd.avatar = null; renderPdAvatar(); });
+  els.pdCancel.addEventListener("click", closeProfile);
+  els.profileDlg.addEventListener("cancel", function (e) { e.preventDefault(); closeProfile(); });
+  els.pdForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = els.pdName.value.trim();
+    if (pd.welcome && !name) { els.pdMsg.textContent = "Введите ник или нажмите «Пропустить»."; els.pdName.focus(); return; }
+    var input = { name: name };
+    if (pd.avatar !== undefined) input.avatar = pd.avatar;
+    els.pdSave.disabled = true;
+    call(api.saveProfile(input)).then(function (r) {
+      els.pdSave.disabled = false;
+      if (!r) return;
+      var wasWelcome = pd.welcome;
+      els.profileDlg.close();
+      render();
+      toast(wasWelcome ? "Приятно познакомиться, " + name + "!" : "Профиль сохранён");
+    });
+  });
+  els.statsEdit.addEventListener("click", function () { openProfile(false); });
   function renderViewerIfChanged() {
     var item = findItem(viewerState.promptId);
     if (!item || !item.files.length) closeViewer();
@@ -733,7 +984,9 @@
     if (!b) return;
     setMenu(false);
     var a = b.dataset.action;
-    if (a === "open-dir") call(api.openDataDir());
+    if (a === "edit-profile") openProfile(false);
+    else if (a === "settings") setPage("settings");
+    else if (a === "open-dir") call(api.openDataDir());
     else if (a === "change-dir") {
       if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
       call(api.changeDataDir()).then(function (r) {
@@ -854,11 +1107,16 @@
   els.fTitle.addEventListener("input", function () { if (els.formMsg.textContent) setMsg(""); });
   els.search.addEventListener("input", function () { state.query = els.search.value; render(); });
   document.addEventListener("keydown", function (e) {
-    if (els.viewer.open) return;
+    if (els.viewer.open || els.profileDlg.open) return;
     var mod = e.ctrlKey || e.metaKey;
-    if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) { e.preventDefault(); if (!state.editorOpen) openEditor(null); else els.fTitle.focus(); }
+    if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
+      e.preventDefault();
+      setPage("prompts");
+      if (!state.editorOpen) openEditor(null); else els.fTitle.focus();
+    }
     else if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyF")) {
       e.preventDefault();
+      setPage("prompts");
       if (!els.toolbar.hidden) { els.search.focus(); els.search.select(); }
     }
     else if (e.key === "Escape" && document.activeElement === els.search && els.search.value) {
@@ -881,6 +1139,7 @@
     state.loaded = true;
     render();
     if (!r) return;
+    if (state.profile && !state.profile.welcomed) openProfile(true);
     var n = r.notice;
     if (!n) return;
     if (n.kind === "created") toast("Создал папку «Snowball.ai» в Документах. Там хранятся все промты и файлы.", true);
@@ -888,6 +1147,6 @@
     else if (n.kind === "rename-later") showBanner("Промты на месте, но папку в Документах пока не получилось переименовать: она открыта в другой программе. Закройте Проводник и перезапустите программу, папка переименуется сама.");
     else if (n.kind === "restored") showBanner("Файл с промтами оказался повреждён, поэтому я открыл последнюю сохранённую копию. Повреждённый файл лежит рядом, в той же папке.");
     else if (n.kind === "reset") showBanner("Файл с промтами оказался повреждён, а резервной копии нет. Повреждённый файл лежит в той же папке с именем prompts.broken-….json.");
-    else if (n.kind === "missing") showBanner("Папка " + n.dir + " недоступна, поэтому я открыл папку в Документах. Если это был съёмный диск, подключите его и выберите папку снова через меню «⋯».");
+    else if (n.kind === "missing") showBanner("Папка " + n.dir + " недоступна, поэтому я открыл папку в Документах. Если это был съёмный диск, подключите его и выберите папку снова через меню профиля внизу слева.");
   });
 })();

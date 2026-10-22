@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -232,7 +232,9 @@ nativeTheme.on('updated', () => {
 });
 
 /* ---------- IPC ---------- */
-function ok(extra) { return Object.assign({ ok: true, prompts: store.view() }, extra || {}); }
+function ok(extra) {
+  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView() }, extra || {});
+}
 function fail(e) {
   const code = e && e.code;
   let error = 'Не получилось. Попробуйте ещё раз.';
@@ -303,7 +305,47 @@ handle('show-file', async (promptId, fileId) => {
   return { ok: true };
 });
 
-handle('copy-text', async (text) => { clipboard.writeText(String(text || '')); return { ok: true }; });
+// promptId is passed when a whole prompt is copied: that counts as using it on the statistics page.
+handle('copy-text', async (text, promptId) => {
+  clipboard.writeText(String(text || ''));
+  if (!promptId || !store.find(promptId)) return { ok: true };
+  await store.recordCopy();
+  return { ok: true, activity: store.activityView() };
+});
+
+/* ---------- profile ---------- */
+const AVATAR_SIZE = 256;
+
+// Crops the middle square of the picture and shrinks it, so a 20 MB photo becomes a small PNG.
+handle('pick-avatar', async () => {
+  const r = await dialog.showOpenDialog(win, {
+    title: 'Выберите картинку для аватарки',
+    properties: ['openFile'],
+    filters: [{ name: 'Картинки', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }]
+  });
+  if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
+  const img = nativeImage.createFromPath(r.filePaths[0]);
+  if (img.isEmpty()) return { ok: false, error: 'Эту картинку не получилось открыть. Попробуйте PNG или JPG.' };
+  const { width, height } = img.getSize();
+  const side = Math.min(width, height);
+  const square = img.crop({ x: Math.floor((width - side) / 2), y: Math.floor((height - side) / 2), width: side, height: side });
+  const small = side > AVATAR_SIZE ? square.resize({ width: AVATAR_SIZE, height: AVATAR_SIZE, quality: 'best' }) : square;
+  return { ok: true, avatar: small.toDataURL() };
+});
+
+// avatar: a data URL from pick-avatar, null to remove, undefined to keep the current one.
+handle('save-profile', async (input) => {
+  const name = input && typeof input.name === 'string' ? input.name : undefined;
+  let avatar;
+  if (input && input.avatar === null) avatar = null;
+  else if (input && typeof input.avatar === 'string') {
+    const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(input.avatar);
+    if (!m || m[1].length > 4 * 1024 * 1024) return { ok: false, error: 'Не получилось сохранить аватарку.' };
+    avatar = Buffer.from(m[1], 'base64');
+  }
+  await store.saveProfile({ name, avatar });
+  return ok();
+});
 
 handle('set-theme', async (theme) => {
   if (!THEMES.includes(theme)) return { ok: false, error: 'Такой темы нет.' };
