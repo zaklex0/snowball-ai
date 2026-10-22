@@ -1,8 +1,9 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
+const Anthropic = require('@anthropic-ai/sdk').default;
 const { Store, copyDataTo, hasData } = require('./storage');
 
 const APP_TITLE = 'Snowball.ai';
@@ -271,7 +272,7 @@ function handle(name, fn) {
   });
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: nativeTheme.themeSource };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: nativeTheme.themeSource, assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -464,6 +465,311 @@ handle('import', async () => {
   }
 });
 
+/* ---------- assistant ---------- */
+// The window sends the whole conversation, main.js answers piece by piece through the 'assistant' event:
+// { id, kind: 'delta', text } … { id, kind: 'action', action } … { id, kind: 'done' } or { id, kind: 'error', error }.
+// Replies come from a source: an async generator of { type: 'text', text } and { type: 'action', … }.
+// For now the only source is the stub below; Claude will be a second source with the same shape.
+const streams = new Map();   // stream id -> AbortController
+const pending = new Map();   // action id -> proposed action, waiting for "Создать" or "Отмена"
+let streamSeq = 0;
+let actionSeq = 0;
+
+function sendAssistant(e) { if (win && !win.isDestroyed()) win.webContents.send('assistant', e); }
+
+function sleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new Error('aborted')); return; }
+    const t = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, ms);
+    const stop = () => { clearTimeout(t); reject(new Error('aborted')); };
+    signal.addEventListener('abort', stop, { once: true });
+  });
+}
+
+// Pulls the prompt name out of «…» or "…", otherwise takes the words after "промт".
+function stubTitle(text) {
+  const q = /[«"“„]([^»"”“]{1,120})[»"”]/.exec(text);
+  if (q) return q[1].trim();
+  const m = /промт\S*\s+([^:\n]{1,80})/i.exec(text);
+  return m && m[1].trim() ? m[1].trim().replace(/^(про|для|о|об)\s+/i, '') : 'Новый промт';
+}
+function stubType(text) {
+  if (/видео|ролик|клип/i.test(text)) return 'Видео';
+  if (/системн/i.test(text)) return 'Системные';
+  return 'Статика';
+}
+function afterColon(text) {
+  const i = text.indexOf(':');
+  return i === -1 ? '' : text.slice(i + 1).trim();
+}
+
+function stubAnswer(last) {
+  const t = last.toLowerCase();
+  if (/(добав|созда|сохран|запиш)\S*\s.*промт/.test(t)) {
+    const title = stubTitle(last);
+    const category = stubType(last);
+    const text = afterColon(last) || `${title}, cinematic composition, soft warm light, rich textures, highly detailed, 4k`;
+    return {
+      text: 'Конечно! Вот что я сохраню в таблицу. Проверьте и нажмите **«Создать»**, если всё верно: без вашего подтверждения я ничего не меняю.',
+      action: { kind: 'create-prompt', title, category, text }
+    };
+  }
+  if (/улучш|доработ|переделай|перепиши/.test(t)) {
+    const subject = afterColon(last) || 'a cat floating in outer space';
+    return {
+      text: 'Вот как можно сделать промт подробнее. Я добавил стиль, свет, камеру и детали:\n\n' +
+        '```\n' + subject + ', cinematic shot, soft golden hour light, 35mm lens, shallow depth of field, ' +
+        'rich textures, volumetric haze, highly detailed, 4k\n```\n\n' +
+        'Что поменялось:\n' +
+        '- **Свет** — мягкий закатный, он даёт тёплые тени.\n' +
+        '- **Камера** — объектив 35 мм и размытый фон, как в кино.\n' +
+        '- **Детали** — фактуры и лёгкая дымка, чтобы картинка не была плоской.\n\n' +
+        'Это заготовка. Настоящий Claude будет улучшать именно ваш текст.'
+    };
+  }
+  if (/календар|встреч|созвон|звон|задач|напомни/.test(t)) {
+    return {
+      text: 'Календарь появится на следующих этапах. Тогда можно будет написать, например, ' +
+        '**«поставь созвон с монтажёром на завтра в 15:00»**, и я предложу карточку с делом. ' +
+        'В календарь оно попадёт только после вашего подтверждения.'
+    };
+  }
+  if (/промт/.test(t)) {
+    const prompts = store.data.prompts;
+    if (!prompts.length) {
+      return { text: 'В вашей таблице пока нет промтов. Напишите, например, **«добавь промт «Неоновый город»»**, и я предложу его сохранить.' };
+    }
+    const counts = {};
+    prompts.forEach((p) => { const k = p.type || 'Без типа'; counts[k] = (counts[k] || 0) + 1; });
+    // Compares the beginnings of words, so "одежду" finds "одежды"; question words are skipped.
+    const skip = /^(промт|сколько|меня|мои|моих|есть|какие|какой|найди|покажи|нужен|нужно|всех|список|про|для)/;
+    const stems = t.split(/[^a-zа-яё0-9]+/i).filter((w) => w.length >= 4 && !skip.test(w)).map((w) => w.slice(0, Math.max(4, w.length - 2)));
+    const found = stems.length ? prompts.filter((p) => stems.some((s) => (p.title + ' ' + p.text + ' ' + p.comment).toLowerCase().includes(s))).slice(0, 3) : [];
+    let text = `Сейчас в таблице ${prompts.length} шт.: ` + Object.keys(counts).map((k) => `${k} — ${counts[k]}`).join(', ') + '.';
+    if (found.length) text += '\n\nПохоже, вам подойдут:\n' + found.map((p) => `- **${p.title || 'Без названия'}** (${p.type || 'без типа'})`).join('\n');
+    text += '\n\nКогда подключим Claude, я буду искать по смыслу, а не только по словам.';
+    return { text };
+  }
+  return {
+    text: 'Привет! Я пока тестовый ассистент: отвечаю заготовками, чтобы можно было посмотреть, как всё будет выглядеть.\n\n' +
+      'Когда подключим Claude, я смогу:\n' +
+      '- придумать или улучшить промт для картинки или видео;\n' +
+      '- найти нужный промт среди ваших;\n' +
+      '- сохранить новый промт в таблицу, но только после вашего «Создать».\n\n' +
+      'Попробуйте написать: **добавь промт «Неоновый город»** или **улучши промт: кот в космосе**.'
+  };
+}
+
+// Pretends to think, then sends the answer a few words at a time, like a real stream.
+async function* stubSource(messages, signal) {
+  const lastUser = messages.slice().reverse().find((m) => m.role === 'user');
+  const answer = stubAnswer(lastUser ? lastUser.content : '');
+  await sleep(500 + Math.random() * 400, signal);
+  const pieces = answer.text.match(/\S+\s*|\s+/g) || [];
+  for (let i = 0; i < pieces.length;) {
+    const n = 1 + Math.floor(Math.random() * 3);
+    yield { type: 'text', text: pieces.slice(i, i + n).join('') };
+    i += n;
+    await sleep(25 + Math.random() * 45, signal);
+  }
+  if (answer.action) yield Object.assign({ type: 'action' }, answer.action);
+}
+
+/* Claude. Each user brings their own API key (the repository is public, so the program has none).
+   The key is encrypted with Windows (safeStorage) into %APPDATA%\Snowball.ai\claude-key.bin,
+   lives decrypted only here in main.js and never goes to the window. Without a key the stub answers. */
+const MODELS = ['claude-opus-5-5', 'claude-haiku-5-5'];
+const DEFAULT_MODEL = 'claude-opus-5-5';
+// How long Claude thinks before answering, like the levels in Claude itself: deeper is slower and costs more.
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const DEFAULT_EFFORT = 'medium';
+const CHECK_MODEL = 'claude-haiku-5-5';   // "Проверить ключ" sends one tiny request to the cheapest model
+const SYSTEM_PROMPT = [
+  'Ты — ассистент в программе Snowball.ai. В ней пользователь хранит промты для нейросетей, которые делают картинки и видео: Midjourney, Nano Banana, GPT Image, Seedream, Kling, Seedance, Runway и другие.',
+  'Ты помогаешь придумывать новые промты, улучшать и разбирать готовые, переводить их и подстраивать под нужную нейросеть.',
+  'Отвечай по-русски, коротко и по делу, если не просят подробнее. Пользователь не программист: объясняй простыми словами, без жаргона.',
+  'Сам промт пиши на том языке, который лучше понимает нужная нейросеть (обычно английский). Каждый готовый промт помещай в отдельный блок кода ```, чтобы его можно было скопировать одной кнопкой.',
+  'Если не хватает важной детали (для какой нейросети, картинка или видео, соотношение сторон), сначала предложи вариант, а потом коротко спроси.',
+  'Из разметки используй только абзацы, списки, **жирный** и блоки кода. Таблицы не используй: программа их не показывает.',
+  'Ты пока не умеешь сам сохранять промты, смотреть промты пользователя и вести календарь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
+].join('\n\n');
+
+const keyPath = () => path.join(app.getPath('userData'), 'claude-key.bin');
+let apiKey = null;
+
+function loadKey() {
+  try { apiKey = safeStorage.decryptString(fs.readFileSync(keyPath())) || null; } catch (e) { apiKey = null; }
+}
+function currentModel() { return MODELS.includes(settings.assistantModel) ? settings.assistantModel : DEFAULT_MODEL; }
+function currentEffort() { return EFFORTS.includes(settings.assistantEffort) ? settings.assistantEffort : DEFAULT_EFFORT; }
+function assistantInfo() { return { hasKey: !!apiKey, model: currentModel(), effort: currentEffort(), models: MODELS, efforts: EFFORTS }; }
+
+const isBilling = (e) => e instanceof Anthropic.APIError &&
+  (e.status === 402 || e.type === 'billing_error' || (e.status === 400 && /credit balance/i.test(e.message || '')));
+
+// Russian text for an SDK error. Subclasses first: APIConnectionError is itself an APIError.
+function claudeError(e) {
+  if (e instanceof Anthropic.AuthenticationError) return 'Ключ не подошёл. Проверьте его в «Настройках» или создайте новый на console.anthropic.com.';
+  if (e instanceof Anthropic.PermissionDeniedError) return 'У этого ключа нет доступа к выбранной модели. Выберите другую модель в «Настройках».';
+  if (e instanceof Anthropic.RateLimitError) return 'Слишком много запросов подряд. Подождите минуту и попробуйте ещё раз.';
+  if (e instanceof Anthropic.APIConnectionError) return 'Нет связи с Claude. Проверьте интернет и попробуйте ещё раз.';
+  if (isBilling(e)) return 'На счёте Anthropic закончились деньги. Пополните баланс на console.anthropic.com в разделе Billing.';
+  if (e instanceof Anthropic.NotFoundError) return 'Эта модель Claude недоступна. Выберите другую в «Настройках».';
+  if (e instanceof Anthropic.APIError) {
+    if (e.type === 'overloaded_error' || e.status >= 500) return 'Claude сейчас перегружен. Попробуйте через минуту.';
+    return `Claude вернул ошибку (код ${e.status}). Попробуйте ещё раз.`;
+  }
+  return null;
+}
+function userError(text) { const e = new Error(text); e.userMessage = text; return e; }
+
+async function* claudeSource(messages, signal) {
+  const client = new Anthropic({ apiKey });
+  const model = currentModel();
+  const params = {
+    model,
+    max_tokens: 16000,
+    system: SYSTEM_PROMPT,
+    messages,
+    cache_control: { type: 'ephemeral' },
+    output_config: { effort: currentEffort() }
+  };
+  // If Opus declines for safety reasons, the API retries on a suitable model inside the same request.
+  // Haiku has no such fallback, so a refusal is shown as an error.
+  if (model === 'claude-opus-5-5') Object.assign(params, { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
+  const stream = client.beta.messages.stream(params, { signal });
+  let wrote = false;
+  for await (const event of stream) {
+    if (event.type === 'content_block_start' && event.content_block.type === 'text' && wrote) yield { type: 'text', text: '\n\n' };
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta' && event.delta.text) {
+      wrote = true;
+      yield { type: 'text', text: event.delta.text };
+    }
+  }
+  const final = await stream.finalMessage();
+  if (final.stop_reason === 'refusal') throw userError('Claude отказался отвечать на этот запрос. Попробуйте сформулировать иначе.');
+  if (final.stop_reason === 'max_tokens') throw userError('Ответ получился слишком длинным и оборвался. Попросите продолжить или сократить.');
+}
+
+async function runAssistant(id, messages, controller) {
+  const source = apiKey ? claudeSource : stubSource;
+  try {
+    for await (const piece of source(messages, controller.signal)) {
+      if (controller.signal.aborted) break;
+      if (piece.type === 'text') sendAssistant({ id, kind: 'delta', text: piece.text });
+      else if (piece.type === 'action') {
+        const action = { id: 'a' + (++actionSeq), kind: piece.kind, title: piece.title, category: piece.category, text: piece.text };
+        pending.set(action.id, action);
+        sendAssistant({ id, kind: 'action', action });
+      }
+    }
+    if (!controller.signal.aborted) sendAssistant({ id, kind: 'done' });
+  } catch (e) {
+    if (!controller.signal.aborted) {
+      if (!e.userMessage) console.error('assistant', e);
+      sendAssistant({ id, kind: 'error', error: e.userMessage || claudeError(e) || 'Ассистент не ответил. Попробуйте ещё раз.' });
+    }
+  } finally {
+    streams.delete(id);
+  }
+}
+
+// messages: [{ role: 'user' | 'assistant', content: string }], the whole conversation so far.
+handle('assistant-send', async (messages) => {
+  const list = (Array.isArray(messages) ? messages : [])
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 100000) }));
+  if (!list.length || list[list.length - 1].role !== 'user') return { ok: false, error: 'Напишите сообщение.' };
+  const id = ++streamSeq;
+  const controller = new AbortController();
+  streams.set(id, controller);
+  runAssistant(id, list, controller);
+  return { ok: true, id };
+});
+
+handle('assistant-stop', async (id) => {
+  const c = streams.get(id);
+  if (c) c.abort();
+  return { ok: true };
+});
+
+// History of conversations, stored in chats.json beside the prompts.
+handle('chat-list', async () => ({ ok: true, chats: store.chatList() }));
+handle('chat-get', async (id) => {
+  const chat = store.getChat(id);
+  return chat ? { ok: true, chat } : { ok: false, error: 'Этот разговор не найден. Возможно, его удалили.' };
+});
+handle('chat-save', async (chat) => {
+  const saved = await store.saveChat(chat);
+  return { ok: true, chats: store.chatList(), id: saved && saved.id };
+});
+handle('chat-delete', async (id) => { await store.deleteChat(id); return { ok: true, chats: store.chatList() }; });
+
+// "Новый разговор" or opening another one: stop whatever is still being written and forget the cards nobody answered.
+handle('assistant-reset', async () => {
+  streams.forEach((c) => c.abort());
+  pending.clear();
+  return { ok: true };
+});
+
+// The user pressed "Создать" (accept) or "Отмена" on a card the assistant suggested.
+handle('assistant-decide', async (actionId, accept) => {
+  const action = pending.get(actionId);
+  if (!action) return { ok: false, error: 'Эта карточка устарела. Попросите ассистента ещё раз.' };
+  pending.delete(actionId);
+  if (!accept) return { ok: true };
+  if (action.kind === 'create-prompt') {
+    const r = await store.savePrompt({ item: { title: action.title, type: action.category, text: action.text } });
+    return ok(r);
+  }
+  return { ok: false, error: 'Такое действие ассистент пока не умеет.' };
+});
+
+// key: a new key from the settings field, or empty to check the saved one. A new key is saved only if it works
+// (or if it is right but the account has no money yet: then it starts working as soon as the balance is topped up).
+handle('assistant-check-key', async (key) => {
+  const fresh = typeof key === 'string' ? key.trim() : '';
+  const k = fresh || apiKey;
+  if (!k) return { ok: false, error: 'Вставьте ключ в поле.' };
+  if (fresh && !/^sk-ant-\S+$/.test(fresh)) return { ok: false, error: 'Это не похоже на ключ Anthropic: он начинается с sk-ant- и пишется без пробелов.' };
+  if (fresh && !safeStorage.isEncryptionAvailable()) return { ok: false, error: 'Windows не дал зашифровать ключ, поэтому он не сохранён.' };
+  let warning = null;
+  try {
+    const client = new Anthropic({ apiKey: k, maxRetries: 1, timeout: 30 * 1000 });
+    await client.messages.create({
+      model: CHECK_MODEL, max_tokens: 64, output_config: { effort: 'low' },
+      messages: [{ role: 'user', content: 'Ответь одним словом: готово' }]
+    });
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) return { ok: false, error: 'Ключ не подошёл. Проверьте, что скопировали его целиком, или создайте новый на console.anthropic.com.' };
+    if (!isBilling(e)) { console.error('check-key', e && e.status); return { ok: false, error: claudeError(e) || 'Не получилось проверить ключ. Попробуйте ещё раз.' }; }
+    warning = claudeError(e);
+  }
+  if (fresh) {
+    await fsp.mkdir(path.dirname(keyPath()), { recursive: true });
+    await fsp.writeFile(keyPath(), safeStorage.encryptString(fresh));
+    apiKey = fresh;
+  }
+  return { ok: true, saved: !!fresh, warning, info: info() };
+});
+
+handle('assistant-delete-key', async () => {
+  await fsp.rm(keyPath(), { force: true });
+  apiKey = null;
+  return { ok: true, info: info() };
+});
+
+// opts: { model?, effort? } from the "Модель" button in the message box.
+handle('assistant-set-options', async (opts) => {
+  const o = opts || {};
+  if (o.model !== undefined && !MODELS.includes(o.model)) return { ok: false, error: 'Такой модели нет.' };
+  if (o.effort !== undefined && !EFFORTS.includes(o.effort)) return { ok: false, error: 'Такого уровня нет.' };
+  if (o.model !== undefined) settings.assistantModel = o.model;
+  if (o.effort !== undefined) settings.assistantEffort = o.effort;
+  saveSettings();
+  return { ok: true, info: info() };
+});
+
 /* ---------- start ---------- */
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -480,6 +786,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     loadSettings();
+    loadKey();
     applyTheme();
     try { await migrateLegacy(); } catch (e) { console.error('migrate', e); }
     try {

@@ -41,7 +41,7 @@
     meta: $("meta"), addBtn: $("add-btn"), menuBtn: $("menu-btn"), menu: $("menu"),
     banner: $("banner"), bannerText: $("banner-text"), bannerAction: $("banner-action"), bannerClose: $("banner-close"),
     editorSlot: $("editor-slot"), editor: $("editor"), editorTitle: $("editor-title"),
-    fTitle: $("f-title"), fCat: $("f-cat"), fText: $("f-text"), fFiles: $("f-files"),
+    fTitle: $("f-title"), fCat: $("f-cat"), fText: $("f-text"), fComment: $("f-comment"), fFiles: $("f-files"),
     saveBtn: $("save-btn"), cancelBtn: $("cancel-btn"), formMsg: $("form-msg"),
     toolbar: $("toolbar"), search: $("search"), filters: $("filters"),
     table: $("table"), rows: $("rows"), stateBox: $("state"), dirLine: $("dir-line"), toast: $("toast"),
@@ -57,6 +57,13 @@
     statsAvatar: $("stats-avatar"), statsName: $("stats-name"), statsSince: $("stats-since"), statsEdit: $("stats-edit"),
     metrics: $("metrics"), heat: $("heat"), heatTip: $("heat-tip"), breakdown: $("breakdown"),
     settingsVersion: $("settings-version"),
+    chat: $("chat"), chatEmpty: $("chat-empty"), chatIdeas: $("chat-ideas"), chatNew: $("chat-new"),
+    composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"),
+    chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"),
+    chatHistory: $("chat-history"), chatHistoryBtn: $("chat-history-btn"), chatList: $("chat-list"),
+    modelBtn: $("model-btn"), modelBtnText: $("model-btn-text"), modelMenu: $("model-menu"),
+    setStatus: $("set-status"), setKeyForm: $("set-key-form"), setKey: $("set-key"), setCheck: $("set-check"),
+    setDelete: $("set-delete"), setMsg: $("set-msg"),
     profileDlg: $("profile-dlg"), pdForm: $("pd-form"), pdTitle: $("pd-title"), pdText: $("pd-text"),
     pdAvatar: $("pd-avatar"), pdPick: $("pd-pick"), pdRemove: $("pd-remove"), pdName: $("pd-name"),
     pdSave: $("pd-save"), pdCancel: $("pd-cancel"), pdMsg: $("pd-msg")
@@ -74,7 +81,9 @@
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
     left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>',
     right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
-    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>'
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+    note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
+    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>'
   };
 
   /* ---------- helpers ---------- */
@@ -138,6 +147,7 @@
     var q = norm(state.query);
     if (!q) return true;
     return norm(item.title).indexOf(q) !== -1 || norm(item.text).indexOf(q) !== -1 || norm(item.type).indexOf(q) !== -1 ||
+      norm(item.comment).indexOf(q) !== -1 ||
       item.files.some(function (f) { return norm(f.name).indexOf(q) !== -1; });
   }
   function findItem(id) { return state.items.find(function (i) { return i.id === id; }) || null; }
@@ -203,7 +213,7 @@
   function setItems(prompts) {
     state.items = (prompts || []).map(function (p) {
       return {
-        id: p.id, title: p.title || "", type: p.type || "", text: p.text || "",
+        id: p.id, title: p.title || "", type: p.type || "", text: p.text || "", comment: p.comment || "",
         createdAt: p.createdAt || 0, updatedAt: p.updatedAt || 0,
         files: Array.isArray(p.files) ? p.files : []
       };
@@ -496,7 +506,8 @@
     });
   }
 
-  function openEditor(item) {
+  // focusComment: opened from the "Комментарий" button, so the cursor goes straight to the comment.
+  function openEditor(item, focusComment) {
     if (state.editorOpen && state.editingId !== (item ? item.id : null) && editorDirty()) {
       // Moving to another prompt keeps nothing unsaved by accident: ask first.
       setMsg("Сначала сохраните или отмените текущую правку.");
@@ -512,6 +523,7 @@
     els.editorTitle.textContent = item ? "Редактирование" : "Новый промт";
     els.fTitle.value = item ? item.title : "";
     els.fText.value = item ? item.text : "";
+    els.fComment.value = item ? item.comment : "";
     if (item) setCategory(item.type);
     else {
       var filtered = state.type !== "all" ? categoryOf(state.type) : null;
@@ -523,9 +535,9 @@
     renderEditorFiles();
     render();
     try { els.editor.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); } catch (e) {}
-    (item ? els.fText : els.fTitle).focus({ preventScroll: true });
+    (focusComment ? els.fComment : item ? els.fText : els.fTitle).focus({ preventScroll: true });
   }
-  function snapshot() { return JSON.stringify([els.fTitle.value, els.fText.value, selectedCategory()]); }
+  function snapshot() { return JSON.stringify([els.fTitle.value, els.fText.value, els.fComment.value, selectedCategory()]); }
   function editorDirty() {
     if (!state.editorOpen) return false;
     var d = state.draft;
@@ -557,7 +569,7 @@
     var existing = state.editingId ? findItem(state.editingId) : null;
     var d = state.draft || { pending: [], removed: new Set() };
     var payload = {
-      item: { id: existing ? existing.id : newId(), title: title, type: type, text: text },
+      item: { id: existing ? existing.id : newId(), title: title, type: type, text: text, comment: els.fComment.value.trim() },
       addFiles: d.pending.map(function (p) { return p.source; }),
       removeFileIds: Array.from(d.removed)
     };
@@ -656,6 +668,8 @@
       type: "button", class: "btn-mini toggle", "aria-expanded": String(open), "aria-controls": "pt-" + item.id,
       onclick: function () { expand(item.id, !state.expanded.has(item.id)); }
     }, icon("chevron"), h("span", { class: "lbl", text: open ? "Свернуть" : "Развернуть" }));
+    var note = h("button", { type: "button", class: "btn-mini", title: item.comment ? "Изменить комментарий" : "Добавить комментарий к промту", onclick: function () { openEditor(item, true); } },
+      icon("note"), h("span", { text: "Комментарий" }));
     var attach = h("button", { type: "button", class: "btn-mini", title: "Прикрепить файлы к этому промту", onclick: function () { pickForPrompt(item); } },
       icon("clip"), h("span", { text: "Файл" }));
     var copy = h("button", {
@@ -664,10 +678,11 @@
     }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
     var count = item.text.length;
     var files = item.files.length ? h("div", { class: "files" }, item.files.map(function (f) { return rowTile(item, f); })) : null;
-    return h("div", { class: "prompt" }, box,
+    var comment = item.comment ? h("div", { class: "prompt-note" }, icon("note"), h("div", { class: "prompt-note-text", text: item.comment })) : null;
+    return h("div", { class: "prompt" }, box, comment,
       h("div", { class: "prompt-bar" }, toggle,
         h("span", { class: "chars", text: fmtNum(count) + " " + plural(count, "символ", "символа", "символов") }),
-        h("span", { class: "spacer" }), attach, copy),
+        h("span", { class: "spacer" }), note, attach, copy),
       files);
   }
 
@@ -737,6 +752,7 @@
         state.info.version ? " · Версия " + state.info.version : "");
       markTheme(state.info.theme);
       els.settingsVersion.textContent = state.info.version ? "Версия " + state.info.version : "";
+      renderAssistantSettings();
     }
 
     if (loading) {
@@ -774,6 +790,7 @@
     state.page = page;
     els.scroller.scrollTop = 0;
     render();
+    if (page === "assistant") { scrollChat(); els.chatInput.focus({ preventScroll: true }); }
   }
   function renderChrome() {
     var p = state.profile || {};
@@ -997,6 +1014,10 @@
       call(api.changeDataDir()).then(function (r) {
         if (!r || r.canceled) return;
         if (state.editorOpen) closeEditor(false);
+        // Conversations live in the data folder too: show the ones from the new folder.
+        api.assistantReset();
+        clearChat();
+        refreshChats();
         state.expanded.clear();
         tileCache.clear();
         render();
@@ -1066,6 +1087,500 @@
       });
     }
   });
+
+  /* ---------- assistant ---------- */
+  // The open conversation lives here; after every finished message it is saved to chats.json (the "История" list).
+  // main.js gets the whole conversation on every message and streams the answer back through api.onAssistant.
+  var IDEAS = ["Добавь промт «Неоновый город»", "Улучши промт: кот в космосе", "Поставь созвон на завтра в 15:00", "Сколько у меня промтов?"];
+  var LIST_RE = /^\s*([-*•]|\d+[.)])\s+/;
+  var chat = {
+    id: null,           // null until the first message: an empty "Новый разговор" is not saved
+    title: "",
+    list: [],           // saved conversations for the history list: { id, title, createdAt, updatedAt }
+    confirmId: null,    // the history item asking "Удалить разговор?"
+    messages: [],       // { role: "user" | "assistant", text, el, body?, extra?, foot?, actions?, streaming?, note?, failed? }
+    streamId: null,     // the answer being written now
+    current: null,      // its message
+    waiting: false,     // sent, but main.js has not said the stream id yet
+    early: []           // events that came before the id
+  };
+
+  // A small part of Markdown, enough for answers: paragraphs, lists, **bold**, `code`, ``` blocks and # headings.
+  function inline(text) {
+    var out = [], re = /\*\*([^*]+)\*\*|`([^`\n]+)`/g, last = 0, m;
+    while ((m = re.exec(text))) {
+      if (m.index > last) out.push(text.slice(last, m.index));
+      out.push(m[1] !== undefined ? h("strong", { text: m[1] }) : h("code", { text: m[2] }));
+      last = re.lastIndex;
+    }
+    if (last < text.length) out.push(text.slice(last));
+    return out;
+  }
+  function codeBlock(code) {
+    var btn = h("button", { type: "button", class: "btn-mini copy rt-copy", onclick: function () {
+      api.copyText(code).then(function (r) { if (r && r.ok) markCopied(btn); }, function () {});
+    } }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
+    return h("div", { class: "rt-code" }, h("pre", { text: code }), btn);
+  }
+  function richText(text) {
+    var nodes = [], lines = text.split("\n"), i = 0;
+    while (i < lines.length) {
+      var line = lines[i];
+      if (/^\s*```/.test(line)) {
+        var code = [];
+        for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) code.push(lines[i]);
+        i++;
+        nodes.push(codeBlock(code.join("\n")));
+      } else if (LIST_RE.test(line)) {
+        var list = h(/^\s*\d/.test(line) ? "ol" : "ul");
+        for (; i < lines.length && LIST_RE.test(lines[i]); i++) list.append(h("li", null, inline(lines[i].replace(LIST_RE, ""))));
+        nodes.push(list);
+      } else if (/^#{1,4}\s/.test(line)) {
+        nodes.push(h("p", { class: "rt-h" }, inline(line.replace(/^#+\s+/, ""))));
+        i++;
+      } else if (!line.trim()) {
+        i++;
+      } else {
+        var p = h("p");
+        for (var first = true; i < lines.length && lines[i].trim() && !/^\s*```/.test(lines[i]) && !LIST_RE.test(lines[i]); i++, first = false) {
+          if (!first) p.append(h("br"));
+          p.append.apply(p, inline(lines[i]));
+        }
+        nodes.push(p);
+      }
+    }
+    return nodes;
+  }
+
+  function nearBottom() { var s = els.scroller; return s.scrollHeight - s.scrollTop - s.clientHeight < 90; }
+  function scrollChat() {
+    if (state.page !== "assistant") return;
+    els.scroller.scrollTop = els.scroller.scrollHeight;
+  }
+  // Keeps the newest text in view, unless the user scrolled up to read something.
+  function follow(fn) {
+    var stick = nearBottom();
+    fn();
+    if (stick) scrollChat();
+  }
+
+  function renderBody(msg) {
+    var kids = richText(msg.text);
+    if (msg.streaming && !msg.text) kids = [h("span", { class: "typing", "aria-label": "Ассистент печатает" }, h("i"), h("i"), h("i"))];
+    msg.body.replaceChildren.apply(msg.body, kids);
+    if (msg.streaming && msg.text) {
+      var last = msg.body.lastElementChild;
+      if (last && (last.tagName === "UL" || last.tagName === "OL")) last = last.lastElementChild;
+      if (last && last.classList.contains("rt-code")) last = null;
+      (last || msg.body).append(h("span", { class: "caret", "aria-hidden": "true" }));
+    }
+  }
+  function renderFoot(msg) {
+    var kids = [];
+    if (msg.note) kids.push(h("span", { class: msg.failed ? "msg-note bad" : "msg-note", text: msg.note }));
+    if (msg.failed) kids.push(h("button", { type: "button", class: "link-btn", onclick: function () { retry(msg); } }, "Повторить"));
+    if (!msg.streaming && msg.text) {
+      var btn = h("button", { type: "button", class: "btn-mini msg-copy", onclick: function () {
+        api.copyText(msg.text).then(function (r) { if (r && r.ok) markCopied(btn); }, function () {});
+      } }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
+      kids.push(btn);
+    }
+    msg.foot.replaceChildren.apply(msg.foot, kids);
+    msg.foot.hidden = !kids.length;
+  }
+
+  function actionCard(msg, a) {
+    var cat = categoryOf(a.category);
+    var kids = [
+      h("div", { class: "act-head" }, icon("spark"), h("span", { text: "Создать промт «" + a.title + "»?" })),
+      h("div", { class: "act-meta" }, h("span", { class: "chip " + catClass(a.category) }, cat ? cat.label : a.category || "Без типа")),
+      h("div", { class: "act-text", text: a.text })
+    ];
+    if (a.status === "done") {
+      kids.push(h("div", { class: "act-done" }, icon("check"), h("span", { text: "Промт сохранён в таблицу" }),
+        h("button", { type: "button", class: "link-btn", onclick: function () { setPage("prompts"); } }, "Открыть «Промты»")));
+    } else if (a.status === "canceled") {
+      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Отменено, ничего не сохранено" })));
+    } else if (a.status === "stale") {
+      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Карточка устарела. Попросите ассистента ещё раз, если промт нужен" })));
+    } else {
+      var busy = a.status === "busy";
+      kids.push(h("div", { class: "act-buttons" },
+        h("button", { type: "button", class: "btn btn-primary", disabled: busy, onclick: function () { decide(msg, a, true); } }, busy ? "Сохраняю…" : "Создать"),
+        h("button", { type: "button", class: "btn btn-ghost", disabled: busy, onclick: function () { decide(msg, a, false); } }, "Отмена")));
+    }
+    return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
+  }
+  function renderActions(msg) {
+    msg.extra.replaceChildren.apply(msg.extra, msg.actions.map(function (a) { return actionCard(msg, a); }));
+  }
+  function decide(msg, a, accept) {
+    if (a.status) return;
+    a.status = "busy";
+    renderActions(msg);
+    call(api.assistantDecide(a.id, accept)).then(function (r) {
+      a.status = r ? (accept ? "done" : "canceled") : null;
+      if (r && accept) { render(); toast("Промт «" + a.title + "» добавлен"); }
+      renderActions(msg);
+      persist();
+    });
+  }
+
+  function addMessage(role, text) {
+    els.chatEmpty.hidden = true;
+    var msg = { role: role, text: text || "" };
+    if (role === "user") {
+      msg.el = h("div", { class: "msg msg-user" }, h("div", { class: "bubble", text: msg.text }));
+    } else {
+      msg.body = h("div", { class: "msg-body rt" });
+      msg.extra = h("div", { class: "msg-extra" });
+      msg.foot = h("div", { class: "msg-foot", hidden: true });
+      msg.actions = [];
+      msg.el = h("div", { class: "msg msg-bot" },
+        h("span", { class: "bot-mark", html: ICONS.spark, "aria-hidden": "true" }),
+        h("div", { class: "msg-main" }, msg.body, msg.extra, msg.foot));
+    }
+    chat.messages.push(msg);
+    els.chat.append(msg.el);
+    return msg;
+  }
+
+  function setBusy(busy) {
+    els.composer.classList.toggle("busy", busy);
+    els.chatSend.setAttribute("aria-label", busy ? "Остановить ответ" : "Отправить");
+    els.chatSend.title = els.chatSend.getAttribute("aria-label");
+  }
+  function finish(msg, note, failed) {
+    msg.streaming = false;
+    msg.note = note || "";
+    msg.failed = !!failed;
+    if (chat.current === msg) { chat.current = null; chat.streamId = null; }
+    renderBody(msg);
+    renderFoot(msg);
+    setBusy(false);
+    persist();
+  }
+
+  // What main.js gets: finished messages only, without the empty answers that failed or were stopped at once.
+  function history() {
+    return chat.messages.filter(function (m) { return m.text && !m.streaming; }).map(function (m) { return { role: m.role, content: m.text }; });
+  }
+  function startReply() {
+    var msg = addMessage("assistant", "");
+    msg.streaming = true;
+    renderBody(msg);
+    chat.current = msg;
+    chat.streamId = null;
+    chat.waiting = true;
+    chat.early = [];
+    setBusy(true);
+    scrollChat();
+    api.assistantSend(history()).then(function (r) {
+      chat.waiting = false;
+      if (chat.current !== msg) return;
+      if (!r || !r.ok) { finish(msg, (r && r.error) || "Ассистент не ответил. Попробуйте ещё раз.", true); return; }
+      chat.streamId = r.id;
+      var early = chat.early;
+      chat.early = [];
+      early.forEach(onAssistantEvent);
+    }, function () {
+      chat.waiting = false;
+      if (chat.current === msg) finish(msg, "Ассистент не ответил. Попробуйте ещё раз.", true);
+    });
+  }
+  function sendChat(text) {
+    text = String(text || "").replace(/\s+$/, "");
+    if (!text.trim() || chat.current) return;
+    if (!chat.id) {
+      chat.id = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      chat.title = text.trim().replace(/\s+/g, " ").slice(0, 70);
+    }
+    addMessage("user", text);
+    persist();
+    els.chatInput.value = "";
+    growInput();
+    startReply();
+  }
+  function stopChat() {
+    var msg = chat.current;
+    if (!msg) return;
+    if (chat.streamId) api.assistantStop(chat.streamId);
+    finish(msg, "Ответ остановлен");
+  }
+  function retry(msg) {
+    var i = chat.messages.indexOf(msg);
+    if (i === -1 || chat.current) return;
+    chat.messages.splice(i, 1);
+    msg.el.remove();
+    startReply();
+  }
+  /* ---------- history ---------- */
+  // The conversation as it is saved: text and what the user answered on cards, no page elements.
+  function savedMessages() {
+    return chat.messages.filter(function (m) { return !m.streaming && (m.text || m.note || (m.actions && m.actions.length)); }).map(function (m) {
+      var out = { role: m.role, text: m.text };
+      if (m.note) out.note = m.note;
+      if (m.failed) out.failed = true;
+      if (m.actions && m.actions.length) out.actions = m.actions.map(function (a) {
+        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, status: a.status === "busy" ? null : a.status };
+      });
+      return out;
+    });
+  }
+  function persist() {
+    if (!chat.id) return;
+    var messages = savedMessages();
+    if (!messages.length) return;
+    api.chatSave({ id: chat.id, title: chat.title, messages: messages }).then(function (r) {
+      if (r && r.ok) { chat.list = r.chats; renderHistory(); }
+    }, function () {});
+  }
+  // Before opening another conversation: stop the answer and turn unanswered cards into "устарела"
+  // (main.js forgets them on assistantReset).
+  function leaveChat() {
+    if (chat.current) stopChat();
+    chat.messages.forEach(function (m) {
+      (m.actions || []).forEach(function (a) { if (!a.status || a.status === "busy") a.status = "stale"; });
+    });
+    persist();
+    api.assistantReset();
+  }
+  function clearChat() {
+    chat.id = null;
+    chat.title = "";
+    chat.messages = [];
+    chat.current = null;
+    chat.streamId = null;
+    chat.waiting = false;
+    chat.early = [];
+    els.chat.replaceChildren(els.chatEmpty);
+    els.chatEmpty.hidden = false;
+    setBusy(false);
+  }
+  function newChat() {
+    leaveChat();
+    clearChat();
+    els.chatInput.value = "";
+    growInput();
+    renderHistory();
+    setHistoryOpen(false);
+    els.scroller.scrollTop = 0;
+    els.chatInput.focus();
+  }
+  function openChat(id) {
+    if (id === chat.id) { setHistoryOpen(false); return; }
+    leaveChat();
+    api.chatGet(id).then(function (r) {
+      if (!r || !r.ok) { toast((r && r.error) || "Не получилось открыть разговор."); return; }
+      clearChat();
+      chat.id = r.chat.id;
+      chat.title = r.chat.title;
+      r.chat.messages.forEach(function (m) {
+        var msg = addMessage(m.role, m.text);
+        if (m.role !== "assistant") return;
+        msg.note = m.note || "";
+        msg.failed = !!m.failed;
+        msg.actions = (m.actions || []).map(function (a) { return Object.assign({}, a); });
+        renderBody(msg);
+        renderActions(msg);
+        renderFoot(msg);
+      });
+      renderHistory();
+      setHistoryOpen(false);
+      scrollChat();
+      els.chatInput.focus({ preventScroll: true });
+    });
+  }
+  function removeChat(id) {
+    api.chatDelete(id).then(function (r) {
+      chat.confirmId = null;
+      if (r && r.ok) chat.list = r.chats;
+      if (id === chat.id) { api.assistantReset(); clearChat(); }
+      renderHistory();
+      toast("Разговор удалён");
+    }, function () { toast("Не получилось удалить разговор."); });
+  }
+  function historyItem(c) {
+    if (chat.confirmId === c.id) {
+      return h("div", { class: "ch-item confirm" },
+        h("span", { text: "Удалить разговор?" }),
+        h("button", { type: "button", class: "link-btn danger", onclick: function () { removeChat(c.id); } }, "Удалить"),
+        h("button", { type: "button", class: "link-btn", onclick: function () { chat.confirmId = null; renderHistory(); } }, "Отмена"));
+    }
+    return h("div", { class: "ch-item" },
+      h("button", { type: "button", class: "ch-open", "aria-current": c.id === chat.id ? "true" : null, title: c.title, onclick: function () { openChat(c.id); } },
+        h("span", { class: "ch-name", text: c.title }), h("span", { class: "ch-when", text: fmtWhen(c.updatedAt) })),
+      h("button", { type: "button", class: "ch-del", "aria-label": "Удалить разговор «" + c.title + "»", title: "Удалить разговор", html: ICONS.x,
+        onclick: function () { chat.confirmId = c.id; renderHistory(); } }));
+  }
+  function renderHistory() {
+    var kids = chat.list.map(historyItem);
+    if (!kids.length) kids = [h("p", { class: "ch-empty", text: "Здесь появятся ваши разговоры с ассистентом." })];
+    els.chatList.replaceChildren.apply(els.chatList, kids);
+  }
+  // In a narrow window the history hides behind the "История" button.
+  function setHistoryOpen(open) {
+    els.chatHistory.classList.toggle("open", open);
+    els.chatHistoryBtn.setAttribute("aria-expanded", String(open));
+  }
+  function refreshChats() {
+    api.chatList().then(function (r) { if (r && r.ok) { chat.list = r.chats; renderHistory(); } }, function () {});
+  }
+
+  function onAssistantEvent(e) {
+    if (!e) return;
+    if (chat.waiting && chat.current) { chat.early.push(e); return; }
+    var msg = chat.current;
+    if (!msg || e.id !== chat.streamId) return;   // an answer that was stopped or belongs to an old conversation
+    follow(function () {
+      if (e.kind === "delta") { msg.text += e.text || ""; renderBody(msg); }
+      else if (e.kind === "action" && e.action) { msg.actions.push(Object.assign({ status: null }, e.action)); renderActions(msg); }
+      else if (e.kind === "done") finish(msg);
+      else if (e.kind === "error") finish(msg, e.error || "Ассистент не ответил. Попробуйте ещё раз.", true);
+    });
+  }
+  api.onAssistant(onAssistantEvent);
+
+  function growInput() {
+    var t = els.chatInput;
+    t.style.height = "auto";
+    t.style.height = Math.min(t.scrollHeight + 2, 220) + "px";
+  }
+  els.chatIdeas.replaceChildren.apply(els.chatIdeas, IDEAS.map(function (idea) {
+    return h("button", { type: "button", class: "fchip", onclick: function () { sendChat(idea); } }, idea);
+  }));
+  els.chatInput.addEventListener("input", growInput);
+  els.chatInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.isComposing) {
+      e.preventDefault();
+      if (!chat.current) sendChat(els.chatInput.value);
+    } else if (e.key === "Escape" && chat.current) {
+      e.preventDefault();
+      stopChat();
+    }
+  });
+  els.composer.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (chat.current) stopChat(); else sendChat(els.chatInput.value);
+    els.chatInput.focus();
+  });
+  els.chatNew.addEventListener("click", newChat);
+  els.chatHistoryBtn.addEventListener("click", function () { setHistoryOpen(!els.chatHistory.classList.contains("open")); });
+  refreshChats();
+
+  /* ---------- assistant settings ---------- */
+  // The key itself never comes back from main.js: the page only knows whether one is saved.
+  var MODELS = [
+    { id: "claude-opus-5-5", name: "Claude Opus 5.5", short: "Opus 5.5", text: "Основная: лучше всего пишет и улучшает промты" },
+    { id: "claude-haiku-5-5", name: "Claude Haiku 5.5", short: "Haiku 5.5", text: "Быстрая и примерно в 40 раз дешевле Opus" }
+  ];
+  // How long Claude thinks before answering (effort in the API). Deeper is slower and costs more.
+  var EFFORTS = [
+    { id: "low", name: "Быстро", text: "Отвечает сразу, почти не раздумывая. Дешевле всего" },
+    { id: "medium", name: "Средне", text: "Подходит для большинства задач" },
+    { id: "high", name: "Глубоко", text: "Дольше думает: для сложных промтов и разборов" },
+    { id: "xhigh", name: "Очень глубоко", text: "Ещё дольше и дороже" },
+    { id: "max", name: "Максимум", text: "Думает, сколько нужно. Самый медленный и дорогой" }
+  ];
+  function byId(list, id) { return list.find(function (x) { return x.id === id; }) || null; }
+  function renderAssistantSettings() {
+    var a = state.info && state.info.assistant;
+    if (!a) return;
+    var model = byId(MODELS, a.model), effort = byId(EFFORTS, a.effort);
+    els.chatMode.hidden = a.hasKey;
+    els.chatMeta.hidden = !a.hasKey;
+    els.chatMeta.textContent = a.hasKey ? "Отвечает " + (model ? model.name : a.model) + "." : "";
+    els.modelBtnText.textContent = (model ? model.short : a.model) + " · " + (effort ? effort.name : a.effort);
+    if (!els.modelMenu.hidden) renderModelMenu();
+    els.setStatus.textContent = a.hasKey ? "Ключ сохранён" : "Ключа нет, отвечает заглушка";
+    els.setStatus.classList.toggle("on", a.hasKey);
+    els.setDelete.hidden = !a.hasKey;
+    els.setKey.placeholder = a.hasKey ? "Ключ сохранён. Вставьте новый, чтобы заменить" : "sk-ant-…";
+  }
+
+  /* ---------- "Модель" button in the message box ---------- */
+  function modelOption(kind, item, checked) {
+    return h("button", { type: "button", class: "mm-item", role: "menuitemradio", "aria-checked": String(checked),
+      onclick: function () { pickOption(kind, item); } },
+      h("span", { class: "mm-text" }, h("span", { class: "mm-name", text: item.name }), h("span", { class: "mm-sub", text: item.text })),
+      h("span", { class: "mm-tick", html: ICONS.check, "aria-hidden": "true" }));
+  }
+  function renderModelMenu() {
+    var a = (state.info && state.info.assistant) || {};
+    var kids = [];
+    if (!a.hasKey) {
+      kids.push(h("div", { class: "mm-note" }, "Сейчас отвечает заглушка, выбор заработает с ключом Claude. ",
+        h("button", { type: "button", class: "link-btn", onclick: function () { setModelMenu(false); setPage("settings"); els.setKey.focus(); } }, "Подключить")));
+    }
+    kids.push(h("div", { class: "mm-label", text: "Модель" }));
+    MODELS.forEach(function (m) { kids.push(modelOption("model", m, m.id === a.model)); });
+    kids.push(h("hr"), h("div", { class: "mm-label", text: "Размышления" }));
+    EFFORTS.forEach(function (e) { kids.push(modelOption("effort", e, e.id === a.effort)); });
+    els.modelMenu.replaceChildren.apply(els.modelMenu, kids);
+  }
+  function setModelMenu(open) {
+    if (open) renderModelMenu();
+    els.modelMenu.hidden = !open;
+    els.modelBtn.setAttribute("aria-expanded", String(open));
+    if (open) { var c = els.modelMenu.querySelector('[aria-checked="true"]') || els.modelMenu.querySelector(".mm-item"); if (c) c.focus(); }
+  }
+  // The menu stays open, so model and thinking can be picked one after the other, like in Claude.
+  function pickOption(kind, item) {
+    var opts = {};
+    opts[kind] = item.id;
+    call(api.assistantSetOptions(opts)).then(function (r) {
+      if (!r) return;
+      renderAssistantSettings();
+      renderModelMenu();
+      var f = els.modelMenu.querySelectorAll(".mm-item");
+      for (var i = 0; i < f.length; i++) if (f[i].querySelector(".mm-name").textContent === item.name) f[i].focus();
+    });
+  }
+  els.modelBtn.addEventListener("click", function () { setModelMenu(els.modelMenu.hidden); });
+  document.addEventListener("mousedown", function (e) {
+    if (!els.modelMenu.hidden && !els.modelMenu.contains(e.target) && !els.modelBtn.contains(e.target)) setModelMenu(false);
+  });
+  els.modelMenu.addEventListener("keydown", function (e) {
+    var items = Array.prototype.slice.call(els.modelMenu.querySelectorAll(".mm-item"));
+    var i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setModelMenu(false); els.modelBtn.focus(); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  });
+  function setKeyMsg(text, neutral) {
+    els.setMsg.textContent = text || "";
+    els.setMsg.classList.toggle("neutral", !!neutral);
+  }
+  els.setKeyForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (els.setCheck.disabled) return;
+    var key = els.setKey.value.trim();
+    var a = state.info && state.info.assistant;
+    if (!key && !(a && a.hasKey)) { setKeyMsg("Вставьте ключ в поле."); els.setKey.focus(); return; }
+    els.setCheck.disabled = true;
+    setKeyMsg("Проверяю ключ, это займёт пару секунд…", true);
+    api.assistantCheckKey(key).then(function (r) {
+      els.setCheck.disabled = false;
+      if (!r || !r.ok) { setKeyMsg((r && r.error) || "Не получилось проверить ключ. Попробуйте ещё раз."); return; }
+      state.info = r.info;
+      els.setKey.value = "";
+      render();
+      if (r.warning) setKeyMsg((r.saved ? "Ключ сохранён, но " : "Ключ верный, но ") + r.warning.charAt(0).toLowerCase() + r.warning.slice(1));
+      else setKeyMsg(r.saved ? "Ключ работает и сохранён. Теперь в «Ассистенте» отвечает Claude." : "Ключ работает.", true);
+    }, function () {
+      els.setCheck.disabled = false;
+      setKeyMsg("Не получилось проверить ключ. Попробуйте ещё раз.");
+    });
+  });
+  els.setDelete.addEventListener("click", function () {
+    call(api.assistantDeleteKey()).then(function (r) {
+      if (!r) return;
+      render();
+      setKeyMsg("Ключ удалён. Ассистент снова отвечает заглушкой.", true);
+    });
+  });
+  els.setKey.addEventListener("input", function () { if (els.setMsg.textContent) setKeyMsg(""); });
+  els.chatConnect.addEventListener("click", function () { setPage("settings"); els.setKey.focus(); });
 
   /* ---------- drag and drop ---------- */
   function hasFiles(e) {

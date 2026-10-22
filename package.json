@@ -1,7 +1,7 @@
 {
   "name": "snowball",
   "productName": "Snowball.ai",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Snowball.ai — система хранения информации",
   "main": "main.js",
   "author": "Snowball.ai",
@@ -74,6 +74,7 @@
     }
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
     "electron-updater": "^6.8.9"
   }
 }

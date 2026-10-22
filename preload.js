@@ -23,6 +23,22 @@ contextBridge.exposeInMainWorld('vsApi', {
   changeDataDir: () => ipcRenderer.invoke('change-data-dir'),
   exportJson: () => ipcRenderer.invoke('export'),
   importJson: () => ipcRenderer.invoke('import'),
+  assistantSend: (messages) => ipcRenderer.invoke('assistant-send', messages),
+  assistantStop: (id) => ipcRenderer.invoke('assistant-stop', id),
+  assistantReset: () => ipcRenderer.invoke('assistant-reset'),
+  assistantDecide: (actionId, accept) => ipcRenderer.invoke('assistant-decide', actionId, accept),
+  chatList: () => ipcRenderer.invoke('chat-list'),
+  chatGet: (id) => ipcRenderer.invoke('chat-get', id),
+  chatSave: (chat) => ipcRenderer.invoke('chat-save', chat),
+  chatDelete: (id) => ipcRenderer.invoke('chat-delete', id),
+  assistantCheckKey: (key) => ipcRenderer.invoke('assistant-check-key', key),
+  assistantDeleteKey: () => ipcRenderer.invoke('assistant-delete-key'),
+  assistantSetOptions: (opts) => ipcRenderer.invoke('assistant-set-options', opts),
+  onAssistant: (fn) => {
+    const listener = (_e, a) => fn(a);
+    ipcRenderer.on('assistant', listener);
+    return () => ipcRenderer.removeListener('assistant', listener);
+  },
   pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch (e) { return ''; } },
   onDataChanged: (fn) => {
     const listener = (_e, prompts) => fn(prompts);

@@ -6,6 +6,7 @@
 //   <dir>/profile.json          — nickname and whether the welcome screen was shown
 //   <dir>/avatar.png            — the avatar, already cropped to a square
 //   <dir>/activity.json         — actions per day for the statistics page
+//   <dir>/chats.json            — the assistant's conversations
 // This module only uses Node's fs/path, so it can be tested without Electron.
 
 const fs = require('fs');
@@ -21,6 +22,7 @@ const FILES_DIR = 'Файлы';
 const PROFILE_FILE = 'profile.json';
 const AVATAR_FILE = 'avatar.png';
 const ACTIVITY_FILE = 'activity.json';
+const CHATS_FILE = 'chats.json';
 // What counts as an action on the statistics page. Deleting and importing do not count.
 const ACTIONS = ['created', 'edited', 'files', 'copied'];
 const NAME_MAX = 32;
@@ -84,6 +86,7 @@ function normalizePrompt(p, fallbackTime) {
     title: str(p.title, 300).trim(),
     type: str(p.type, 60).trim(),
     text: str(p.text, 2000000),
+    comment: str(p.comment, 100000),
     createdAt: num(p.createdAt) || now,
     updatedAt: num(p.updatedAt) || num(p.createdAt) || now,
     files: Array.isArray(p.files) ? p.files.map(normalizeFile).filter(Boolean) : []
@@ -159,6 +162,32 @@ function normalizeActivity(a) {
   return { format: 'snowball-activity', version: 1, since: num(a && a.since), days };
 }
 
+// A suggested change in a chat ("Создать промт …?") and what the user answered.
+const ACTION_STATUSES = ['done', 'canceled', 'stale'];
+function normalizeAction(a) {
+  if (!a || typeof a !== 'object') return null;
+  return {
+    id: str(a.id, 64), kind: str(a.kind, 40), title: str(a.title, 300), category: str(a.category, 60), text: str(a.text, 200000),
+    // A card nobody answered cannot be answered after a restart: main.js has forgotten it.
+    status: ACTION_STATUSES.includes(a.status) ? a.status : 'stale'
+  };
+}
+function normalizeChat(c) {
+  if (!c || typeof c !== 'object' || !ID_RE.test(str(c.id))) return null;
+  const messages = (Array.isArray(c.messages) ? c.messages : []).map((m) => {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant')) return null;
+    const out = { role: m.role, text: str(m.text, 200000) };
+    if (m.note) out.note = str(m.note, 500);
+    if (m.failed) out.failed = true;
+    const actions = Array.isArray(m.actions) ? m.actions.map(normalizeAction).filter(Boolean) : [];
+    if (actions.length) out.actions = actions;
+    return out;
+  }).filter(Boolean);
+  if (!messages.length) return null;
+  const now = Date.now();
+  return { id: c.id, title: str(c.title, 120).trim() || 'Без названия', createdAt: num(c.createdAt) || now, updatedAt: num(c.updatedAt) || now, messages };
+}
+
 async function uniqueTarget(dir, name) {
   const ext = path.extname(name);
   const stem = name.slice(0, name.length - ext.length);
@@ -176,6 +205,7 @@ class Store {
     this.notice = null;      // 'created' | 'restored' | 'reset'
     this.profile = normalizeProfile(null);
     this.activity = normalizeActivity(null);
+    this.chats = [];
     this.queue = Promise.resolve();
   }
 
@@ -185,6 +215,7 @@ class Store {
   get profilePath() { return path.join(this.dir, PROFILE_FILE); }
   get avatarPath() { return path.join(this.dir, AVATAR_FILE); }
   get activityPath() { return path.join(this.dir, ACTIVITY_FILE); }
+  get chatsPath() { return path.join(this.dir, CHATS_FILE); }
   promptDir(id) {
     if (!ID_RE.test(id)) throw new Error('bad id');
     return path.join(this.filesRoot, id);
@@ -206,6 +237,8 @@ class Store {
   // Profile and statistics live beside prompts.json and never block opening the prompts.
   async loadExtras() {
     this.profile = normalizeProfile(await readJson(this.profilePath));
+    const chats = await readJson(this.chatsPath);
+    this.chats = chats && Array.isArray(chats.chats) ? chats.chats.map(normalizeChat).filter(Boolean) : [];
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
     this.activity = this.backfillActivity();
@@ -265,6 +298,35 @@ class Store {
       }
       p.welcomed = true;
       await writeJson(this.profilePath, p);
+    });
+  }
+
+  /* ---------- assistant chats ---------- */
+  // Newest first, without the messages: enough for the history list.
+  chatList() {
+    return this.chats.slice().sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((c) => ({ id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt }));
+  }
+  getChat(id) { return this.chats.find((c) => c.id === id) || null; }
+  writeChats() { return writeJson(this.chatsPath, { format: 'snowball-chats', version: 1, chats: this.chats }); }
+
+  // Replaces the whole conversation: the window holds it and sends it after every finished message.
+  saveChat(input) {
+    return this.run(async () => {
+      const prev = this.getChat(input && input.id);
+      const chat = normalizeChat(Object.assign({}, input, { createdAt: prev ? prev.createdAt : Date.now(), updatedAt: Date.now() }));
+      if (!chat) return null;
+      if (prev) this.chats[this.chats.indexOf(prev)] = chat; else this.chats.push(chat);
+      await this.writeChats();
+      return chat;
+    });
+  }
+
+  deleteChat(id) {
+    return this.run(async () => {
+      const before = this.chats.length;
+      this.chats = this.chats.filter((c) => c.id !== id);
+      if (this.chats.length !== before) await this.writeChats();
     });
   }
 
@@ -344,7 +406,7 @@ class Store {
 
   view() {
     return this.data.prompts.map((p) => ({
-      id: p.id, title: p.title, type: p.type, text: p.text, createdAt: p.createdAt, updatedAt: p.updatedAt,
+      id: p.id, title: p.title, type: p.type, text: p.text, comment: p.comment, createdAt: p.createdAt, updatedAt: p.updatedAt,
       files: p.files.map((f) => {
         const abs = path.join(this.promptDir(p.id), f.stored);
         return { id: f.id, name: f.name, size: f.size, kind: f.kind, addedAt: f.addedAt, url: pathToFileURL(abs).href };
@@ -409,15 +471,17 @@ class Store {
         if (this.find(prompt.id)) prompt.id = newId('p');
         this.data.prompts.push(prompt);
       }
-      const before = JSON.stringify([prompt.title, prompt.type, prompt.text, prompt.files.map((f) => f.id)]);
+      const sig = () => JSON.stringify([prompt.title, prompt.type, prompt.text, prompt.comment, prompt.files.map((f) => f.id)]);
+      const before = sig();
       prompt.title = str(item.title, 300).trim();
       prompt.type = str(item.type, 60).trim();
       prompt.text = str(item.text, 2000000);
+      prompt.comment = str(item.comment, 100000);
       await this.removeFiles(prompt, input && input.removeFileIds);
       const kept = prompt.files.length;
       await this.copyIn(prompt, input && input.addFiles, errors);
       // "Сохранить" without real changes keeps the date and does not count as an edit.
-      const changed = isNew || before !== JSON.stringify([prompt.title, prompt.type, prompt.text, prompt.files.map((f) => f.id)]);
+      const changed = isNew || before !== sig();
       if (!changed) return { id: prompt.id, errors };
       prompt.updatedAt = now;
       await this.write();
@@ -470,7 +534,7 @@ class Store {
       version: 1,
       exportedAt: new Date().toISOString(),
       prompts: this.data.prompts.map((p) => ({
-        id: p.id, title: p.title, type: p.type, text: p.text, createdAt: p.createdAt, updatedAt: p.updatedAt,
+        id: p.id, title: p.title, type: p.type, text: p.text, comment: p.comment, createdAt: p.createdAt, updatedAt: p.updatedAt,
         files: p.files.map((f) => f.name)
       }))
     }, null, 2);
@@ -499,11 +563,11 @@ class Store {
   }
 }
 
-// Copies the data (prompts.json, profile, statistics and the files folder) into another folder.
+// Copies the data (prompts.json, profile, statistics, chats and the files folder) into another folder.
 async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
   await fsp.copyFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
-  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE]) {
+  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE]) {
     if (await exists(path.join(fromDir, name))) await fsp.copyFile(path.join(fromDir, name), path.join(toDir, name));
   }
   const files = path.join(fromDir, FILES_DIR);
