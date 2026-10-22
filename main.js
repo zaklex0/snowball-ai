@@ -12,23 +12,9 @@ const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 36;
 const THEMES = ['system', 'light', 'dark'];
 
-// The first prompt saved in the web version, carried over on first launch.
-const SEED = () => [{
-  id: 'clothing-extraction',
-  title: 'ИЗВЛЕЧЕНИЕ ОДЕЖДЫ',
-  type: 'Статика',
-  createdAt: 1792620676096,
-  updatedAt: 1792620676096,
-  text: [
-    'Using the attached photo as reference, identify every garment, pair of shoes, and accessory the person is wearing, and produce a new flat-lay product photo: all items laid out individually on a pure white studio background, in vertical 3:4 format.',
-    'Each item must match the original precisely — same colors, same fabric and material, same silhouette and fit, same construction details (collar, sleeves, buttons, zippers, pockets, seams), same patterns, and the same visible logos or branding. Do not redesign, restyle, modernize, or reinterpret any item. Do not shift the color palette. Do not add items that are not visible in the photo.',
-    'If part of a garment is obscured in the photo, reconstruct only the minimal hidden portion, based on the most plausible continuation of its existing construction — nothing beyond that.',
-    'Layout: show each item in full, arranged separately with no overlap, spaced evenly to fill the vertical frame. Keep the relative proportions between items realistic.',
-    'Lighting: soft, even studio lighting with minimal contact shadows beneath each item, accurate color reproduction, and realistic fabric texture.',
-    'Preserve exactly as photographed: garment shapes, colors, materials, construction details, and original branding.',
-    'Exclude: the person, their body or skin, a mannequin, hangers, any background scenery, decorative props, added text, watermarks, borders, or UI elements. The background must be solid pure white — no gradient, no shadows beyond soft contact shadows, no transparency.'
-  ].join('\n')
-}];
+// Prompts a fresh install starts with (only when the data folder has no prompts.json yet).
+// Empty for now; example prompts for each type can go here later.
+const SEED = () => [];
 
 let win = null;
 let store = null;
