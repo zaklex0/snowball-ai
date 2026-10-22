@@ -1,0 +1,71 @@
+{
+  "name": "snowball",
+  "productName": "Snowball.ai",
+  "version": "1.2.0",
+  "description": "Snowball.ai — система хранения информации",
+  "main": "main.js",
+  "author": "Snowball.ai",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "build:win": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^43.7.8",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "local.snowball.prompts",
+    "productName": "Snowball.ai",
+    "executableName": "Snowball",
+    "copyright": "Snowball.ai",
+    "electronLanguages": [
+      "ru",
+      "en-US"
+    ],
+    "compression": "maximum",
+    "asar": true,
+    "publish": null,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "storage.js",
+      "src/**/*",
+      "assets/icon.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Snowball-Setup-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Snowball.ai",
+      "uninstallDisplayName": "Snowball.ai",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049",
+      "guid": "7c715124-93b8-540d-914a-d47e2d58f03f"
+    }
+  }
+}

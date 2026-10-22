@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file:; style-src 'self' file:; font-src 'self' file:; img-src 'self' file: data: blob:; media-src 'self' file: blob:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snowball.ai</title>
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <div class="titlebar" id="titlebar" hidden>
+    <img src="../assets/icon.png" alt="">
+    <span>Snowball.ai</span>
+  </div>
+
+  <main class="scroller" id="scroller">
+    <div class="page">
+      <header class="top">
+        <div class="top-text">
+          <p class="eyebrow">Система хранения информации</p>
+          <h1>Snowball<span class="brand">.ai</span></h1>
+          <p class="meta" id="meta">Загружаю промты…</p>
+        </div>
+        <div class="top-actions">
+          <button type="button" class="btn btn-primary" id="add-btn" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Добавить промт
+          </button>
+          <button type="button" class="btn btn-ghost btn-icon" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Папка, сохранение в файл">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+            <span class="sr-only">Меню</span>
+          </button>
+          <div class="menu" id="menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-action="open-dir">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>
+              Открыть папку с промтами
+            </button>
+            <button type="button" role="menuitem" data-action="change-dir">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v2"/><path d="M3 9v8.5A2.5 2.5 0 0 0 5.5 20H12"/><path d="m16 17 2 2 4-4"/></svg>
+              Выбрать другую папку…
+            </button>
+            <hr>
+            <button type="button" role="menuitem" data-action="export">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></svg>
+              Сохранить промты в файл…
+            </button>
+            <button type="button" role="menuitem" data-action="import">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 20h14"/></svg>
+              Загрузить промты из файла…
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="banner" id="banner" role="status" hidden>
+        <p id="banner-text"></p>
+        <button type="button" class="link-btn" id="banner-close">Понятно</button>
+      </div>
+
+      <div id="editor-slot">
+        <form class="editor" id="editor" hidden novalidate>
+          <h2 id="editor-title">Новый промт</h2>
+          <div class="fields">
+            <div class="field">
+              <label class="field-label" for="f-title">Название</label>
+              <input class="input" id="f-title" type="text" maxlength="300" autocomplete="off" placeholder="Например: Извлечение одежды">
+            </div>
+            <div class="field">
+              <span class="field-label" id="f-cat-label">Тип</span>
+              <div class="cat-picker" id="f-cat" role="radiogroup" aria-labelledby="f-cat-label"></div>
+            </div>
+            <div class="field full">
+              <label class="field-label" for="f-text">Промт</label>
+              <textarea class="textarea" id="f-text" rows="8" placeholder="Вставьте текст промта из урока"></textarea>
+            </div>
+            <div class="field full">
+              <span class="field-label">Файлы</span>
+              <div class="files" id="f-files"></div>
+              <span class="files-hint">Референсы, примеры результата, любые файлы. Можно перетащить их сюда или вставить картинку через Ctrl + V.</span>
+            </div>
+          </div>
+          <div class="editor-actions">
+            <button type="submit" class="btn btn-primary" id="save-btn">Сохранить</button>
+            <button type="button" class="btn btn-ghost" id="cancel-btn">Отмена</button>
+            <span class="hint">Ctrl + Enter — сохранить, Esc — отмена</span>
+            <span class="form-msg" id="form-msg" role="status"></span>
+          </div>
+        </form>
+      </div>
+
+      <section class="toolbar" id="toolbar" aria-label="Поиск и фильтр" hidden>
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+          <label for="search" class="sr-only">Поиск</label>
+          <input class="input" id="search" type="search" autocomplete="off" placeholder="Поиск по названию и тексту промта">
+        </div>
+        <div class="filters" id="filters" role="group" aria-label="Фильтр по типу"></div>
+      </section>
+
+      <section class="card" aria-label="Список промтов">
+        <table class="table" id="table" hidden>
+          <colgroup><col class="w-name"><col class="w-type"><col></colgroup>
+          <thead>
+            <tr><th scope="col">Название</th><th scope="col">Тип</th><th scope="col">Промт</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="state" id="state">
+          <div class="dots" aria-hidden="true"><i class="cat-static"></i><i class="cat-video"></i><i class="cat-system"></i></div>
+          <h2>Загружаю промты…</h2>
+          <p>Сейчас здесь появится ваша таблица.</p>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <p id="dir-line"></p>
+        <p>Перетащите файл на строку, чтобы прикрепить его к промту. <kbd>Ctrl</kbd> + <kbd>N</kbd> — новый промт, <kbd>Ctrl</kbd> + <kbd>F</kbd> — поиск, <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>−</kbd> — масштаб.</p>
+      </footer>
+    </div>
+  </main>
+</div>
+
+<dialog class="viewer" id="viewer" aria-labelledby="viewer-title">
+  <div class="viewer-head">
+    <div class="viewer-title" id="viewer-title"></div>
+    <button type="button" class="btn-mini" id="viewer-open">Открыть в программе</button>
+    <button type="button" class="btn-mini" id="viewer-show">Показать в папке</button>
+    <button type="button" class="btn-mini" id="viewer-close">Закрыть</button>
+  </div>
+  <div class="viewer-body" id="viewer-body"></div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
