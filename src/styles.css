@@ -622,9 +622,11 @@ h1 .brand { color: var(--accent-strong); }
 .top-row { display: grid; grid-template-columns: 26px minmax(120px, 1fr) minmax(150px, 1.1fr); align-items: center; gap: 12px; }
 .top-ico { display: grid; place-items: center; color: var(--ink-soft); }
 .top-ico svg { width: 19px; height: 19px; }
-.top-bar { height: 28px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.top-bar { display: flex; align-items: center; height: 28px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+.top-pct { margin-left: 8px; font-size: 12.5px; font-weight: 600; color: var(--ink-soft); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.top-row.zero .top-ico, .top-row.zero .top-name { opacity: .6; }
 .top-fill {
-  display: flex; align-items: center; justify-content: center; height: 100%; min-width: 0; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; height: 100%; min-width: 0; flex: none; border-radius: 8px;
   background: var(--accent); color: var(--accent-ink); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .top-row:nth-child(n+2) .top-fill { background: color-mix(in srgb, var(--accent) 70%, var(--surface-2)); }

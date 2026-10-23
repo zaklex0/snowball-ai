@@ -210,7 +210,7 @@
             <div class="top-text">
               <p class="eyebrow">Ваша активность</p>
               <h1 id="stats-title">Статистика</h1>
-              <p class="meta">Новый промт, правка, файл, копирование, дело в календаре и сообщение ассистенту — по одному действию.</p>
+              <p class="meta">Новый промт, правка, файл, копирование, дело в календаре, задача и сообщение ассистенту — по одному действию.</p>
             </div>
           </header>
           <section class="card stats-card" aria-label="Профиль">
@@ -291,12 +291,11 @@
           <div class="tbar-wrap">
             <form class="tbar" id="tbar">
               <span class="tbar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg></span>
-              <input class="tbar-input" id="tbar-input" maxlength="2000" autocomplete="off" aria-label="Ассистент задач"
-                placeholder="Ассистент задач: «смонтировать рилс завтра срочно и позвонить Диме в пятницу»">
+              <textarea class="tbar-input" id="tbar-input" rows="1" maxlength="2000" autocomplete="off" aria-label="Ассистент задач" title="Enter — отправить, Ctrl + Enter — новая строка"
+                placeholder="Ассистент задач: «смонтировать рилс завтра срочно и позвонить Диме в пятницу»"></textarea>
               <span class="tbar-model" id="tbar-model" title="Ассистент задач — всегда самая дешёвая модель с быстрыми размышлениями"></span>
               <button type="submit" class="tbar-send" id="tbar-send" title="Отправить (Enter)" aria-label="Отправить" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
             </form>
-            <div class="tbar-reply" id="tbar-reply" role="status" aria-live="polite" hidden></div>
             <div class="tbar-ideas" id="tbar-ideas"></div>
           </div>
           <div class="tfilters" id="tfilters">
@@ -693,6 +692,7 @@
 </div>
 
 <aside class="tpanel" id="tpanel" aria-label="Задача" hidden></aside>
+<div class="tnotes" id="tnotes" aria-live="polite"></div>
 <div class="utoast" id="utoast" role="status" aria-live="polite" hidden><span id="utoast-text"></span><button type="button" class="utoast-btn" id="utoast-undo">Отменить</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 

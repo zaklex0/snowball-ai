@@ -1292,10 +1292,12 @@
     var total = rows.reduce(function (t, r) { return t + r.n; }, 0);
     if (!total) { els.topList.replaceChildren(h("p", { class: "muted", text: "Пока пусто: здесь появится, чем вы пользуетесь чаще всего." })); return; }
     els.topList.replaceChildren.apply(els.topList, rows.map(function (r) {
-      var pct = Math.round(r.n / total * 100);
-      return h("div", { class: "top-row" },
+      var pct = Math.round(r.n / total * 100), label = r.n && !pct ? "<1%" : pct + "%";
+      // A narrow bar has no room for its number: then it stands right after the bar.
+      var inside = pct >= 12;
+      return h("div", { class: "top-row" + (r.n ? "" : " zero") },
         h("span", { class: "top-ico", html: ICONS[r.g.icon], "aria-hidden": "true" }),
-        h("span", { class: "top-bar" }, fillBar(Math.max(pct, r.n ? 8 : 0), pct + "%")),
+        h("span", { class: "top-bar" }, fillBar(r.n ? Math.max(pct, 3) : 0, inside ? label : ""), inside ? null : h("span", { class: "top-pct", text: label })),
         h("span", { class: "top-name" }, h("b", { text: fmtNum(r.n) }), " " + r.g.name.toLowerCase()));
     }));
   }
@@ -1319,7 +1321,7 @@
     els.breakdown.replaceChildren(
       chip("Создано промтов", s.by.created), chip("Правок", s.by.edited),
       chip("Прикреплено файлов", s.by.files), chip("Скопировано", s.by.copied),
-      chip("Дел в календаре", s.by.calendar), chip("Сообщений ассистенту", s.by.assistant));
+      chip("Дел в календаре", s.by.calendar), chip("Действий с задачами", s.by.tasks), chip("Сообщений ассистенту", s.by.assistant));
     renderTopUse(s);
     renderHeat();
     fillAvatar(els.statsAvatar, p.avatar, p.name);
