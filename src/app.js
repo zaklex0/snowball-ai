@@ -87,7 +87,7 @@
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
     timerRow: $("timer-row"), timerPop: $("timer-pop"),
     tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), soloBack: $("solo-back"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
-    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tbarIdeas: $("tbar-ideas"), tnotes: $("tnotes"),
+    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tnotes: $("tnotes"),
     tpanel: $("tpanel"), utoast: $("utoast"), utoastText: $("utoast-text"), utoastUndo: $("utoast-undo"),
     tview: $("tview"), tsearch: $("tsearch"), tfTag: $("tf-tag"), tfPrio: $("tf-prio"), tfDone: $("tf-done"), tfReset: $("tf-reset"), tlist: $("tlist"), boardHint: $("board-hint"),
     qa: $("qa"), qaBtn: $("qa-btn"), qaModel: $("qa-model"), qaNew: $("qa-new"), qaFull: $("qa-full"), qaClose: $("qa-close"),
@@ -883,7 +883,7 @@
     home: { name: "Главная", icon: "home" },
     prompts: { name: "Промты", icon: "prompts" },
     calendar: { name: "Календарь", icon: "calendar" },
-    tasks: { name: "Задачи", icon: "tasks", alpha: true },
+    tasks: { name: "Задачи", icon: "tasks", beta: true },
     assistant: { name: "LLM", icon: "chat", many: true },
     generator: { name: "Генератор", icon: "spark" },
     stats: { name: "Статистика", icon: "stats" }
@@ -1167,7 +1167,7 @@
       return h("button", { type: "button", role: "menuitem", onclick: function () { setTabMenu(false); openTab(k, { fresh: true }); } },
         h("span", { class: "ico", html: ICONS[TABS[k].icon], "aria-hidden": "true" }),
         h("span", { text: k === "assistant" ? "LLM — новый разговор" : TABS[k].name }),
-        isOpen ? h("small", { text: "уже открыта" }) : TABS[k].alpha ? h("small", null, h("span", { class: "alpha", text: "Альфа" })) : null);
+        isOpen ? h("small", { text: "уже открыта" }) : TABS[k].beta ? h("small", null, h("span", { class: "alpha", text: "Бета" })) : null);
     })));
     var r = els.tabPlus.getBoundingClientRect();
     els.tabMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + "px";
@@ -3199,7 +3199,7 @@
     if (chime.ctx) { try { chime.ctx.close(); } catch (e) {} chime.ctx = null; }
   }
 
-  /* ---------- tasks board (alpha) ---------- */
+  /* ---------- tasks board (beta) ---------- */
   // Three columns: «Предстоит», «В процессе», «Готово». A card shows the title and marks (importance, tags, due day,
   // subtasks, note); the circle on the left ticks it off into «Готово» and back to where it was. A click opens the whole
   // task in the panel on the right (renderTaskPanel). Cards are dragged between columns (or up and down).
@@ -3695,7 +3695,6 @@
   /* The tasks assistant bar: its own assistant that only knows tasks (the cheapest model, quick thinking).
      Every message is a separate request; changes apply at once. Enter sends, Ctrl + Enter (or Shift + Enter) starts a new line.
      The answer comes as a notification in the bottom right corner (taskNote) with «Отменить», which takes back what it changed. */
-  var TBAR_IDEAS = ["Смонтировать рилс завтра срочно и позвонить Диме в пятницу", "Что у меня на сегодня?", "Что горит?"];
   var tbar = { busy: false };
   function growTbar() {
     var t = els.tbarInput;
@@ -3709,12 +3708,6 @@
     els.tbarInput.disabled = tbar.busy;
     els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim();
     els.tbarSend.title = tbar.busy ? "Ассистент разбирает…" : "Отправить (Enter)";
-    els.tbarIdeas.hidden = tbar.busy;
-    if (!els.tbarIdeas.firstChild) {
-      els.tbarIdeas.replaceChildren.apply(els.tbarIdeas, [h("span", { text: "Попробуйте:" })].concat(TBAR_IDEAS.map(function (idea) {
-        return h("button", { type: "button", class: "fchip", onclick: function () { sendTbar(idea); } }, idea);
-      })));
-    }
   }
   function sendTbar(text) {
     var v = String(text || "").trim();

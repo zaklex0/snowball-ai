@@ -1370,7 +1370,7 @@ h1 .brand { color: var(--accent-strong); }
 .tbar-wrap { display: grid; gap: 8px; }
 .tbar { display: flex; align-items: flex-end; gap: 10px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .tbar:focus-within { border-color: var(--accent-strong); }
-.tbar-ico { flex: none; margin-bottom: 4px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
+.tbar-ico { flex: none; align-self: flex-start; margin-top: 4px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
 .tbar-ico svg { width: 17px; height: 17px; }
 .tbar-input { flex: 1; min-width: 0; height: 38px; max-height: 150px; padding: 8px 0; border: 0; outline: none; background: none; color: var(--ink); font: inherit; font-size: 15px; line-height: 22px; resize: none; overflow-y: auto; }
 .tbar-input:disabled { opacity: .6; }
@@ -1386,8 +1386,6 @@ h1 .brand { color: var(--accent-strong); }
 .tbar.busy .tbar-send svg { display: none; }
 .tbar.busy .tbar-send::after { content: ""; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: tbar-spin .8s linear infinite; }
 @keyframes tbar-spin { to { transform: rotate(360deg); } }
-.tbar-ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); }
-.tbar-ideas[hidden] { display: none; }
 
 /* What the tasks assistant did: notifications in the bottom right corner (left of the task panel when it is open) */
 .tnotes { position: fixed; right: 20px; bottom: 20px; z-index: 45; width: min(380px, calc(100vw - 40px)); display: flex; flex-direction: column; gap: 10px; pointer-events: none; transition: right .25s ease; }
