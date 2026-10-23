@@ -85,6 +85,7 @@
     calTimeline: $("cal-timeline"),
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
+    timerRow: $("timer-row"), timerPop: $("timer-pop"),
     tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), soloBack: $("solo-back"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
     tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tbarIdeas: $("tbar-ideas"), tnotes: $("tnotes"),
     tpanel: $("tpanel"), utoast: $("utoast"), utoastText: $("utoast-text"), utoastUndo: $("utoast-undo"),
@@ -3069,6 +3070,133 @@
   });
   els.chatConnect.addEventListener("click", function () { goToKey("openai"); });
 
+  /* ---------- focus timer ---------- */
+  // A plain countdown above "Статистика": started here or by the assistant, not tied to anything. main.js keeps it
+  // (the same in every window, it survives a restart); when time is up the main window plays a melody until "Выключить".
+  var TIMER_PRESETS = [5, 10, 15, 25, 30, 45, 60, 90];
+  var tm = { state: "idle", duration: 0, endsAt: 0, left: 0, pop: false, last: 25 };
+  try { tm.last = Math.min(240, Math.max(1, +localStorage.getItem("timerLast") || 25)); } catch (e) {}
+  var TICONS = {
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 3h5M12 3v2.5"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="5.5" width="3.6" height="13" rx="1.2"/><rect x="13.4" y="5.5" width="3.6" height="13" rx="1.2"/></svg>',
+    stop: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/></svg>'
+  };
+  function timerLeft() { return tm.state === "running" ? Math.max(0, tm.endsAt - Date.now()) : tm.left; }
+  function fmtLeft(ms) {
+    var sec = Math.ceil(ms / 1000), hh = Math.floor(sec / 3600), mm = Math.floor(sec % 3600 / 60), ss = sec % 60;
+    return (hh ? hh + ":" + pad2(mm) : mm) + ":" + pad2(ss);
+  }
+  function timerCmd(cmd, arg) { return call(api.timer(cmd, arg)).then(function (r) { if (r && r.timer) applyTimer(r.timer); }); }
+  function startTimerUi(min) {
+    min = Math.round(Math.min(240, Math.max(1, +min || 0)));
+    if (!min) return;
+    tm.last = min;
+    try { localStorage.setItem("timerLast", String(min)); } catch (e) {}
+    tm.pop = false;
+    timerCmd("start", min);
+  }
+  function applyTimer(t) {
+    var was = tm.state;
+    tm.state = t.state; tm.duration = t.duration; tm.endsAt = t.endsAt; tm.left = t.left;
+    // The clocks of the window and main.js are the same machine's, so the end time can be counted here.
+    if (tm.state === "running") tm.endsAt = Date.now() + t.left;
+    if (tm.state === "ringing" && was !== "ringing" && isMainWindow) playChime();
+    if (tm.state !== "ringing") stopChime();
+    renderTimer();
+  }
+  function renderTimer() {
+    var row = els.timerRow, st = tm.state, left = timerLeft();
+    row.className = "timer-row " + st;
+    var kids;
+    if (st === "idle") {
+      kids = [h("button", { type: "button", class: "nav-item timer-main", title: "Таймер для фокуса", "aria-expanded": String(tm.pop),
+        onclick: function () { setTimerPop(!tm.pop); } }, h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: "Таймер" }))];
+    } else if (st === "ringing") {
+      kids = [h("button", { type: "button", class: "nav-item timer-main", title: "Выключить мелодию", onclick: function () { timerCmd("stop"); } },
+        h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: "Время вышло!" }), h("span", { class: "timer-time", text: "Выключить" }))];
+    } else {
+      var fill = h("span", { class: "timer-fill", "aria-hidden": "true" });
+      fill.style.width = (tm.duration ? Math.min(100, (1 - left / tm.duration) * 100) : 0) + "%";
+      kids = [
+        h("button", { type: "button", class: "nav-item timer-main", title: st === "paused" ? "Таймер на паузе" : "Идёт таймер", "aria-expanded": String(tm.pop),
+          onclick: function () { setTimerPop(!tm.pop); } },
+          h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: st === "paused" ? "Пауза" : "Фокус" }),
+          h("span", { class: "timer-time", text: fmtLeft(left) }), fill),
+        h("button", { type: "button", class: "timer-ico", title: st === "paused" ? "Продолжить" : "Пауза", "aria-label": st === "paused" ? "Продолжить" : "Пауза",
+          html: st === "paused" ? ICONS.play : TICONS.pause, onclick: function () { timerCmd(st === "paused" ? "resume" : "pause"); } }),
+        h("button", { type: "button", class: "timer-ico", title: "Остановить", "aria-label": "Остановить таймер", html: TICONS.stop, onclick: function () { timerCmd("stop"); } })
+      ];
+    }
+    row.replaceChildren.apply(row, kids);
+    if (tm.pop) renderTimerPop();
+  }
+  // The panel: presets and an own number of minutes; while it runs — "+5 минут", pause and stop.
+  function renderTimerPop() {
+    var st = tm.state, kids = [h("h3", { text: "Таймер" })];
+    if (st === "running" || st === "paused") {
+      kids.push(h("p", { text: (st === "paused" ? "На паузе, осталось " : "Осталось ") + fmtLeft(timerLeft()) + (st === "running" ? " · закончится в " + timeOf(new Date(tm.endsAt)) : "") }),
+        h("div", { class: "timer-acts" },
+          h("button", { type: "button", class: "btn btn-ghost", onclick: function () { timerCmd("add", 5); } }, "+5 минут"),
+          h("button", { type: "button", class: "btn btn-ghost", onclick: function () { timerCmd(st === "paused" ? "resume" : "pause"); } }, st === "paused" ? "Продолжить" : "Пауза"),
+          h("button", { type: "button", class: "btn btn-ghost", onclick: function () { tm.pop = false; timerCmd("stop"); } }, "Остановить")),
+        h("p", { text: "Начать заново:" }));
+    } else kids.push(h("p", { text: "Сколько минут? Когда время выйдет, сыграет мелодия." }));
+    kids.push(h("div", { class: "timer-presets" }, TIMER_PRESETS.map(function (m) {
+      return h("button", { type: "button", onclick: function () { startTimerUi(m); } }, m + " мин");
+    })));
+    var own = h("input", { class: "input", type: "number", min: "1", max: "240", step: "1", value: String(tm.last), "aria-label": "Своё время, минут" });
+    own.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); startTimerUi(own.value); } });
+    kids.push(h("div", { class: "timer-own" }, own, h("span", { text: "мин" }), h("button", { type: "button", class: "btn btn-primary", onclick: function () { startTimerUi(own.value); } }, "Старт")));
+    els.timerPop.replaceChildren.apply(els.timerPop, kids);
+  }
+  function timeOf(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
+  function setTimerPop(open) {
+    tm.pop = open;
+    els.timerPop.hidden = !open;
+    renderTimer();
+    if (open) { var b = els.timerPop.querySelector(".timer-presets button"); if (b) b.focus(); }
+  }
+  els.timerPop.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); setTimerPop(false); } });
+  document.addEventListener("mousedown", function (e) {
+    if (tm.pop && !els.timerPop.contains(e.target) && !els.timerRow.contains(e.target)) setTimerPop(false);
+  });
+  // Every second while it runs; the panel's "осталось" too.
+  setInterval(function () {
+    if (tm.state !== "running") return;
+    var main = els.timerRow.querySelector(".timer-time"), fill = els.timerRow.querySelector(".timer-fill"), left = timerLeft();
+    if (main) main.textContent = fmtLeft(left);
+    if (fill) fill.style.width = (tm.duration ? Math.min(100, (1 - left / tm.duration) * 100) : 0) + "%";
+    if (tm.pop) renderTimerPop();
+  }, 1000);
+  api.onTimer(applyTimer);
+
+  // The melody: soft bells made right here (no sound files), three rounds, about 9 seconds; "Выключить" stops it.
+  var chime = { ctx: null, stop: null };
+  function bell(ctx, freq, at) {
+    var g = ctx.createGain(), o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g2 = ctx.createGain();
+    o1.type = "sine"; o1.frequency.value = freq;
+    o2.type = "sine"; o2.frequency.value = freq * 2.01;
+    g2.gain.value = 0.22;
+    o1.connect(g); o2.connect(g2); g2.connect(g); g.connect(ctx.destination);
+    g.gain.setValueAtTime(0.0001, at);
+    g.gain.exponentialRampToValueAtTime(0.3, at + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, at + 1.8);
+    o1.start(at); o2.start(at); o1.stop(at + 1.9); o2.stop(at + 1.9);
+  }
+  function playChime() {
+    stopChime();
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    var ctx = new Ctx(), notes = [659.25, 783.99, 1046.5, 783.99, 1318.51];
+    for (var round = 0; round < 3; round++) notes.forEach(function (f, i) { bell(ctx, f, ctx.currentTime + 0.05 + round * 3 + i * 0.3); });
+    chime.ctx = ctx;
+    chime.stop = setTimeout(stopChime, 9500);
+  }
+  function stopChime() {
+    clearTimeout(chime.stop);
+    if (chime.ctx) { try { chime.ctx.close(); } catch (e) {} chime.ctx = null; }
+  }
+
   /* ---------- tasks board (alpha) ---------- */
   // Three columns: «Предстоит», «В процессе», «Готово». A card shows the title and marks (importance, tags, due day,
   // subtasks, note); the circle on the left ticks it off into «Готово» and back to where it was. A click opens the whole
@@ -3799,6 +3927,7 @@
   if (api.platform === "win32") els.titlebar.classList.add("win");
   render();
   // Another window changed something: show the same here.
+  api.timer("state").then(function (r) { if (r && r.timer) applyTimer(r.timer); }, function () {});
   api.onSync(function (d) {
     applyData(d);
     if (d.chats) { hist.list = d.chats; renderHistory(); }

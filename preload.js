@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('vsApi', {
     ipcRenderer.on('sync', listener);
     return () => ipcRenderer.removeListener('sync', listener);
   },
+  timer: (cmd, arg) => ipcRenderer.invoke('timer', cmd, arg),
+  onTimer: (fn) => {
+    const listener = (_e, t) => fn(t);
+    ipcRenderer.on('timer', listener);
+    return () => ipcRenderer.removeListener('timer', listener);
+  },
   onWindowMain: (fn) => {
     const listener = () => fn();
     ipcRenderer.on('window-main', listener);

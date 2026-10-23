@@ -420,7 +420,7 @@ function fail(e) {
 }
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
-const NO_SYNC = new Set(['load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
+const NO_SYNC = new Set(['timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
@@ -912,6 +912,20 @@ function stubTasks(text, t) {
 
 function stubAnswer(last) {
   const t = last.toLowerCase();
+  if (/таймер|фокус/.test(t)) {
+    if (/останов|выключ|стоп|отмени|сбрось|убери/.test(t)) {
+      const was = timer.state;
+      timer = { state: 'idle', duration: 0, endsAt: 0, left: 0 };
+      timerChanged();
+      return { text: was === 'idle' ? 'Таймер и так не запущен.' : 'Остановил таймер.' };
+    }
+    // "на 2 часа" or "на 2 ч" — hours (\b does not work next to Russian letters); "на 40 минут" — minutes; "на час" — 60; nothing — 25.
+    const hours = /(\d{1,3})\s*(?:час|ч(?![а-яё]))/.exec(t), num = /(\d{1,3})/.exec(t);
+    const n = hours ? +hours[1] * 60 : num ? +num[1] : /час/.test(t) ? 60 : 25;
+    const m = startTimer(n);
+    const end = new Date(timer.endsAt);
+    return { text: 'Запустил таймер на ' + m + ' мин. Закончится в ' + pad2(end.getHours()) + ':' + pad2(end.getMinutes()) + ' — сыграю мелодию.' };
+  }
   if (/(открой|покажи|перейди|запусти)/.test(t) && !/что у меня|какие/.test(t)) {
     const kinds = TAB_WORDS.filter((w) => w[1].test(t)).map((w) => w[0]);
     if (kinds.length) return { text: 'Открыл: ' + kinds.map((k) => '«' + TAB_NAMES[k] + '»').join(', ') + '.', open: kinds };
@@ -1013,6 +1027,7 @@ const SYSTEM_PROMPT = [
   'Название дела — только суть, 2–5 слов, без слова, обозначающего тип (созвон, звонок, встреча, съёмка, монтаж — тип и так виден по цвету), и без служебных слов. Например, «на завтра забей созвон на 14:00 с Димой по поводу правок по монтажу видео на ютуб» → название «Дима, правки монтажа YouTube», тип call. Важные подробности можно положить в note. Тип: task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж. Если время окончания не названо, оставь to пустым.',
   'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
+  'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
   'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
@@ -1115,6 +1130,16 @@ const TOOLS = [
     }
   },
   {
+    name: 'timer_start',
+    description: 'Сразу запускает таймер для фокуса на столько минут (заменяет запущенный). Он ни к чему не привязан: просто отсчёт, в конце мелодия.',
+    parameters: { type: 'object', additionalProperties: false, required: ['minutes'], properties: { minutes: { type: 'integer', minimum: 1, maximum: 240, description: 'Сколько минут, от 1 до 240' } } }
+  },
+  {
+    name: 'timer_stop',
+    description: 'Останавливает таймер для фокуса (и мелодию, если она играет).',
+    parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
+  },
+  {
     name: 'calendar_delete',
     description: 'Удаляет дело из календаря (или показывает карточку для подтверждения — это скажет результат).',
     parameters: {
@@ -1171,6 +1196,17 @@ function runTool(name, input) {
     const task = store.findTask(String(a.id || ''));
     if (!task) return { output: 'Задачи с таким id нет. Найди её через tasks_list.', error: true };
     return { output: after('Удалить задачу ' + taskLine(task)), action: { kind: 'task-delete', title: task.title, task } };
+  }
+  if (name === 'timer_start') {
+    const m = startTimer(a.minutes);
+    const end = new Date(timer.endsAt);
+    return { output: 'Таймер запущен на ' + m + ' мин., закончится в ' + pad2(end.getHours()) + ':' + pad2(end.getMinutes()) + '.' };
+  }
+  if (name === 'timer_stop') {
+    const was = timer.state;
+    timer = { state: 'idle', duration: 0, endsAt: 0, left: 0 };
+    timerChanged();
+    return { output: was === 'idle' ? 'Таймер и так не был запущен.' : 'Таймер остановлен.' };
   }
   if (name === 'open_tabs') {
     const tabs = (Array.isArray(a.tabs) ? a.tabs : []).map((k) => (k === 'llm' ? 'assistant' : k)).filter((k) => TAB_KINDS.includes(k)).slice(0, 8);
@@ -1405,7 +1441,7 @@ async function* claudeSource(model, messages, signal, opts) {
 
 // The small assistant window does calendar and tasks errands: the cheapest model and quick thinking are enough.
 const QUICK_MODELS = ['gpt-6-luna', 'claude-haiku-5-5'];
-const QUICK_LINE = 'Это маленькое окно ассистента для быстрых дел: календарь, задачи, вкладки. Отвечай одной-двумя короткими фразами.';
+const QUICK_LINE = 'Это маленькое окно ассистента для быстрых дел: календарь, задачи, вкладки, таймер. Отвечай одной-двумя короткими фразами.';
 function quickModel() { return QUICK_MODELS.map(modelById).find((m) => m && keys[m.provider]) || null; }
 
 // Who answers: the chosen model if there is a key for it (in the small window, the cheapest one), otherwise the stub.
@@ -1840,6 +1876,81 @@ handle('cal-delete', async (id) => { await store.deleteEvent(id); return ok(); }
    so a reminder missed while the program was closed does not pop up hours later) and shows a notification. */
 const reminded = new Set();
 function remindLabel(min) { return min >= 1440 ? 'завтра' : min >= 60 ? 'через час' : 'через ' + min + ' минут'; }
+/* ---------- focus timer ---------- */
+// One timer for the whole program: kept here, so every window shows the same, and in settings.json, so it survives
+// a restart. state: 'idle' | 'running' | 'paused' | 'ringing' (time is up, the window plays the melody until "Выключить").
+// While it runs, the program's button on the Windows taskbar fills with a progress bar.
+const TIMER_MAX = 240;   // minutes
+let timer = { state: 'idle', duration: 0, endsAt: 0, left: 0 };
+let timerTimeout = null;
+let timerTick = null;
+function timerLeft() { return timer.state === 'running' ? Math.max(0, timer.endsAt - Date.now()) : timer.left; }
+function timerView() { return { state: timer.state, duration: timer.duration, endsAt: timer.endsAt, left: timerLeft() }; }
+function paintTimerBar() {
+  const frac = timer.duration ? 1 - timerLeft() / timer.duration : 0;
+  liveWins().forEach((w) => {
+    if (timer.state === 'running') w.setProgressBar(Math.min(1, Math.max(0.01, frac)), { mode: 'normal' });
+    else if (timer.state === 'paused') w.setProgressBar(Math.min(1, Math.max(0.01, frac)), { mode: 'paused' });
+    else if (timer.state === 'ringing') w.setProgressBar(1, { mode: 'error' });
+    else w.setProgressBar(-1);
+  });
+}
+function timerChanged() {
+  clearTimeout(timerTimeout);
+  clearInterval(timerTick);
+  if (timer.state === 'running') {
+    timerTimeout = setTimeout(ringTimer, Math.max(0, timer.endsAt - Date.now()));
+    timerTick = setInterval(paintTimerBar, 5000);
+  }
+  paintTimerBar();
+  settings.timer = timer.state === 'idle' ? undefined : Object.assign({}, timer);
+  saveSettings();
+  broadcast('timer', timerView());
+}
+function startTimer(minutes) {
+  const m = Math.round(Math.min(TIMER_MAX, Math.max(1, Number(minutes) || 0)));
+  timer = { state: 'running', duration: m * 60000, endsAt: Date.now() + m * 60000, left: m * 60000 };
+  timerChanged();
+  return m;
+}
+function ringTimer() {
+  const minutes = Math.round(timer.duration / 60000);
+  timer = { state: 'ringing', duration: timer.duration, endsAt: Date.now(), left: 0 };
+  timerChanged();
+  const away = !liveWins().some((w) => w.isFocused() && w.isVisible() && !w.isMinimized());
+  if (away && Notification.isSupported()) {
+    const n = new Notification({ title: 'Время вышло', body: 'Таймер на ' + minutes + ' ' + plural(minutes, 'минуту', 'минуты', 'минут') + ' закончился.', icon: path.join(__dirname, 'assets', 'icon.png') });
+    n.on('failed', (_e, err) => console.error('notification', err));
+    if (!app.isPackaged) n.on('show', () => console.log('notification shown:', n.title));
+    n.on('click', () => showWin(win));
+    n.show();
+  }
+  if (away && win && !win.isDestroyed()) win.flashFrame(true);
+}
+// After a restart: a running timer goes on; one that ended while the program was closed just ends quietly.
+function restoreTimer() {
+  const t = settings.timer;
+  if (!t || typeof t !== 'object' || !(t.duration > 0)) return;
+  if (t.state === 'running' && t.endsAt > Date.now()) timer = { state: 'running', duration: t.duration, endsAt: t.endsAt, left: 0 };
+  else if (t.state === 'paused' && t.left > 0) timer = { state: 'paused', duration: t.duration, endsAt: 0, left: t.left };
+  else timer = { state: 'idle', duration: 0, endsAt: 0, left: 0 };
+  timerChanged();
+}
+// cmd: 'state', 'start' (arg — minutes), 'pause', 'resume', 'add' (arg — minutes), 'stop' (also silences the melody).
+handle('timer', async (cmd, arg) => {
+  if (cmd === 'start') startTimer(arg);
+  else if (cmd === 'pause' && timer.state === 'running') { timer = { state: 'paused', duration: timer.duration, endsAt: 0, left: timerLeft() }; timerChanged(); }
+  else if (cmd === 'resume' && timer.state === 'paused') { timer = { state: 'running', duration: timer.duration, endsAt: Date.now() + timer.left, left: timer.left }; timerChanged(); }
+  else if (cmd === 'add' && (timer.state === 'running' || timer.state === 'paused')) {
+    const ms = Math.round(Math.min(60, Math.max(1, Number(arg) || 5))) * 60000;
+    timer.duration += ms;
+    if (timer.state === 'running') timer.endsAt += ms; else timer.left += ms;
+    timerChanged();
+  } else if (cmd === 'add' && timer.state === 'ringing') startTimer(arg || 5);
+  else if (cmd === 'stop') { timer = { state: 'idle', duration: 0, endsAt: 0, left: 0 }; timerChanged(); }
+  return { ok: true, timer: timerView() };
+});
+
 function checkReminders() {
   if (!store) return;
   const now = Date.now();
@@ -2069,6 +2180,7 @@ if (!app.requestSingleInstanceLock()) {
     setupUpdates();
     setInterval(checkReminders, 20 * 1000);
     setTimeout(checkReminders, 3000);
+    restoreTimer();
   });
 
   app.on('before-quit', () => saveSettings(true));
