@@ -23,7 +23,7 @@ const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'generat
 // Empty for now; example prompts for each type can go here later.
 const SEED = () => [];
 
-let win = null;
+let win = null;   // the main window: its size, place and tabs are remembered; other windows come from moved tabs
 let store = null;
 let settings = {};
 let firstRunNotice = null;
@@ -143,9 +143,29 @@ function visibleBounds(b) {
   return onScreen ? b : { width: b.width, height: b.height };
 }
 
-function createWindow() {
-  const b = visibleBounds(settings.bounds) || { width: 1180, height: 820 };
-  win = new BrowserWindow({
+/* ---------- windows ---------- */
+const liveWins = () => BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+// The window the user works in now: dialogs open over it, a click on a notification brings it back.
+function activeWin() { const f = BrowserWindow.getFocusedWindow(); return f && !f.isDestroyed() ? f : win; }
+function showWin(w) { if (!w || w.isDestroyed()) return; if (w.isMinimized()) w.restore(); w.show(); w.focus(); }
+function broadcast(channel, data, except) {
+  liveWins().forEach((w) => { if (w.webContents !== except) w.webContents.send(channel, data); });
+}
+// Background and the colour of the Windows buttons, in every window.
+function paintWindows() {
+  liveWins().forEach((w) => {
+    w.setBackgroundColor(bgColor());
+    if (IS_WIN) { try { w.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } }
+  });
+}
+
+// opts.tabs: the tabs a new window opens with (a tab moved out of another window); opts.bounds: where it goes.
+// Without opts it is the main window, at the size and place remembered last time.
+function createWindow(opts) {
+  opts = opts || {};
+  const main = !opts.tabs;
+  const b = opts.bounds || visibleBounds(settings.bounds) || { width: 1180, height: 820 };
+  const w = new BrowserWindow({
     ...b,
     minWidth: 420,
     minHeight: 480,
@@ -164,28 +184,29 @@ function createWindow() {
       spellcheck: false
     }
   });
-  if (settings.maximized) win.maximize();
+  if (main) win = w;
+  if (main && settings.maximized) w.maximize();
 
-  win.loadFile(path.join(__dirname, 'src', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  w.loadFile(path.join(__dirname, 'src', 'index.html'), main ? undefined : { query: { tabs: JSON.stringify(opts.tabs) } });
+  w.once('ready-to-show', () => w.show());
 
-  win.webContents.on('did-finish-load', () => {
+  w.webContents.on('did-finish-load', () => {
     // The program was started by a double click on a file: open it once the page is ready.
-    if (pendingArchive) { const f = pendingArchive; pendingArchive = null; setTimeout(() => openArchiveFromOS(f), 600); }
-    if (settings.zoom) win.webContents.setZoomFactor(settings.zoom);
+    if (main && pendingArchive) { const f = pendingArchive; pendingArchive = null; setTimeout(() => openArchiveFromOS(f), 600); }
+    if (settings.zoom) w.webContents.setZoomFactor(settings.zoom);
   });
 
   // Keep the app on its own page; real web links open in the browser.
-  win.webContents.on('will-navigate', (e) => e.preventDefault());
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  w.webContents.on('will-navigate', (e) => e.preventDefault());
+  w.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
   // Zoom with Ctrl + / Ctrl - / Ctrl 0 (there is no menu bar to provide it).
-  win.webContents.on('before-input-event', (e, input) => {
+  w.webContents.on('before-input-event', (e, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
-    const wc = win.webContents;
+    const wc = w.webContents;
     let z = wc.getZoomFactor();
     if (input.code === 'Equal' || input.code === 'NumpadAdd') z = Math.min(2, z + 0.1);
     else if (input.code === 'Minus' || input.code === 'NumpadSubtract') z = Math.max(0.6, z - 0.1);
@@ -193,32 +214,70 @@ function createWindow() {
     else return;
     e.preventDefault();
     z = Math.round(z * 10) / 10;
-    wc.setZoomFactor(z);
+    liveWins().forEach((x) => x.webContents.setZoomFactor(z));
     settings.zoom = z;
     saveSettings();
   });
 
+  // Only the main window's size and place are remembered.
   const rememberBounds = () => {
-    if (!win || win.isDestroyed()) return;
-    settings.maximized = win.isMaximized();
-    if (!win.isMaximized() && !win.isMinimized() && !win.isFullScreen()) settings.bounds = win.getBounds();
+    if (w !== win || w.isDestroyed()) return;
+    settings.maximized = w.isMaximized();
+    if (!w.isMaximized() && !w.isMinimized() && !w.isFullScreen()) settings.bounds = w.getBounds();
     saveSettings();
   };
-  win.on('resize', rememberBounds);
-  win.on('move', rememberBounds);
-  win.on('maximize', rememberBounds);
-  win.on('unmaximize', rememberBounds);
-  win.on('close', () => { rememberBounds(); saveSettings(true); });
+  w.on('resize', rememberBounds);
+  w.on('move', rememberBounds);
+  w.on('maximize', rememberBounds);
+  w.on('unmaximize', rememberBounds);
+  w.on('close', () => { rememberBounds(); saveSettings(true); });
 
-  win.on('focus', async () => {
+  w.on('focus', async () => {
+    w.flashFrame(false);
     if (!store) return;
     try {
-      if (await store.reloadIfChanged()) win.webContents.send('data-changed', store.view());
+      if (await store.reloadIfChanged()) broadcast('data-changed', store.view());
     } catch (e) { /* ignore */ }
   });
-  win.on('focus', () => { if (win) win.flashFrame(false); });
-  win.on('closed', () => { win = null; });
+  // When the main window closes and others stay, the next one becomes the main window (and remembers its tabs).
+  w.on('closed', () => {
+    if (w !== win) return;
+    win = liveWins()[0] || null;
+    if (win) win.webContents.send('window-main');
+  });
+  return w;
 }
+
+// A tab moved into a window of its own. mode 'beside': the screen is split in half, this window on the left,
+// the new one on the right; mode 'point': the new window opens where the tab was dropped; otherwise a little lower and to the right.
+handle('window-open', async function (tabs, mode, point) {
+  const list = (Array.isArray(tabs) ? tabs : []).filter((x) => x && TAB_KINDS.includes(x.kind)).slice(0, 10)
+    .map((x) => (x.kind === 'assistant' && typeof x.chatId === 'string' ? { kind: x.kind, chatId: x.chatId.slice(0, 64) } : { kind: x.kind }));
+  if (!list.length) return { ok: false, error: 'Нечего открыть.' };
+  const from = BrowserWindow.fromWebContents(this.sender) || win;
+  const fb = from.getNormalBounds ? from.getNormalBounds() : from.getBounds();
+  let bounds;
+  if (mode === 'beside') {
+    const wa = screen.getDisplayMatching(from.getBounds()).workArea;
+    const half = Math.floor(wa.width / 2);
+    if (from.isMinimized()) from.restore();
+    if (from.isMaximized()) from.unmaximize();
+    from.setBounds({ x: wa.x, y: wa.y, width: half, height: wa.height });
+    bounds = { x: wa.x + half, y: wa.y, width: wa.width - half, height: wa.height };
+  } else if (mode === 'point' && point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+    const wa = screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) }).workArea;
+    const width = Math.min(fb.width, wa.width), height = Math.min(fb.height, wa.height);
+    bounds = {
+      x: Math.max(wa.x, Math.min(Math.round(point.x) - 300, wa.x + wa.width - width)),
+      y: Math.max(wa.y, Math.min(Math.round(point.y) - 20, wa.y + wa.height - height)),
+      width, height
+    };
+  } else {
+    bounds = visibleBounds({ x: fb.x + 36, y: fb.y + 36, width: fb.width, height: fb.height }) || { width: fb.width, height: fb.height };
+  }
+  createWindow({ tabs: list, bounds });
+  return { ok: true };
+});
 
 /* ---------- updates ---------- */
 // The installed program checks GitHub Releases on start and every few hours. When a new version
@@ -257,7 +316,7 @@ function htmlToMarkdown(html) {
     .replace(/[ \t]+\n/g, '\n').replace(/\n\s*\n(?=- )/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
-function sendUpdate(u) { if (win && !win.isDestroyed()) win.webContents.send('update', u); }
+function sendUpdate(u) { broadcast('update', u); }
 
 function checkUpdates() { updater.checkForUpdates().catch(() => { /* reported by the 'error' event */ }); }
 
@@ -302,11 +361,7 @@ function setupUpdates() {
   setInterval(checkUpdates, 4 * 60 * 60 * 1000);
 }
 
-nativeTheme.on('updated', () => {
-  if (!win || win.isDestroyed()) return;
-  win.setBackgroundColor(bgColor());
-  if (IS_WIN) { try { win.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } }
-});
+nativeTheme.on('updated', paintWindows);
 
 /* ---------- IPC ---------- */
 function ok(extra) {
@@ -321,10 +376,23 @@ function fail(e) {
   else if (e && e.userMessage) error = e.userMessage;
   return { ok: false, error };
 }
+// fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
+// When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
+const NO_SYNC = new Set(['load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
-    try { return await fn(...args); } catch (e) { console.error(name, e); return fail(e); }
+    try {
+      const r = await fn.apply(event, args);
+      if (r && r.ok && !NO_SYNC.has(name) && liveWins().length > 1) syncOthers(r, event.sender);
+      return r;
+    } catch (e) { console.error(name, e); return fail(e); }
   });
+}
+function syncOthers(r, except) {
+  const data = { info: info() };
+  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, profile: r.profile, activity: r.activity });
+  if (r.chats) data.chats = r.chats;
+  broadcast('sync', data, except);
 }
 function info() {
   return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), tabs: tabsSetting(), assistant: assistantInfo() };
@@ -348,7 +416,7 @@ handle('add-files', async (promptId, sources) => ok(await store.addFiles(promptI
 handle('remove-file', async (promptId, fileId) => { await store.removeFile(promptId, fileId); return ok(); });
 
 handle('pick-files', async () => {
-  const r = await dialog.showOpenDialog(win, {
+  const r = await dialog.showOpenDialog(activeWin(), {
     title: 'Выберите файлы для промта',
     properties: ['openFile', 'multiSelections'],
     filters: [
@@ -395,7 +463,7 @@ const AVATAR_SIZE = 256;
 
 // Crops the middle square of the picture and shrinks it, so a 20 MB photo becomes a small PNG.
 handle('pick-avatar', async () => {
-  const r = await dialog.showOpenDialog(win, {
+  const r = await dialog.showOpenDialog(activeWin(), {
     title: 'Выберите картинку для аватарки',
     properties: ['openFile'],
     filters: [{ name: 'Картинки', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }]
@@ -429,10 +497,7 @@ handle('set-theme', async (theme) => {
   settings.theme = theme;
   applyTheme();
   // nativeTheme fires 'updated' only when light/dark flips; "Тёмная" -> "Чёрная" needs the bar repainted too.
-  if (win && !win.isDestroyed()) {
-    win.setBackgroundColor(bgColor());
-    if (IS_WIN) { try { win.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } }
-  }
+  paintWindows();
   saveSettings();
   return { ok: true, info: info() };
 });
@@ -496,7 +561,7 @@ handle('open-data-dir', async () => {
 });
 
 handle('change-data-dir', async () => {
-  const r = await dialog.showOpenDialog(win, {
+  const r = await dialog.showOpenDialog(activeWin(), {
     title: 'Где хранить промты?',
     defaultPath: store.dir,
     buttonLabel: 'Выбрать эту папку',
@@ -535,7 +600,7 @@ function manifest(kind, counts) {
 const plural = (n, a, b, c) => { const m = n % 10, mm = n % 100; return m === 1 && mm !== 11 ? a : m >= 2 && m <= 4 && (mm < 12 || mm > 14) ? b : c; };
 
 handle('backup-export', async () => {
-  const r = await dialog.showSaveDialog(win, {
+  const r = await dialog.showSaveDialog(activeWin(), {
     title: 'Сохранить все данные в файл',
     defaultPath: path.join(app.getPath('documents'), `${APP_TITLE} — копия ${today()}.${BACKUP_EXT}`),
     filters: [{ name: 'Резервная копия Snowball.ai', extensions: [BACKUP_EXT] }]
@@ -554,7 +619,7 @@ handle('prompts-export', async (ids) => {
   const list = Array.isArray(ids) && ids.length ? ids.filter((id) => store.find(id)) : null;
   const one = list && list.length === 1 ? store.find(list[0]) : null;
   const base = one ? sanitizeName(one.title || 'Промт').replace(/\.[^.]*$/, '') : (list ? 'Промты (' + list.length + ')' : APP_TITLE + ' — промты ' + today());
-  const r = await dialog.showSaveDialog(win, {
+  const r = await dialog.showSaveDialog(activeWin(), {
     title: one ? 'Поделиться промтом' : 'Сохранить промты в файл',
     defaultPath: path.join(app.getPath('documents'), base + '.' + SHARE_EXT),
     filters: [{ name: 'Промты Snowball.ai', extensions: [SHARE_EXT] }]
@@ -593,7 +658,7 @@ async function openArchive(file) {
       detail = (titles.length > 1 ? titles.slice(0, 6).map((t) => '• ' + t).join('\n') + (titles.length > 6 ? '\n• и ещё ' + (titles.length - 6) : '') + '\n\n' : '') +
         'Вместе с комментариями и приложенными файлами (' + (c.files || 0) + '). Промты, которые у вас уже есть, пропустятся.';
     }
-    const answer = await dialog.showMessageBox(win, { type: 'question', buttons: [kind === 'backup' ? 'Восстановить' : 'Добавить', 'Отмена'], defaultId: 0, cancelId: 1, title: APP_TITLE, message, detail, noLink: true });
+    const answer = await dialog.showMessageBox(activeWin(), { type: 'question', buttons: [kind === 'backup' ? 'Восстановить' : 'Добавить', 'Отмена'], defaultId: 0, cancelId: 1, title: APP_TITLE, message, detail, noLink: true });
     if (answer.response !== 0) return { ok: true, canceled: true };
     const res = await store.mergeFrom(tmp, kind);
     if (kind === 'backup') {
@@ -603,7 +668,7 @@ async function openArchive(file) {
         SETTINGS_IN_BACKUP.forEach((k) => { if (look[k] !== undefined) settings[k] = look[k]; });
         if (!THEMES.includes(settings.theme)) settings.theme = 'system';
         applyTheme();
-        if (win && !win.isDestroyed()) { win.setBackgroundColor(bgColor()); if (IS_WIN) { try { win.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } } }
+        paintWindows();
         saveSettings(true);
       }
     }
@@ -616,7 +681,7 @@ async function openArchive(file) {
 handle('archive-open', async (file) => {
   let target = typeof file === 'string' ? file : '';
   if (!target) {
-    const r = await dialog.showOpenDialog(win, {
+    const r = await dialog.showOpenDialog(activeWin(), {
       title: 'Загрузить промты или резервную копию',
       properties: ['openFile'],
       filters: [{ name: 'Файлы Snowball.ai', extensions: [SHARE_EXT, BACKUP_EXT, 'json'] }, { name: 'Все файлы', extensions: ['*'] }]
@@ -645,13 +710,15 @@ function archiveFromArgs(argv) {
 }
 let pendingArchive = null;
 async function openArchiveFromOS(file) {
-  if (!file || !win || win.isDestroyed()) return;
+  const w = activeWin();
+  if (!file || !w || w.isDestroyed()) return;
   try {
     const r = await openArchive(file);
-    win.webContents.send('archive-opened', r);
+    w.webContents.send('archive-opened', r);
+    if (r && r.ok && !r.canceled) syncOthers(r, w.webContents);
   } catch (e) {
     console.error('archive', e);
-    win.webContents.send('archive-opened', fail(e));
+    w.webContents.send('archive-opened', fail(e));
   }
 }
 
@@ -665,7 +732,11 @@ const pending = new Map();   // action id -> proposed action, waiting for "Со�
 let streamSeq = 0;
 let actionSeq = 0;
 
-function sendAssistant(e) { if (win && !win.isDestroyed()) win.webContents.send('assistant', e); }
+const streamOwner = new Map();   // stream id -> the page (webContents) that asked; its answer goes only there
+function sendAssistant(e) {
+  const wc = streamOwner.get(e.id);
+  if (wc && !wc.isDestroyed()) wc.send('assistant', e);
+}
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -1280,14 +1351,15 @@ function pickSource(quick) {
 
 /* Notifications: when an answer is ready and the window is minimized, hidden or behind another window,
    Windows shows a notification and the taskbar button blinks. A click on it brings the chat back. */
-function windowAway() { return !win || win.isDestroyed() || win.isMinimized() || !win.isVisible() || !win.isFocused(); }
+function windowAway(w) { w = w || win; return !w || w.isDestroyed() || w.isMinimized() || !w.isVisible() || !w.isFocused(); }
 // The first words of the answer without Markdown marks, for the notification text.
 function plainStart(text) {
   const t = String(text || '').replace(/```[\s\S]*?(```|$)/g, ' ').replace(/[*#`>]/g, '').replace(/^\s*[-•]\s+/gm, '').replace(/\s+/g, ' ').trim();
   return t.length > 140 ? t.slice(0, 139).trimEnd() + '…' : t;
 }
-function notifyAnswer(text, failed) {
-  if (settings.notify === false || !windowAway() || !Notification.isSupported()) return;
+function notifyAnswer(text, failed, wc) {
+  const w = (wc && !wc.isDestroyed() && BrowserWindow.fromWebContents(wc)) || win;
+  if (settings.notify === false || !windowAway(w) || !Notification.isSupported()) return;
   const n = new Notification({
     title: failed ? 'Ассистент не смог ответить' : 'Ассистент ответил',
     body: failed ? String(text || '') : (plainStart(text) || 'Ответ готов'),
@@ -1296,14 +1368,12 @@ function notifyAnswer(text, failed) {
   n.on('failed', (_e, err) => console.error('notification', err));
   if (!app.isPackaged) n.on('show', () => console.log('notification shown:', n.title));
   n.on('click', () => {
-    if (!win || win.isDestroyed()) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-    win.webContents.send('assistant-open');
+    if (!w || w.isDestroyed()) return;
+    showWin(w);
+    w.webContents.send('assistant-open');
   });
   n.show();
-  if (win && !win.isDestroyed()) win.flashFrame(true);
+  if (w && !w.isDestroyed()) w.flashFrame(true);
 }
 
 async function runAssistant(id, messages, controller, quick) {
@@ -1323,6 +1393,7 @@ async function runAssistant(id, messages, controller, quick) {
             action.undo = r.undo;
             action.status = 'done';
             data = ok(r.extra);
+            if (liveWins().length > 1) syncOthers(data, streamOwner.get(id));
           } catch (e) {
             action.status = 'failed';
             action.error = e.userMessage || 'Не получилось.';
@@ -1335,7 +1406,7 @@ async function runAssistant(id, messages, controller, quick) {
     }
     if (!controller.signal.aborted) {
       sendAssistant({ id, kind: 'done', assistant: assistantInfo(), cost: runCost.get(controller.signal) || 0 });
-      if (!quick) notifyAnswer(full, false);
+      if (!quick) notifyAnswer(full, false, streamOwner.get(id));
     }
   } catch (e) {
     if (!controller.signal.aborted) {
@@ -1344,16 +1415,17 @@ async function runAssistant(id, messages, controller, quick) {
       else if (!e.userMessage) console.error('assistant', e);
       const error = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
       sendAssistant({ id, kind: 'error', error, assistant: assistantInfo(), cost: runCost.get(controller.signal) || 0 });
-      if (!quick) notifyAnswer(error, true);
+      if (!quick) notifyAnswer(error, true, streamOwner.get(id));
     }
   } finally {
     streams.delete(id);
+    streamOwner.delete(id);
   }
 }
 
 // messages: [{ role: 'user' | 'assistant', content: string }], the whole conversation so far.
 // opts.quick: the small assistant window (cheapest model, short answers, no Windows notification).
-handle('assistant-send', async (messages, opts) => {
+handle('assistant-send', async function (messages, opts) {
   const list = (Array.isArray(messages) ? messages : [])
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .map((m) => ({ role: m.role, content: m.content.slice(0, 100000) }));
@@ -1361,6 +1433,7 @@ handle('assistant-send', async (messages, opts) => {
   const id = ++streamSeq;
   const controller = new AbortController();
   streams.set(id, controller);
+  streamOwner.set(id, this.sender);
   store.recordAssistant();
   runAssistant(id, list, controller, !!(opts && opts.quick));
   return { ok: true, id };
@@ -1403,11 +1476,10 @@ function checkReminders() {
     n.on('failed', (_e, err) => console.error('notification', err));
     if (!app.isPackaged) n.on('show', () => console.log('notification shown:', n.title));
     n.on('click', () => {
-      if (!win || win.isDestroyed()) return;
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
-      win.webContents.send('calendar-open', e.date);
+      const w = activeWin();
+      if (!w || w.isDestroyed()) return;
+      showWin(w);
+      w.webContents.send('calendar-open', e.date);
     });
     n.show();
     if (windowAway() && win && !win.isDestroyed()) win.flashFrame(true);
@@ -1587,9 +1659,7 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', (_event, argv) => {
     if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+    showWin(win);
     openArchiveFromOS(archiveFromArgs(argv));
   });
 

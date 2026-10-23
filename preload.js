@@ -17,6 +17,17 @@ contextBridge.exposeInMainWorld('vsApi', {
   saveProfile: (input) => ipcRenderer.invoke('save-profile', input),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   setTabs: (tabs) => ipcRenderer.invoke('set-tabs', tabs),
+  windowOpen: (tabs, mode, point) => ipcRenderer.invoke('window-open', tabs, mode, point),
+  onSync: (fn) => {
+    const listener = (_e, data) => fn(data);
+    ipcRenderer.on('sync', listener);
+    return () => ipcRenderer.removeListener('sync', listener);
+  },
+  onWindowMain: (fn) => {
+    const listener = () => fn();
+    ipcRenderer.on('window-main', listener);
+    return () => ipcRenderer.removeListener('window-main', listener);
+  },
   setConfirm: (on) => ipcRenderer.invoke('set-confirm', on),
   updateState: () => ipcRenderer.invoke('update-state'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),

@@ -135,6 +135,10 @@ button { cursor: pointer; }
 }
 .tab:hover { background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--ink); }
 .tab.on { background: var(--bg); color: var(--ink); border-color: var(--line); z-index: 1; }
+.tab.drop-before { box-shadow: inset 3px 0 0 var(--accent-strong); }
+.tab.drop-after { box-shadow: inset -3px 0 0 var(--accent-strong); }
+.menu.tab-ctx { position: fixed; bottom: auto; right: auto; z-index: 45; min-width: 250px; }
+.menu.tab-ctx[hidden] { display: none; }
 .tab:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
 .tab-ico { display: grid; flex: none; }
 .tab-ico svg { width: 16px; height: 16px; }

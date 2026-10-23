@@ -111,6 +111,8 @@
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>',
     bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>',
+    window: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6.5" width="13" height="13" rx="2"/><path d="M8 3.5h10.5A2 2 0 0 1 20.5 5.5V16"/></svg>',
+    split: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></svg>',
     share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>',
@@ -880,6 +882,12 @@
   };
   var TAB_ORDER = ["home", "prompts", "calendar", "tasks", "assistant", "generator", "stats"];
   var tabs = { list: [], active: -1, seq: 0 };
+  // The first window is the main one: its tabs are remembered. A window opened from a moved tab gets its tabs in the address
+  // (?tabs=[…]) and does not remember them; if the main window is closed, the next one becomes main ('window-main').
+  var startTabs = null;
+  try { startTabs = JSON.parse(new URLSearchParams(location.search).get("tabs") || "null"); } catch (e) { startTabs = null; }
+  var isMainWindow = !startTabs;
+  api.onWindowMain(function () { isMainWindow = true; saveTabs(); });
   function activeTab() { return tabs.list[tabs.active] || null; }
   function chatTitle(id) { var c = hist.list.find(function (x) { return x.id === id; }); return c ? c.title : ""; }
   function tabTitle(t) {
@@ -942,6 +950,7 @@
     else { if (i < tabs.active) tabs.active--; renderTabs(); saveTabs(); }
   }
   function saveTabs() {
+    if (!isMainWindow) return;
     api.setTabs({
       list: tabs.list.map(function (t) { return t.kind === "assistant" ? { kind: t.kind, chatId: t.session.id || t.session.loadId || undefined } : { kind: t.kind }; }),
       active: tabs.active
@@ -949,6 +958,7 @@
   }
   // The tabs saved last time; an LLM tab loads its conversation when it is first opened.
   function restoreTabs(saved) {
+    if (startTabs) saved = { list: startTabs, active: 0 };
     tabs.list = [];
     (saved && saved.list && saved.list.length ? saved.list : [{ kind: "prompts" }]).forEach(function (x) {
       if (!TABS[x.kind]) return;
@@ -960,11 +970,20 @@
     activateTab(Math.max(0, Math.min(tabs.list.length - 1, (saved && saved.active) || 0)));
   }
   function renderTabs() {
+    var cur = activeTab();
+    document.title = cur ? tabTitle(cur) + " — Snowball.ai" : "Snowball.ai";
     els.tabs.replaceChildren.apply(els.tabs, tabs.list.map(function (t, i) {
       var title = tabTitle(t), on = i === tabs.active;
       return h("div", { class: "tab" + (on ? " on" : ""), role: "tab", "aria-selected": String(on), tabindex: on ? "0" : "-1", title: title,
+        draggable: "true", "data-i": String(i),
         onclick: function () { activateTab(i); },
         onauxclick: function (e) { if (e.button === 1) { e.preventDefault(); closeTab(i); } },
+        oncontextmenu: function (e) { e.preventDefault(); openTabCtx(i, e.clientX, e.clientY); },
+        ondragstart: function (e) { tabDrag.from = i; tabDrag.dropped = false; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/x-snowball-tab", String(i)); },
+        ondragover: function (e) { if (tabDrag.from === null) return; e.preventDefault(); markTabDrop(this, e); },
+        ondragleave: function () { this.classList.remove("drop-before", "drop-after"); },
+        ondrop: function (e) { if (tabDrag.from === null) return; e.preventDefault(); dropTab(i, e); },
+        ondragend: function (e) { endTabDrag(e); },
         onkeydown: function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateTab(i); } } },
         h("span", { class: "tab-ico", html: ICONS[TABS[t.kind].icon], "aria-hidden": "true" }),
         h("span", { class: "tab-t", text: title }),
@@ -974,6 +993,77 @@
           onclick: function (e) { e.stopPropagation(); closeTab(i); } }));
     }));
   }
+  // Dragging a tab: dropped on another tab it goes before or after it (by the half it was dropped on);
+  // dropped outside the window it opens in a window of its own right there.
+  var tabDrag = { from: null, dropped: false };
+  function markTabDrop(el, e) {
+    var r = el.getBoundingClientRect(), after = e.clientX > r.left + r.width / 2;
+    el.classList.toggle("drop-before", !after);
+    el.classList.toggle("drop-after", after);
+  }
+  function dropTab(i, e) {
+    var from = tabDrag.from;
+    tabDrag.dropped = true;
+    var el = els.tabs.children[i], r = el.getBoundingClientRect();
+    var to = e.clientX > r.left + r.width / 2 ? i + 1 : i;
+    if (from < to) to--;
+    if (to === from) { renderTabs(); return; }
+    var activeT = activeTab(), t = tabs.list.splice(from, 1)[0];
+    tabs.list.splice(to, 0, t);
+    tabs.active = tabs.list.indexOf(activeT);
+    renderTabs();
+    saveTabs();
+  }
+  function endTabDrag(e) {
+    var from = tabDrag.from;
+    tabDrag.from = null;
+    els.tabs.querySelectorAll(".drop-before, .drop-after").forEach(function (el) { el.classList.remove("drop-before", "drop-after"); });
+    if (tabDrag.dropped || from === null) return;
+    var outside = e.screenX < window.screenX || e.screenX > window.screenX + window.outerWidth || e.screenY < window.screenY || e.screenY > window.screenY + window.outerHeight;
+    if (outside && (e.screenX || e.screenY)) tabToWindow(from, "point", { x: e.screenX, y: e.screenY });
+  }
+  // Moves a tab into a new window. An LLM conversation goes with it (it is saved, the new window loads it);
+  // a tab whose answer is still being written waits. The last tab leaves "Главная" behind.
+  function tabToWindow(i, mode, point) {
+    var t = tabs.list[i];
+    if (!t) return;
+    if (t.session && t.session.current) { toast("Дождитесь, пока ассистент допишет ответ, и попробуйте ещё раз."); return; }
+    var desc = t.kind === "assistant" ? { kind: t.kind, chatId: t.session.id || t.session.loadId || undefined } : { kind: t.kind };
+    call(api.windowOpen([desc], mode, point)).then(function (r) { if (r) closeTab(tabs.list.indexOf(t)); });
+  }
+  // Right click on a tab.
+  var ctxMenu = h("div", { class: "menu tab-ctx", role: "menu", hidden: true });
+  document.body.append(ctxMenu);
+  function openTabCtx(i, x, y) {
+    setTabMenu(false);
+    var item = function (label, ic, fn) {
+      return h("button", { type: "button", role: "menuitem", onclick: function () { ctxMenu.hidden = true; fn(); } },
+        h("span", { class: "ico", html: ic, "aria-hidden": "true" }), h("span", { text: label }));
+    };
+    ctxMenu.replaceChildren.apply(ctxMenu, [
+      item("Открыть в новом окне", ICONS.window, function () { tabToWindow(i, null); }),
+      item("Рядом: экран пополам", ICONS.split, function () { tabToWindow(i, "beside"); }),
+      h("hr"),
+      item("Закрыть вкладку", ICONS.x, function () { closeTab(i); }),
+      tabs.list.length > 1 ? item("Закрыть другие вкладки", ICONS.x, function () {
+        var keep = tabs.list[i];
+        tabs.list.slice().forEach(function (t) { if (t !== keep) closeTab(tabs.list.indexOf(t)); });
+      }) : null].filter(Boolean));
+    ctxMenu.hidden = false;
+    ctxMenu.style.left = Math.max(8, Math.min(x, window.innerWidth - ctxMenu.offsetWidth - 8)) + "px";
+    ctxMenu.style.top = Math.max(8, Math.min(y, window.innerHeight - ctxMenu.offsetHeight - 8)) + "px";
+    var first = ctxMenu.querySelector("button");
+    if (first) first.focus();
+  }
+  ctxMenu.addEventListener("keydown", function (e) {
+    var items = Array.prototype.slice.call(ctxMenu.querySelectorAll("button"));
+    var k = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); ctxMenu.hidden = true; }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(k + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
+  });
+  document.addEventListener("mousedown", function (e) { if (!ctxMenu.hidden && !ctxMenu.contains(e.target)) ctxMenu.hidden = true; });
+  window.addEventListener("blur", function () { ctxMenu.hidden = true; });
+
   // "+": what a new tab shows.
   function setTabMenu(open) {
     els.tabMenu.hidden = !open;
@@ -3131,6 +3221,12 @@
   /* ---------- start ---------- */
   if (api.platform === "win32") els.titlebar.classList.add("win");
   render();
+  // Another window changed something: show the same here.
+  api.onSync(function (d) {
+    applyData(d);
+    if (d.chats) { hist.list = d.chats; renderHistory(); }
+    render();
+  });
   api.onDataChanged(function (prompts) {
     setItems(prompts);
     render();
@@ -3140,7 +3236,7 @@
     state.loaded = true;
     restoreTabs(r && r.info && r.info.tabs);
     if (!r) return;
-    if (state.profile && !state.profile.welcomed) openProfile(true);
+    if (isMainWindow && state.profile && !state.profile.welcomed) openProfile(true);
     var n = r.notice;
     if (!n) return;
     if (n.kind === "created") toast("Создал папку «Snowball.ai» в Документах. Там хранятся все промты и файлы.", true);
