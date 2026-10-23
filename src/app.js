@@ -1115,14 +1115,23 @@
       if (on && focusFirst) { var f = w.querySelector(".submenu button[aria-checked=\"true\"]") || w.querySelector(".submenu button"); if (f) f.focus(); }
     });
   }
+  // The mouse travels from "Тема" to its list across other items and a small gap, so a list closes or switches
+  // only after a short pause: on the way it stays open. A hidden bridge in styles.css covers the gap.
+  var subTimer = null;
+  function subLater(fn, ms) { clearTimeout(subTimer); subTimer = setTimeout(fn, ms); }
+  function openSubName() { var b = els.menu.querySelector(".sub-wrap.open .has-sub"); return b ? b.dataset.sub : null; }
   els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
     var name = w.querySelector(".has-sub").dataset.sub;
-    w.addEventListener("mouseenter", function () { openSub(name); });
-    w.addEventListener("mouseleave", function () { if (!w.contains(document.activeElement)) openSub(null); });
-    w.querySelector(".has-sub").addEventListener("click", function () { openSub(name, true); });
+    w.addEventListener("mouseenter", function () {
+      var open = openSubName();
+      if (!open || open === name) { clearTimeout(subTimer); openSub(name); }
+      else subLater(function () { openSub(name); }, 260);
+    });
+    w.addEventListener("mouseleave", function () { subLater(function () { if (!w.contains(document.activeElement)) openSub(null); }, 350); });
+    w.querySelector(".has-sub").addEventListener("click", function () { clearTimeout(subTimer); openSub(name, true); });
   });
   els.menu.querySelectorAll(":scope > button, :scope > hr").forEach(function (b) {
-    b.addEventListener("mouseenter", function () { openSub(null); });
+    b.addEventListener("mouseenter", function () { subLater(function () { openSub(null); }, 260); });
   });
   els.menuBtn.addEventListener("click", function () { setMenu(els.menu.hidden); });
   document.addEventListener("mousedown", function (e) {
@@ -1422,7 +1431,11 @@
         b.classList.add("cw-ev");
         if (pl.s1 - pl.s0 <= 45) b.classList.add("short");
         b.style.top = ((pl.s0 - startHour * 60) / 60 * HOUR_H) + "px";
-        b.style.height = Math.max(24, (pl.s1 - pl.s0) / 60 * HOUR_H - 2) + "px";
+        var hgt = Math.max(24, (pl.s1 - pl.s0) / 60 * HOUR_H - 2);
+        b.style.height = hgt + "px";
+        // As many whole lines as fit (a one-hour event shows two), the rest ends with "…"; the full text is in the tooltip.
+        b.querySelector(".row1").style.webkitLineClamp = String(Math.max(1, Math.floor((hgt - 8) / 16)));
+        b.title = timeRange(pl.e) + " " + pl.e.title + (pl.e.note ? " — " + pl.e.note : "");
         b.style.left = "calc(" + (pl.lane / lanes.length * 100) + "% + 2px)";
         b.style.width = "calc(" + (100 / lanes.length) + "% - 4px)";
         col.append(b);
@@ -2079,9 +2092,10 @@
     anthropic: { name: "Claude", owner: "Anthropic" }
   };
   var MODELS = [
+    // In the menu the strongest model of each service is on top, the weakest at the bottom.
+    { id: "gpt-6-astra", provider: "openai", name: "GPT-6 Astra", short: "GPT-6 Astra", text: "Самая сильная и самая дорогая" },
     { id: "gpt-6.1-sol", provider: "openai", name: "GPT-6.1 Sol", short: "GPT-6.1 Sol", text: "Основная: почти как Astra, но в 5 раз дешевле" },
     { id: "gpt-6-luna", provider: "openai", name: "GPT-6 Luna", short: "GPT-6 Luna", text: "Самая дешёвая, в 20 раз дешевле Sol. Для проверок" },
-    { id: "gpt-6-astra", provider: "openai", name: "GPT-6 Astra", short: "GPT-6 Astra", text: "Самая сильная и самая дорогая" },
     { id: "claude-opus-5-5", provider: "anthropic", name: "Claude Opus 5.5", short: "Opus 5.5", text: "Лучше всего пишет и улучшает промты" },
     { id: "claude-haiku-5-5", provider: "anthropic", name: "Claude Haiku 5.5", short: "Haiku 5.5", text: "Быстрая и примерно в 40 раз дешевле Opus" }
   ];
@@ -2159,6 +2173,7 @@
 
   /* ---------- "Модель" button in the message box ---------- */
   var effortOpen = false;
+  var effortTimer = null;
   function modelOption(item, checked, onpick) {
     return h("button", { type: "button", class: "mm-item", role: "menuitemradio", "aria-checked": String(checked), onclick: onpick },
       h("span", { class: "mm-text" },
@@ -2193,8 +2208,15 @@
       h("span", { class: "sub-value", text: effort.name }),
       h("span", { class: "sub-chev", html: ICONS.right, "aria-hidden": "true" }));
     var wrap = h("div", { class: "sub-wrap" + (effortOpen ? " open" : "") }, row, list);
-    wrap.addEventListener("mouseenter", function () { effortOpen = true; wrap.classList.add("open"); row.setAttribute("aria-expanded", "true"); });
-    wrap.addEventListener("mouseleave", function () { if (wrap.contains(document.activeElement) && document.activeElement !== row) return; effortOpen = false; wrap.classList.remove("open"); row.setAttribute("aria-expanded", "false"); });
+    // Like the profile menu: the list stays open for a moment after the mouse leaves, so it can be reached.
+    wrap.addEventListener("mouseenter", function () { clearTimeout(effortTimer); effortOpen = true; wrap.classList.add("open"); row.setAttribute("aria-expanded", "true"); });
+    wrap.addEventListener("mouseleave", function () {
+      clearTimeout(effortTimer);
+      effortTimer = setTimeout(function () {
+        if (wrap.contains(document.activeElement) && document.activeElement !== row) return;
+        effortOpen = false; wrap.classList.remove("open"); row.setAttribute("aria-expanded", "false");
+      }, 350);
+    });
     kids.push(wrap);
     els.modelMenu.replaceChildren.apply(els.modelMenu, kids);
   }

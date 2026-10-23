@@ -1297,7 +1297,10 @@ if (!app.requestSingleInstanceLock()) {
     win.focus();
   });
 
-  if (IS_WIN) app.setAppUserModelId('local.snowball.prompts');
+  // Windows ties the taskbar icon and notifications to this id through a Start Menu shortcut, and Electron
+  // makes or repoints that shortcut to whatever exe shows a notification. A run from the sources gets its own id,
+  // so it never takes over the installed program's shortcut (and its icon).
+  if (IS_WIN) app.setAppUserModelId(app.isPackaged ? 'local.snowball.prompts' : 'local.snowball.prompts.dev');
   Menu.setApplicationMenu(null);
 
   app.whenReady().then(async () => {

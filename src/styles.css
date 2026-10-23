@@ -296,6 +296,8 @@ h1 .brand { color: var(--accent-strong); }
 .sub-wrap.open > .has-sub { background: var(--surface-2); }
 .menu.submenu { display: none; left: calc(100% + 4px); bottom: auto; top: -6px; min-width: 250px; }
 .sub-wrap.open > .submenu { display: grid; }
+/* An invisible bridge over the gap between the menu and its list, so the mouse does not "leave" on the way */
+.menu.submenu::before { content: ""; position: absolute; top: 0; bottom: 0; left: -14px; width: 14px; }
 .theme-swatch { width: 17px; height: 17px; flex: none; border-radius: 50%; border: 1px solid var(--line); }
 .sw-light { background: linear-gradient(135deg, #FCEEE4 50%, #F4AA84 50%); }
 .sw-dark { background: linear-gradient(135deg, #251B17 50%, #F2A982 50%); }
@@ -797,10 +799,10 @@ h1 .brand { color: var(--accent-strong); }
 .cal { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
 .cal-month { padding: 16px 18px; display: grid; gap: 12px; }
 .cal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.cal-toolbar .cal-month-title { flex: 1 1 200px; }
+.cal-toolbar .cal-month-title { flex: 1 1 200px; margin-left: 6px; }
 .cal-view-wrap { position: relative; }
 .cal-view-btn svg { width: 16px; height: 16px; }
-.menu.cal-view-menu { top: calc(100% + 6px); bottom: auto; left: auto; right: 0; min-width: 180px; }
+.menu.cal-view-menu { top: calc(100% + 6px); bottom: auto; left: 0; right: auto; min-width: 180px; }
 .cal-view-menu button[aria-checked="true"] .tick { visibility: visible; }
 
 /* Week, 3 days, day: columns of days with events placed by time */
@@ -829,11 +831,10 @@ h1 .brand { color: var(--accent-strong); }
 .cw-col.off { background-color: color-mix(in srgb, var(--off-bg) 55%, transparent); }
 .cw-col:hover { background-color: color-mix(in srgb, var(--surface-2) 45%, transparent); }
 .cal-ev.cw-ev { position: absolute; overflow: hidden; align-content: start; padding: 4px 7px; border-radius: 8px; z-index: 1; box-shadow: 0 1px 0 rgba(0, 0, 0, .04); }
-.cal-ev.cw-ev .row1 { display: grid; gap: 0; }
-.cal-ev.cw-ev .tm { font-size: 11.5px; }
-.cal-ev.cw-ev .ttl { font-size: 13px; line-height: 1.25; overflow-wrap: break-word; word-break: normal; hyphens: auto; }
-.cal-ev.cw-ev.short .row1 { display: flex; gap: 6px; }
-.cal-ev.cw-ev.short .ttl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Time and title flow as one text, cut to whole lines (the number of lines comes from app.js) */
+.cal-ev.cw-ev .row1 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; line-height: 16px; }
+.cal-ev.cw-ev .tm { display: inline; font-size: 12px; margin-right: 5px; }
+.cal-ev.cw-ev .ttl { display: inline; font-size: 13px; line-height: 16px; overflow-wrap: break-word; }
 .cal-ev.cw-ev .kind, .cal-ev.cw-ev .bell { display: none; }
 .cal-ev.cw-ev.short .note { display: none; }
 .cw-body:not(.one-day) .cal-ev.cw-ev .note { display: none; }

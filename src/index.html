@@ -291,10 +291,6 @@
           </header>
 
           <div class="cal-toolbar">
-            <h2 class="cal-month-title" id="cal-title"></h2>
-            <button type="button" class="btn btn-ghost" id="cal-today">Сегодня</button>
-            <button type="button" class="cal-icon-btn" id="cal-prev" aria-label="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
-            <button type="button" class="cal-icon-btn" id="cal-next" aria-label="Вперёд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
             <div class="cal-view-wrap">
               <button type="button" class="btn btn-ghost cal-view-btn" id="cal-view-btn" aria-haspopup="true" aria-expanded="false" aria-controls="cal-view-menu">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M9.5 10v10.5M15 10v10.5"/></svg>
@@ -307,6 +303,10 @@
                 <button type="button" role="menuitemradio" aria-checked="false" data-view="day">День <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
               </div>
             </div>
+            <button type="button" class="btn btn-ghost" id="cal-today">Сегодня</button>
+            <button type="button" class="cal-icon-btn" id="cal-prev" aria-label="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+            <button type="button" class="cal-icon-btn" id="cal-next" aria-label="Вперёд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+            <h2 class="cal-month-title" id="cal-title"></h2>
           </div>
 
           <div class="cal" id="cal-month-view">
