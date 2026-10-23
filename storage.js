@@ -7,6 +7,7 @@
 //   <dir>/avatar.png            — the avatar, already cropped to a square
 //   <dir>/activity.json         — actions per day for the statistics page
 //   <dir>/chats.json            — the assistant's conversations
+//   <dir>/Файлы чатов/<chatId>/ — pictures attached to messages in LLM conversations
 //   <dir>/calendar.json         — things planned in the calendar
 //   <dir>/tasks.json            — the tasks board: to do, in progress, done
 // This module only uses Node's fs/path, so it can be tested without Electron.
@@ -21,6 +22,8 @@ const FORMAT = 'snowball';
 const DATA_FILE = 'prompts.json';
 const BACKUP_FILE = 'prompts.backup.json';
 const FILES_DIR = 'Файлы';
+const CHAT_FILES_DIR = 'Файлы чатов';
+const CHAT_IMAGES_MAX = 6;   // pictures in one message
 const PROFILE_FILE = 'profile.json';
 const AVATAR_FILE = 'avatar.png';
 const ACTIVITY_FILE = 'activity.json';
@@ -264,11 +267,21 @@ function normalizeAction(a) {
   if (a.prevTask && typeof a.prevTask === 'object') out.prevTask = normalizeTask(a.prevTask);
   return out;
 }
+// A picture in a message: its file is "Файлы чатов/<chat id>/<stored>".
+const STORED_RE = /^[A-Za-z0-9_-]{1,64}\.(jpg|png)$/;
+function normalizeChatImages(list) {
+  return (Array.isArray(list) ? list : []).slice(0, CHAT_IMAGES_MAX).map((x) => {
+    if (!x || typeof x !== 'object' || !STORED_RE.test(str(x.stored))) return null;
+    return { id: ID_RE.test(str(x.id)) ? x.id : newId('i'), name: str(x.name, NAME_MAX * 4).trim() || 'картинка', stored: x.stored };
+  }).filter(Boolean);
+}
 function normalizeChat(c) {
   if (!c || typeof c !== 'object' || !ID_RE.test(str(c.id))) return null;
   const messages = (Array.isArray(c.messages) ? c.messages : []).map((m) => {
     if (!m || (m.role !== 'user' && m.role !== 'assistant')) return null;
     const out = { role: m.role, text: str(m.text, 200000) };
+    const images = m.role === 'user' ? normalizeChatImages(m.images) : [];
+    if (images.length) out.images = images;
     if (m.note) out.note = str(m.note, 500);
     if (m.failed) out.failed = true;
     if (num(m.cost) > 0) out.cost = num(m.cost);   // what the answer cost, in dollars
@@ -312,6 +325,29 @@ class Store {
   get avatarPath() { return path.join(this.dir, AVATAR_FILE); }
   get activityPath() { return path.join(this.dir, ACTIVITY_FILE); }
   get chatsPath() { return path.join(this.dir, CHATS_FILE); }
+  get chatFilesRoot() { return path.join(this.dir, CHAT_FILES_DIR); }
+  chatFilesDir(chatId) {
+    if (!ID_RE.test(str(chatId))) throw new Error('bad id');
+    return path.join(this.chatFilesRoot, chatId);
+  }
+  // The file of a picture in a conversation, or null for a name that is not ours (no "..", no folders).
+  chatImagePath(chatId, stored) {
+    if (!ID_RE.test(str(chatId)) || !STORED_RE.test(str(stored))) return null;
+    return path.join(this.chatFilesRoot, chatId, stored);
+  }
+  // A picture for a message (already made smaller by the window): bytes of a JPEG or PNG.
+  async saveChatImage(chatId, name, bytes, ext) {
+    const dir = this.chatFilesDir(chatId);
+    await fsp.mkdir(dir, { recursive: true });
+    const id = newId('i');
+    const stored = id + '.' + (ext === 'png' ? 'png' : 'jpg');
+    await fsp.writeFile(path.join(dir, stored), Buffer.from(bytes));
+    return { id, name: str(name, NAME_MAX * 4).trim() || 'картинка', stored };
+  }
+  async removeChatImage(chatId, stored) {
+    const file = this.chatImagePath(chatId, stored);
+    if (file && await exists(file)) { try { await this.trash(file); } catch (e) { await fsp.rm(file, { force: true }); } }
+  }
   get calendarPath() { return path.join(this.dir, CALENDAR_FILE); }
   get tasksPath() { return path.join(this.dir, TASKS_FILE); }
   promptDir(id) {
@@ -606,6 +642,8 @@ class Store {
       const before = this.chats.length;
       this.chats = this.chats.filter((c) => c.id !== id);
       if (this.chats.length !== before) await this.writeChats();
+      // Its pictures go to the Recycle Bin with it.
+      if (ID_RE.test(str(id)) && await exists(this.chatFilesDir(id))) { try { await this.trash(this.chatFilesDir(id)); } catch (e) { /* leftover files are harmless */ } }
     });
   }
 
@@ -845,6 +883,10 @@ class Store {
     entries.unshift({ name: 'prompts.json', data: JSON.stringify({ format: FORMAT, version: 1, prompts }, null, 2) });
     if (kind === 'backup') {
       entries.push({ name: CHATS_FILE, data: JSON.stringify({ format: 'snowball-chats', version: 1, chats: this.chats }, null, 2) });
+      this.chats.forEach((c) => c.messages.forEach((m) => (m.images || []).forEach((im) => {
+        const file = this.chatImagePath(c.id, im.stored);
+        if (file && fs.existsSync(file)) entries.push({ name: 'chatfiles/' + c.id + '/' + im.stored, file });
+      })));
       entries.push({ name: CALENDAR_FILE, data: JSON.stringify({ format: 'snowball-calendar', version: 1, events: this.events }, null, 2) });
       entries.push({ name: TASKS_FILE, data: JSON.stringify(this.tasksFile(), null, 2) });
       entries.push({ name: ACTIVITY_FILE, data: JSON.stringify(this.activity, null, 2) });
@@ -895,11 +937,19 @@ class Store {
       if (kind !== 'backup') return res;
 
       const chats = await readJson(path.join(dir, CHATS_FILE));
-      (chats && Array.isArray(chats.chats) ? chats.chats : []).map(normalizeChat).filter(Boolean).forEach((c) => {
-        if (this.getChat(c.id)) return;
+      for (const c of (chats && Array.isArray(chats.chats) ? chats.chats : []).map(normalizeChat).filter(Boolean)) {
+        if (this.getChat(c.id)) continue;
         this.chats.push(c);
         res.chats++;
-      });
+        for (const m of c.messages) {
+          for (const im of m.images || []) {
+            const from = path.join(dir, 'chatfiles', c.id, im.stored);
+            if (!(await exists(from))) continue;
+            await fsp.mkdir(this.chatFilesDir(c.id), { recursive: true });
+            await fsp.copyFile(from, this.chatImagePath(c.id, im.stored));
+          }
+        }
+      }
       if (res.chats) await this.writeChats();
       const cal = await readJson(path.join(dir, CALENDAR_FILE));
       (cal && Array.isArray(cal.events) ? cal.events : []).map((e) => normalizeEvent(e)).filter(Boolean).forEach((e) => {
@@ -957,6 +1007,8 @@ async function copyDataTo(fromDir, toDir) {
   }
   const files = path.join(fromDir, FILES_DIR);
   if (await exists(files)) await fsp.cp(files, path.join(toDir, FILES_DIR), { recursive: true, force: false, errorOnExist: false });
+  const chatFiles = path.join(fromDir, CHAT_FILES_DIR);
+  if (await exists(chatFiles)) await fsp.cp(chatFiles, path.join(toDir, CHAT_FILES_DIR), { recursive: true, force: false, errorOnExist: false });
 }
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }

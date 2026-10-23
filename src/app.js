@@ -75,7 +75,7 @@
     settingsDlg: $("settings-dlg"), settingsClose: $("settings-close"), settingsMain: $("settings-main"), setBackupMsg: $("set-backup-msg"),
     updCurrent: $("upd-current"), updCurrentTitle: $("upd-current-title"), updCurrentBody: $("upd-current-body"), setNavDot: $("set-nav-dot"),
     chat: $("chat"), chatEmpty: $("chat-empty"), chatIdeas: $("chat-ideas"), chatNew: $("chat-new"),
-    composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"),
+    composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"), chatAtt: $("chat-att"), chatAttach: $("chat-attach"), chatFile: $("chat-file"),
     calMeta: $("cal-meta"), calAdd: $("cal-add"), calTitle: $("cal-title"), calToday: $("cal-today"), calPrev: $("cal-prev"), calNext: $("cal-next"),
     calDialog: $("cal-dialog"), calViewBtn: $("cal-view-btn"), calViewMenu: $("cal-view-menu"), calViewName: $("cal-view-name"),
     calMonthView: $("cal-month-view"), calWeekView: $("cal-week-view"), cwHead: $("cw-head"), cwBody: $("cw-body"),
@@ -2437,13 +2437,20 @@
     });
   }
 
-  function addMessage(role, text, se) {
+  // images: the message's pictures [{ id, name, stored }] (only user messages in LLM have them).
+  function addMessage(role, text, se, images) {
     se = se || chat;
     if (se === chat) els.chatEmpty.hidden = true;
     if (se === quick) els.qaEmpty.hidden = true;
     var msg = { role: role, text: text || "" };
     if (role === "user") {
-      msg.el = h("div", { class: "msg msg-user" }, h("div", { class: "bubble", text: msg.text }));
+      msg.images = images && images.length ? images.slice() : null;
+      var chatId = se.id;
+      var pics = msg.images ? h("div", { class: "bubble-imgs" + (msg.images.length > 1 ? " many" : "") }, msg.images.map(function (im) {
+        return h("button", { type: "button", class: "bubble-img", title: im.name + " — открыть", onclick: function () { call(api.chatImageOpen(chatId, im.stored)); } },
+          h("img", { src: chatImageUrl(chatId, im.stored), alt: im.name }));
+      })) : null;
+      msg.el = h("div", { class: "msg msg-user" }, h("div", { class: "bubble" }, pics, msg.text ? h("span", { text: msg.text }) : null));
     } else {
       msg.body = h("div", { class: "msg-body rt" });
       msg.extra = h("div", { class: "msg-extra" });
@@ -2500,10 +2507,12 @@
     return "[Карточка: " + what + " — " + how + "]";
   }
   function history(se) {
-    return (se || chat).messages.filter(function (m) { return (m.text || (m.actions && m.actions.length)) && !m.streaming; }).map(function (m) {
+    return (se || chat).messages.filter(function (m) { return (m.text || m.images || (m.actions && m.actions.length)) && !m.streaming; }).map(function (m) {
       var content = m.text;
       if (m.actions && m.actions.length) content = (content ? content + "\n\n" : "") + m.actions.map(cardOutcome).join("\n");
-      return { role: m.role, content: content };
+      var out = { role: m.role, content: content };
+      if (m.images) out.images = m.images.map(function (im) { return im.stored; });
+      return out;
     });
   }
   function startReply(se) {
@@ -2517,7 +2526,7 @@
     showBusy(se);
     scrollChat(se);
     renderTabs();
-    api.assistantSend(history(se), se.quick ? { quick: true } : undefined).then(function (r) {
+    api.assistantSend(history(se), se.quick ? { quick: true } : { chatId: se.id }).then(function (r) {
       se.waiting = false;
       if (se.current !== msg) return;
       if (!r || !r.ok) { finish(msg, (r && r.error) || "Ассистент не ответил. Попробуйте ещё раз.", true); return; }
@@ -2534,12 +2543,14 @@
   function sendChat(text, se) {
     se = se || chat;
     text = String(text || "").replace(/\s+$/, "");
-    if (!text.trim() || se.current) return;
-    if (!se.id) {
-      se.id = newChatId();
-      se.title = text.trim().replace(/\s+/g, " ").slice(0, 70);
-    }
-    addMessage("user", text, se);
+    var pics = (se.attach || []).filter(function (a) { return a.stored; });
+    if ((!text.trim() && !pics.length) || se.current) return;
+    if ((se.attach || []).some(function (a) { return !a.stored; })) { toast("Картинка ещё загружается, секунду."); return; }
+    if (!se.id) se.id = newChatId();
+    if (!se.title) se.title = (text.trim() || "Картинка: " + pics.map(function (a) { return a.name; }).join(", ")).replace(/\s+/g, " ").slice(0, 70);
+    se.attach = [];
+    if (se === chat) renderAttach();
+    addMessage("user", text, se, pics.map(function (a) { return { id: a.id, name: a.name, stored: a.stored }; }));
     persist(se);
     if (se.quick) els.qaInput.value = "";
     else if (se === chat) { els.chatInput.value = ""; growInput(); }
@@ -2564,8 +2575,9 @@
   /* ---------- history ---------- */
   // The conversation as it is saved: text and what the user answered on cards, no page elements.
   function savedMessages(se) {
-    return se.messages.filter(function (m) { return !m.streaming && (m.text || m.note || (m.actions && m.actions.length)); }).map(function (m) {
+    return se.messages.filter(function (m) { return !m.streaming && (m.text || m.images || m.note || (m.actions && m.actions.length)); }).map(function (m) {
       var out = { role: m.role, text: m.text };
+      if (m.images) out.images = m.images;
       if (m.note) out.note = m.note;
       if (m.failed) out.failed = true;
       if (m.cost) out.cost = m.cost;
@@ -2595,6 +2607,8 @@
   }
   function clearChat(se) {
     se = se || chat;
+    se.attach = [];
+    if (se === chat) renderAttach();
     se.id = null;
     se.title = "";
     se.messages = [];
@@ -2616,6 +2630,7 @@
     els.chat.replaceChildren(els.chatEmpty, se.box);
     els.chatEmpty.hidden = se.messages.length > 0;
     els.chatInput.value = se.draft || "";
+    renderAttach();
     growInput();
     showBusy(se);
     renderHistory();
@@ -2641,7 +2656,7 @@
       se.id = r.chat.id;
       se.title = r.chat.title;
       r.chat.messages.forEach(function (m) {
-        var msg = addMessage(m.role, m.text, se);
+        var msg = addMessage(m.role, m.text, se, m.images);
         if (m.role !== "assistant") return;
         msg.note = m.note || "";
         msg.failed = !!m.failed;
@@ -2745,6 +2760,84 @@
   api.onAssistant(onAssistantEvent);
   // A click on the Windows notification about an answer.
   api.onAssistantOpen(function () { setPage("assistant"); scrollChat(); });
+
+  /* ---------- pictures for LLM messages ---------- */
+  // A picture is made smaller right here (the long side at most 2048 px, JPEG), saved beside the conversation
+  // ("Файлы чатов/<id>/") and shown above the message box until it is sent with the next message.
+  var ATTACH_MAX = 6, IMAGE_SIDE = 2048;
+  function chatImageUrl(chatId, stored) {
+    var dir = state.info && state.info.dataDir;
+    if (!dir || !chatId) return "";
+    var parts = (dir + "/Файлы чатов/" + chatId + "/" + stored).split(/[\\/]+/);
+    return "file:///" + parts.map(function (p, i) { return i === 0 && /^[A-Za-z]:$/.test(p) ? p : encodeURIComponent(p); }).join("/");
+  }
+  function shrinkImage(file) {
+    return createImageBitmap(file).then(function (bmp) {
+      var k = Math.min(1, IMAGE_SIDE / Math.max(bmp.width, bmp.height));
+      var w = Math.max(1, Math.round(bmp.width * k)), hgt = Math.max(1, Math.round(bmp.height * k));
+      var canvas = new OffscreenCanvas(w, hgt), ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, w, hgt);
+      ctx.drawImage(bmp, 0, 0, w, hgt);
+      bmp.close();
+      return canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 });
+    }).then(function (blob) { return blob.arrayBuffer(); });
+  }
+  function addChatImages(files) {
+    var se = chat;
+    if (state.page !== "assistant") return;
+    var list = Array.prototype.filter.call(files || [], function (f) { return /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(f.name); });
+    if (!list.length) { toast("Приложить можно только картинки."); return; }
+    se.attach = se.attach || [];
+    var room = ATTACH_MAX - se.attach.length;
+    if (room <= 0) { toast("В одно сообщение — не больше " + ATTACH_MAX + " картинок."); return; }
+    if (list.length > room) toast("В одно сообщение — не больше " + ATTACH_MAX + " картинок, лишние не добавлены.");
+    if (!se.id) se.id = newChatId();
+    list.slice(0, room).forEach(function (f) {
+      var a = { name: f.name || "картинка", stored: null, preview: URL.createObjectURL(f) };
+      se.attach.push(a);
+      shrinkImage(f).then(function (buf) {
+        return api.chatImageSave(se.id, a.name, new Uint8Array(buf), "jpg");
+      }).then(function (r) {
+        if (!r || !r.ok) throw new Error((r && r.error) || "save");
+        if (se.attach.indexOf(a) === -1) { api.chatImageRemove(se.id, r.image.stored); return; }   // removed while saving
+        a.id = r.image.id; a.stored = r.image.stored; a.name = r.image.name;
+        if (se === chat) renderAttach();
+      }).catch(function (e) {
+        var i = se.attach.indexOf(a);
+        if (i !== -1) se.attach.splice(i, 1);
+        URL.revokeObjectURL(a.preview);
+        if (se === chat) renderAttach();
+        toast(e && e.message && e.message !== "save" ? e.message : "Не получилось прочитать картинку «" + a.name + "».");
+      });
+    });
+    renderAttach();
+    updateCostHint();
+    els.chatInput.focus();
+  }
+  function renderAttach() {
+    var list = chat.attach || [];
+    els.chatAtt.hidden = !list.length;
+    els.chatAtt.replaceChildren.apply(els.chatAtt, list.map(function (a) {
+      return h("div", { class: "att-thumb" + (a.stored ? "" : " loading"), title: a.name },
+        h("img", { src: a.preview || chatImageUrl(chat.id, a.stored), alt: a.name }),
+        h("button", { type: "button", class: "att-x", title: "Убрать", "aria-label": "Убрать картинку «" + a.name + "»", html: ICONS.x, onclick: function () {
+          var i = chat.attach.indexOf(a);
+          if (i !== -1) chat.attach.splice(i, 1);
+          if (a.stored) api.chatImageRemove(chat.id, a.stored);
+          renderAttach();
+          updateCostHint();
+        } }));
+    }));
+  }
+  els.chatAttach.addEventListener("click", function () { els.chatFile.value = ""; els.chatFile.click(); });
+  els.chatFile.addEventListener("change", function () { if (els.chatFile.files.length) addChatImages(els.chatFile.files); });
+  els.chatInput.addEventListener("paste", function (e) {
+    var cd = e.clipboardData;
+    if (!cd || !cd.files || !cd.files.length) return;
+    e.preventDefault();
+    addChatImages(cd.files);
+  });
 
   function growInput() {
     var t = els.chatInput;
@@ -3006,7 +3099,8 @@
     var price = a.prices[a.model], effort = byId(EFFORTS, a.effort) || EFFORTS[1];
     if (!price) return 0;
     var chars = (a.fixedChars || 0) + els.chatInput.value.length;
-    chat.messages.forEach(function (m) { chars += (m.text || "").length; });
+    chat.messages.forEach(function (m) { chars += (m.text || "").length + (m.images ? m.images.length * 4500 : 0); });
+    chars += (chat.attach || []).length * 4500;
     return (chars / 3 * price.input + effort.out * price.output) / 1e6;
   }
   function updateCostHint() {
@@ -3840,6 +3934,7 @@
     e.preventDefault();
     var archive = Array.prototype.find.call(e.dataTransfer.files || [], function (f) { return /\.(snowprompt|snowball)$/i.test(f.name); });
     if (archive) { clearDrag(); var ap = api.pathForFile(archive); if (ap) openArchive(ap); return; }
+    if (state.page === "assistant") { clearDrag(); addChatImages(e.dataTransfer.files); return; }
     var inEditor = state.editorOpen && els.editor.contains(e.target);
     var tr = !inEditor && e.target.closest ? e.target.closest("tr[data-id]:not(.editing)") : null;
     var files = e.dataTransfer.files;

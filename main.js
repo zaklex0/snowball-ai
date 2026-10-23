@@ -420,7 +420,7 @@ function fail(e) {
 }
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
-const NO_SYNC = new Set(['timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
+const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
@@ -984,6 +984,8 @@ function stubAnswer(last) {
 async function* stubSource(messages, signal) {
   const lastUser = messages.slice().reverse().find((m) => m.role === 'user');
   const answer = stubAnswer(lastUser ? lastUser.content : '');
+  const pics = lastUser && lastUser.imgs ? lastUser.imgs.length : 0;
+  if (pics) answer.text = 'Вижу ' + pics + ' ' + plural(pics, 'картинку', 'картинки', 'картинок') + '. Я заглушка и разглядеть их не могу — это сделают ChatGPT или Claude, когда в «Настройках» будет ключ.\n\n' + answer.text;
   await sleep(500 + Math.random() * 400, signal);
   const pieces = answer.text.match(/\S+\s*|\s+/g) || [];
   for (let i = 0; i < pieces.length;) {
@@ -1342,7 +1344,9 @@ async function* openaiSource(model, messages, signal, opts) {
   const extra = (opts && opts.extra) ? '\n\n' + opts.extra : '';
   const client = new OpenAI({ apiKey: keys.openai });
   const tools = TOOLS.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: true }));
-  let input = messages.map((m) => ({ role: m.role, content: m.content }));
+  let input = messages.map((m) => (m.imgs && m.imgs.length
+    ? { role: m.role, content: [{ type: 'input_text', text: m.content || IMAGE_ONLY_TEXT }].concat(m.imgs.map((i) => ({ type: 'input_image', image_url: 'data:' + i.media + ';base64,' + i.data }))) }
+    : { role: m.role, content: m.content }));
   let wrote = false;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const stream = await client.responses.create({
@@ -1396,7 +1400,9 @@ async function* claudeSource(model, messages, signal, opts) {
   const extra = (opts && opts.extra) ? '\n\n' + opts.extra : '';
   const client = new Anthropic({ apiKey: keys.anthropic });
   const tools = TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters, strict: true }));
-  let msgs = messages.slice();
+  let msgs = messages.map((m) => (m.imgs && m.imgs.length
+    ? { role: m.role, content: m.imgs.map((i) => ({ type: 'image', source: { type: 'base64', media_type: i.media, data: i.data } })).concat([{ type: 'text', text: m.content || IMAGE_ONLY_TEXT }]) }
+    : { role: m.role, content: m.content }));
   let wrote = false;
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const params = {
@@ -1480,8 +1486,22 @@ function notifyAnswer(text, failed, wc) {
   if (w && !w.isDestroyed()) w.flashFrame(true);
 }
 
+// Reads the pictures of the conversation for the request: { media, data (base64) } in m.imgs. A missing file is skipped.
+async function withImages(messages) {
+  return Promise.all(messages.map(async (m) => {
+    if (!m.files) return m;
+    const imgs = [];
+    for (const f of m.files) {
+      try { imgs.push({ media: /\.png$/i.test(f) ? 'image/png' : 'image/jpeg', data: (await fsp.readFile(f)).toString('base64') }); } catch (e) { /* deleted meanwhile */ }
+    }
+    return { role: m.role, content: m.content, imgs };
+  }));
+}
+const IMAGE_ONLY_TEXT = 'Посмотри на картинку.';
+
 async function runAssistant(id, messages, controller, quick) {
   const source = pickSource(quick);
+  try { messages = await withImages(messages); } catch (e) { /* send the text alone */ }
   let full = '';
   try {
     for await (const piece of source(messages, controller.signal)) {
@@ -1529,11 +1549,19 @@ async function runAssistant(id, messages, controller, quick) {
 
 // messages: [{ role: 'user' | 'assistant', content: string }], the whole conversation so far.
 // opts.quick: the small assistant window (cheapest model, short answers, no Windows notification).
+// A user message may have images: the stored names of its pictures in "Файлы чатов/<opts.chatId>/".
 handle('assistant-send', async function (messages, opts) {
+  const chatId = opts && typeof opts.chatId === 'string' ? opts.chatId : '';
   const list = (Array.isArray(messages) ? messages : [])
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
-    .map((m) => ({ role: m.role, content: m.content.slice(0, 100000) }));
-  if (!list.length || list[list.length - 1].role !== 'user') return { ok: false, error: 'Напишите сообщение.' };
+    .map((m) => {
+      const out = { role: m.role, content: m.content.slice(0, 100000) };
+      const files = m.role === 'user' && chatId && Array.isArray(m.images) ? m.images.map((x) => store.chatImagePath(chatId, x)).filter(Boolean).slice(0, 6) : [];
+      if (files.length) out.files = files;
+      return out;
+    });
+  const last = list[list.length - 1];
+  if (!last || last.role !== 'user' || !(last.content.trim() || last.files)) return { ok: false, error: 'Напишите сообщение.' };
   const id = ++streamSeq;
   const controller = new AbortController();
   streams.set(id, controller);
@@ -1541,6 +1569,20 @@ handle('assistant-send', async function (messages, opts) {
   store.recordAssistant();
   runAssistant(id, list, controller, !!(opts && opts.quick));
   return { ok: true, id };
+});
+
+// A picture for an LLM message (already made smaller by the window): bytes of a JPEG or PNG, at most 8 MB.
+handle('chat-image-save', async (chatId, name, bytes, ext) => {
+  if (!bytes || !(bytes.byteLength > 0) || bytes.byteLength > 8 * 1024 * 1024) return { ok: false, error: 'Эта картинка слишком большая.' };
+  const image = await store.saveChatImage(chatId, name, bytes, ext);
+  return { ok: true, image };
+});
+handle('chat-image-remove', async (chatId, stored) => { await store.removeChatImage(chatId, stored); return { ok: true }; });
+handle('chat-image-open', async (chatId, stored) => {
+  const file = store.chatImagePath(chatId, stored);
+  if (!file || !fs.existsSync(file)) return { ok: false, error: 'Этой картинки уже нет.' };
+  const err = await shell.openPath(file);
+  return err ? { ok: false, error: 'Не получилось открыть картинку.' } : { ok: true };
 });
 
 handle('assistant-stop', async (id) => {

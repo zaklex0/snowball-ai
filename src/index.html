@@ -429,8 +429,13 @@
               <div class="composer-dock">
                 <form class="composer" id="composer" novalidate>
                   <label for="chat-input" class="sr-only">Сообщение ассистенту</label>
+                  <div class="att-row" id="chat-att" hidden></div>
                   <textarea id="chat-input" rows="1" maxlength="20000" placeholder="Напишите сообщение…"></textarea>
                   <div class="composer-bar">
+                    <button type="button" class="att-btn" id="chat-attach" title="Приложить картинку. Ещё можно вставить её через Ctrl + V или перетащить в окно" aria-label="Приложить картинку">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.2-8.2a3.3 3.3 0 0 1 4.7 4.7l-8.2 8.2a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/></svg>
+                    </button>
+                    <input type="file" id="chat-file" accept="image/*" multiple hidden>
                     <div class="model-wrap">
                       <div class="model-menu" id="model-menu" role="dialog" aria-label="Модель и размышления" hidden></div>
                       <button type="button" class="model-btn" id="model-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="model-menu" title="Выбрать модель">
