@@ -1112,8 +1112,22 @@
       var btn = w.querySelector(".has-sub"), on = !!name && btn.dataset.sub === name;
       w.classList.toggle("open", on);
       btn.setAttribute("aria-expanded", String(on));
+      if (on) fitSubmenu(w.querySelector(".submenu"));
       if (on && focusFirst) { var f = w.querySelector(".submenu button[aria-checked=\"true\"]") || w.querySelector(".submenu button"); if (f) f.focus(); }
     });
+  }
+  // The profile menu sits at the bottom of the window, so a list opened downwards could go under the Windows
+  // taskbar. After opening, a list that does not fit moves up (or down) just enough to be fully visible.
+  function fitSubmenu(list) {
+    if (!list) return;
+    list.style.top = "";
+    list.style.bottom = "";
+    var r = list.getBoundingClientRect(), gap = 8;
+    var over = r.bottom - (window.innerHeight - gap);
+    var move = over > 0 ? -over : r.top < gap ? gap - r.top : 0;
+    if (!move) return;
+    list.style.top = (list.offsetTop + move) + "px";
+    list.style.bottom = "auto";   // the effort list is pinned by its bottom edge in styles.css
   }
   // The mouse travels from "Тема" to its list across other items and a small gap, so a list closes or switches
   // only after a short pause: on the way it stays open. A hidden bridge in styles.css covers the gap.
@@ -2203,13 +2217,13 @@
     var list = h("div", { class: "menu submenu mm-efforts", role: "menu", "aria-label": "Размышления" },
       EFFORTS.map(function (e) { return modelOption(e, e.id === a.effort, function () { pickOption("effort", e); }); }));
     var row = h("button", { type: "button", class: "mm-item has-sub", "aria-haspopup": "true", "aria-expanded": String(effortOpen),
-      onclick: function () { effortOpen = !effortOpen; wrap.classList.toggle("open", effortOpen); row.setAttribute("aria-expanded", String(effortOpen)); if (effortOpen) focusEffort(); } },
+      onclick: function () { effortOpen = !effortOpen; wrap.classList.toggle("open", effortOpen); row.setAttribute("aria-expanded", String(effortOpen)); if (effortOpen) { fitSubmenu(list); focusEffort(); } } },
       h("span", { class: "mm-text" }, h("span", { class: "mm-name", text: "Размышления" })),
       h("span", { class: "sub-value", text: effort.name }),
       h("span", { class: "sub-chev", html: ICONS.right, "aria-hidden": "true" }));
     var wrap = h("div", { class: "sub-wrap" + (effortOpen ? " open" : "") }, row, list);
     // Like the profile menu: the list stays open for a moment after the mouse leaves, so it can be reached.
-    wrap.addEventListener("mouseenter", function () { clearTimeout(effortTimer); effortOpen = true; wrap.classList.add("open"); row.setAttribute("aria-expanded", "true"); });
+    wrap.addEventListener("mouseenter", function () { clearTimeout(effortTimer); effortOpen = true; wrap.classList.add("open"); row.setAttribute("aria-expanded", "true"); fitSubmenu(list); });
     wrap.addEventListener("mouseleave", function () {
       clearTimeout(effortTimer);
       effortTimer = setTimeout(function () {
