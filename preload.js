@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   pickAvatar: () => ipcRenderer.invoke('pick-avatar'),
   saveProfile: (input) => ipcRenderer.invoke('save-profile', input),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
-  setMode: (mode) => ipcRenderer.invoke('set-mode', mode),
+  setTabs: (tabs) => ipcRenderer.invoke('set-tabs', tabs),
   setConfirm: (on) => ipcRenderer.invoke('set-confirm', on),
   updateState: () => ipcRenderer.invoke('update-state'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
@@ -32,11 +32,13 @@ contextBridge.exposeInMainWorld('vsApi', {
     ipcRenderer.on('archive-opened', listener);
     return () => ipcRenderer.removeListener('archive-opened', listener);
   },
-  assistantSend: (messages) => ipcRenderer.invoke('assistant-send', messages),
+  assistantSend: (messages, opts) => ipcRenderer.invoke('assistant-send', messages, opts),
   assistantStop: (id) => ipcRenderer.invoke('assistant-stop', id),
   assistantReset: () => ipcRenderer.invoke('assistant-reset'),
   assistantDecide: (actionId, accept) => ipcRenderer.invoke('assistant-decide', actionId, accept),
   assistantUndo: (actionId) => ipcRenderer.invoke('assistant-undo', actionId),
+  taskSave: (t) => ipcRenderer.invoke('task-save', t),
+  taskDelete: (id) => ipcRenderer.invoke('task-delete', id),
   calSave: (ev) => ipcRenderer.invoke('cal-save', ev),
   calDelete: (id) => ipcRenderer.invoke('cal-delete', id),
   onCalendarOpen: (fn) => {

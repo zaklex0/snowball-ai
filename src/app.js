@@ -13,11 +13,12 @@
   var VIDEO_EXT = ["mp4", "webm", "mov", "m4v", "ogv", "mkv"];
   var AUDIO_EXT = ["mp3", "wav", "ogg", "m4a", "flac", "aac", "opus"];
   // Kinds of actions counted on the statistics page (storage.js counts them).
-  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant"];
+  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks"];
   // How the statistics page groups them in "Что вы чаще всего делаете".
   var USE_GROUPS = [
     { name: "Промты: новые и правки", keys: ["created", "edited"], icon: "pencil" },
     { name: "Календарь", keys: ["calendar"], icon: "calendar" },
+    { name: "Задачи", keys: ["tasks"], icon: "tasks" },
     { name: "Ассистент", keys: ["assistant"], icon: "spark" },
     { name: "Копирование промтов", keys: ["copied"], icon: "copy" },
     { name: "Файлы к промтам", keys: ["files"], icon: "clip" }
@@ -28,12 +29,13 @@
 
   var state = {
     loaded: false,
-    page: "prompts",      // a key of els.views: "prompts", "calendar", "assistant", "generator", "stats"
+    page: "prompts",      // what the open tab shows, a key of els.views: "home", "prompts", "calendar", "tasks", "assistant" (LLM), "generator", "stats"
     items: [],
     info: null,
     profile: null,        // { name, welcomed, avatar }
     activity: null,       // { since, days: { "2026-10-22": { created, edited, files, copied } } }
     events: [],           // calendar: { id, date "2026-11-03", from "15:00", to, title, kind, note, remind }
+    tasks: [],            // tasks board: { id, title, status "todo" | "doing" | "done", note, order }
     query: "",
     type: "all",
     expanded: new Set(),
@@ -57,10 +59,11 @@
     table: $("table"), rows: $("rows"), stateBox: $("state"), toast: $("toast"),
     viewer: $("viewer"), viewerTitle: $("viewer-title"), viewerBody: $("viewer-body"),
     viewerOpen: $("viewer-open"), viewerShow: $("viewer-show"), viewerClose: $("viewer-close"),
-    navItems: Array.prototype.slice.call(document.querySelectorAll(".nav-item[data-page]")),
+    navItems: Array.prototype.slice.call(document.querySelectorAll(".side [data-page]")),
+    badges: Array.prototype.slice.call(document.querySelectorAll(".nav-badge[data-badge]")), homeGrid: $("home-grid"), homeTitle: $("home-title"), homeDate: $("home-date"),
     views: {
       prompts: $("view-prompts"), generator: $("view-generator"), calendar: $("view-calendar"), assistant: $("view-assistant"),
-      stats: $("view-stats")
+      tasks: $("view-tasks"), stats: $("view-stats"), home: $("view-home")
     },
     sideAvatar: $("side-avatar"), sideName: $("side-name"),
     menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
@@ -81,7 +84,9 @@
     calTimeline: $("cal-timeline"),
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
-    modeBtn: $("mode-btn"), modeMenu: $("mode-menu"), modeName: $("mode-name"), modeIco: $("mode-ico"), navBase: $("nav-base"), navGen: $("nav-gen"),
+    tabs: $("tabs"), tabPlus: $("tab-plus"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
+    qa: $("qa"), qaBtn: $("qa-btn"), qaModel: $("qa-model"), qaNew: $("qa-new"), qaFull: $("qa-full"), qaClose: $("qa-close"),
+    qaList: $("qa-list"), qaEmpty: $("qa-empty"), qaIdeas: $("qa-ideas"), qaForm: $("qa-form"), qaInput: $("qa-input"), qaSend: $("qa-send"),
     chatHistory: $("chat-history"), chatHistoryBtn: $("chat-history-btn"), chatList: $("chat-list"),
     chatCost: $("chat-cost"), modelBtn: $("model-btn"), modelBtnText: $("model-btn-text"), modelMenu: $("model-menu"),
     profileDlg: $("profile-dlg"), pdForm: $("pd-form"), pdTitle: $("pd-title"), pdText: $("pd-text"),
@@ -108,7 +113,12 @@
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>',
     share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
-    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>'
+    spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>',
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg>',
+    tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg>',
+    prompts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
+    chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>',
+    stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>'
   };
 
   /* ---------- helpers ---------- */
@@ -258,6 +268,7 @@
     if (r.profile) state.profile = r.profile;
     if (r.activity) state.activity = r.activity;
     if (r.events) state.events = r.events;
+    if (r.tasks) state.tasks = r.tasks;
   }
   // Every call returns { ok, prompts?, error? }. Fresh prompts replace the list.
   function call(promise) {
@@ -821,7 +832,6 @@
     if (state.info) {
       els.setDir.replaceChildren(h("span", { class: "ico", html: ICONS.folder, "aria-hidden": "true" }), h("code", { text: state.info.dataDir }));
       markTheme(state.info.theme);
-      renderMode();
       renderAssistantSettings();
     }
 
@@ -852,63 +862,157 @@
     renderChrome();
     if (state.page === "stats") renderStats();
     if (state.page === "calendar") renderCalendar();
+    if (state.page === "tasks") renderTasks();
   }
 
-  /* ---------- work modes ---------- */
-  // "Моя база данных" shows prompts, calendar and the assistant; "Генератор" is the future place for making pictures and videos.
-  var MODES = {
-    base: { name: "Моя база данных", first: "prompts", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/><path d="M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/></svg>' },
-    gen: { name: "Генератор", first: "generator", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>' }
+  /* ---------- tabs ---------- */
+  // Like a browser: every section opens in a tab on top of the window. Prompts, calendar, tasks, generator and statistics
+  // open once (opening again switches to that tab); LLM tabs open as many times as needed, each with its own conversation.
+  // A tab: { id, kind, session? (LLM), usedAt }. The list and the open tab are kept in settings.json (set-tabs).
+  var TABS = {
+    home: { name: "Главная", icon: "home" },
+    prompts: { name: "Промты", icon: "prompts" },
+    calendar: { name: "Календарь", icon: "calendar" },
+    tasks: { name: "Задачи", icon: "tasks", alpha: true },
+    assistant: { name: "LLM", icon: "chat", many: true },
+    generator: { name: "Генератор", icon: "spark" },
+    stats: { name: "Статистика", icon: "stats" }
   };
-  var BASE_PAGES = ["prompts", "calendar", "assistant"];
-  function currentMode() { return (state.info && MODES[state.info.mode]) ? state.info.mode : "base"; }
-  function renderMode() {
-    var m = currentMode();
-    els.modeName.textContent = MODES[m].name;
-    if (els.modeIco.dataset.mode !== m) { els.modeIco.innerHTML = MODES[m].icon; els.modeIco.dataset.mode = m; }
-    els.navBase.hidden = m !== "base";
-    els.navGen.hidden = m !== "gen";
-    els.modeMenu.querySelectorAll("[data-mode]").forEach(function (b) { b.setAttribute("aria-checked", String(b.dataset.mode === m)); });
+  var TAB_ORDER = ["home", "prompts", "calendar", "tasks", "assistant", "generator", "stats"];
+  var tabs = { list: [], active: -1, seq: 0 };
+  function activeTab() { return tabs.list[tabs.active] || null; }
+  function chatTitle(id) { var c = hist.list.find(function (x) { return x.id === id; }); return c ? c.title : ""; }
+  function tabTitle(t) {
+    if (t.kind !== "assistant") return TABS[t.kind].name;
+    var se = t.session;
+    return "LLM · " + (se.title || (se.loadId && chatTitle(se.loadId)) || "Новый разговор");
   }
-  function setModeMenu(open) {
-    els.modeMenu.hidden = !open;
-    els.modeBtn.setAttribute("aria-expanded", String(open));
-    if (open) { var c = els.modeMenu.querySelector('[aria-checked="true"]'); if (c) c.focus(); }
+  function makeTab(kind, session) {
+    var t = { id: ++tabs.seq, kind: kind, usedAt: 0 };
+    if (kind === "assistant") t.session = session || newSession(false);
+    return t;
   }
-  els.modeBtn.addEventListener("click", function () { setModeMenu(els.modeMenu.hidden); });
-  els.modeMenu.addEventListener("click", function (e) {
-    var b = e.target.closest("[data-mode]");
-    if (!b) return;
-    setModeMenu(false);
-    var m = b.dataset.mode;
-    if (m === currentMode()) return;
-    call(api.setMode(m)).then(function (r) {
-      if (!r) return;
-      var inMode = m === "base" ? BASE_PAGES.indexOf(state.page) !== -1 : state.page === "generator";
-      if (!inMode && state.page !== "stats") setPage(MODES[m].first); else render();
+  // opts: fresh — a new LLM conversation even if one is open; session — show this conversation in a new tab;
+  // background — open without switching to it.
+  function openTab(kind, opts) {
+    opts = opts || {};
+    if (!TABS[kind]) return;
+    var at = -1;
+    if (!TABS[kind].many) at = tabs.list.findIndex(function (t) { return t.kind === kind; });
+    else if (!opts.fresh && !opts.session) {
+      var cur = activeTab();
+      if (cur && cur.kind === kind) at = tabs.active;
+      else tabs.list.forEach(function (t, i) {
+        if (t.kind !== kind) return;
+        var better = at === -1 || (t.session && t.session.unread) && !(tabs.list[at].session && tabs.list[at].session.unread) ||
+          !!(t.session && t.session.unread) === !!(tabs.list[at].session && tabs.list[at].session.unread) && t.usedAt > tabs.list[at].usedAt;
+        if (better) at = i;
+      });
+    }
+    if (at === -1) { tabs.list.push(makeTab(kind, opts.session)); at = tabs.list.length - 1; }
+    if (opts.background) { renderTabs(); saveTabs(); return; }
+    activateTab(at);
+  }
+  function activateTab(i) {
+    var t = tabs.list[i];
+    if (!t) return;
+    setMenu(false);
+    setTabMenu(false);
+    tabs.active = i;
+    t.usedAt = Date.now();
+    state.page = t.kind;
+    if (t.kind === "assistant") showSession(t.session);
+    els.scroller.scrollTop = 0;
+    render();
+    saveTabs();
+    if (t.kind === "assistant") { scrollChat(); els.chatInput.focus({ preventScroll: true }); }
+  }
+  // Closing a tab with an answer being written stops the answer, like closing a page in a browser.
+  function closeTab(i) {
+    var t = tabs.list[i];
+    if (!t) return;
+    if (t.session) {
+      if (t.session.current) stopChat(t.session);
+      persist(t.session);
+      dropSession(t.session);
+    }
+    tabs.list.splice(i, 1);
+    if (!tabs.list.length) { tabs.list.push(makeTab("home")); activateTab(0); return; }
+    if (i === tabs.active) activateTab(Math.min(i, tabs.list.length - 1));
+    else { if (i < tabs.active) tabs.active--; renderTabs(); saveTabs(); }
+  }
+  function saveTabs() {
+    api.setTabs({
+      list: tabs.list.map(function (t) { return t.kind === "assistant" ? { kind: t.kind, chatId: t.session.id || t.session.loadId || undefined } : { kind: t.kind }; }),
+      active: tabs.active
     });
-  });
-  els.modeMenu.addEventListener("keydown", function (e) {
-    var items = Array.prototype.slice.call(els.modeMenu.querySelectorAll("button"));
+  }
+  // The tabs saved last time; an LLM tab loads its conversation when it is first opened.
+  function restoreTabs(saved) {
+    tabs.list = [];
+    (saved && saved.list && saved.list.length ? saved.list : [{ kind: "prompts" }]).forEach(function (x) {
+      if (!TABS[x.kind]) return;
+      var t = makeTab(x.kind);
+      if (t.session && x.chatId) t.session.loadId = x.chatId;
+      tabs.list.push(t);
+    });
+    if (!tabs.list.length) tabs.list.push(makeTab("prompts"));
+    activateTab(Math.max(0, Math.min(tabs.list.length - 1, (saved && saved.active) || 0)));
+  }
+  function renderTabs() {
+    els.tabs.replaceChildren.apply(els.tabs, tabs.list.map(function (t, i) {
+      var title = tabTitle(t), on = i === tabs.active;
+      return h("div", { class: "tab" + (on ? " on" : ""), role: "tab", "aria-selected": String(on), tabindex: on ? "0" : "-1", title: title,
+        onclick: function () { activateTab(i); },
+        onauxclick: function (e) { if (e.button === 1) { e.preventDefault(); closeTab(i); } },
+        onkeydown: function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activateTab(i); } } },
+        h("span", { class: "tab-ico", html: ICONS[TABS[t.kind].icon], "aria-hidden": "true" }),
+        h("span", { class: "tab-t", text: title }),
+        t.session && t.session.current ? h("span", { class: "tab-busy", title: "Пишет ответ" }) :
+          t.session && t.session.unread ? h("span", { class: "tab-unread", title: "Есть новый ответ" }) : null,
+        h("button", { type: "button", class: "tab-x", title: "Закрыть вкладку (Ctrl + W)", "aria-label": "Закрыть вкладку «" + title + "»", html: ICONS.x,
+          onclick: function (e) { e.stopPropagation(); closeTab(i); } }));
+    }));
+  }
+  // "+": what a new tab shows.
+  function setTabMenu(open) {
+    els.tabMenu.hidden = !open;
+    els.tabPlus.setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    els.tabMenu.replaceChildren.apply(els.tabMenu, [h("p", { class: "menu-label", text: "Новая вкладка" })].concat(TAB_ORDER.map(function (k) {
+      var isOpen = !TABS[k].many && tabs.list.some(function (t) { return t.kind === k; });
+      return h("button", { type: "button", role: "menuitem", onclick: function () { setTabMenu(false); openTab(k, { fresh: true }); } },
+        h("span", { class: "ico", html: ICONS[TABS[k].icon], "aria-hidden": "true" }),
+        h("span", { text: k === "assistant" ? "LLM — новый разговор" : TABS[k].name }),
+        isOpen ? h("small", { text: "уже открыта" }) : TABS[k].alpha ? h("small", null, h("span", { class: "alpha", text: "Альфа" })) : null);
+    })));
+    var r = els.tabPlus.getBoundingClientRect();
+    els.tabMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 300)) + "px";
+    var first = els.tabMenu.querySelector("button");
+    if (first) first.focus();
+  }
+  els.tabPlus.addEventListener("click", function () { setTabMenu(els.tabMenu.hidden); });
+  els.tabMenu.addEventListener("keydown", function (e) {
+    var items = Array.prototype.slice.call(els.tabMenu.querySelectorAll("button"));
     var i = items.indexOf(document.activeElement);
-    if (e.key === "Escape") { e.preventDefault(); setModeMenu(false); els.modeBtn.focus(); }
+    if (e.key === "Escape") { e.preventDefault(); setTabMenu(false); els.tabPlus.focus(); }
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
   });
   document.addEventListener("mousedown", function (e) {
-    if (!els.modeMenu.hidden && !els.modeMenu.contains(e.target) && !els.modeBtn.contains(e.target)) setModeMenu(false);
+    if (!els.tabMenu.hidden && !els.tabMenu.contains(e.target) && !els.tabPlus.contains(e.target)) setTabMenu(false);
   });
+  // The assistant asked to open tabs ("открой календарь и генератор"): all open, the first one is shown.
+  function openTabsFromAssistant(kinds) {
+    (kinds || []).forEach(function (k, i) { if (TABS[k]) openTab(k, { fresh: k === "assistant", background: i > 0 }); });
+  }
 
   /* ---------- pages and sidebar ---------- */
+  // Every way to a section (sidebar, Ctrl + N, a notification, a card's "Открыть") goes through its tab.
   function setPage(page) {
     setMenu(false);
-    // Opening a page of the other mode (Ctrl + N, a notification) switches the mode with it.
-    var wanted = BASE_PAGES.indexOf(page) !== -1 ? "base" : page === "generator" ? "gen" : null;
-    if (wanted && state.info && currentMode() !== wanted) { state.info.mode = wanted; api.setMode(wanted); }
-    if (state.page === page) return;
-    state.page = page;
-    els.scroller.scrollTop = 0;
-    render();
-    if (page === "assistant") { scrollChat(); els.chatInput.focus({ preventScroll: true }); }
+    var cur = activeTab();
+    if (cur && cur.kind === page) return;
+    openTab(page);
   }
   function renderChrome() {
     var p = state.profile || {};
@@ -921,7 +1025,80 @@
       if (b.dataset.page === state.page) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
     Object.keys(els.views).forEach(function (k) { els.views[k].hidden = k !== state.page; });
+    renderTabs();
+    renderUpcoming();
+    renderBadges();
+    if (state.page === "home") renderHome();
   }
+
+  // The small counters on the section icons: what is left for today, tasks not done yet, answers not read yet.
+  function badgeCounts() {
+    var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
+    return {
+      calendar: (state.events || []).filter(function (e) { return e.date === today && (e.to ? minutesOf(e.to) : minutesOf(e.from) + 30) > mins; }).length,
+      tasks: (state.tasks || []).filter(function (t) { return t.status !== "done"; }).length,
+      assistant: sessions.filter(function (se) { return se.unread; }).length,
+      generator: 0
+    };
+  }
+  function renderBadges() {
+    var n = badgeCounts();
+    els.badges.forEach(function (b) {
+      var v = n[b.dataset.badge] || 0;
+      b.hidden = !v;
+      b.textContent = v > 9 ? "9+" : String(v);
+    });
+  }
+  // Home: a greeting and a tile for every section with what is there now.
+  function renderHome() {
+    var hr = new Date().getHours(), name = state.profile && state.profile.name;
+    els.homeTitle.textContent = (hr < 5 ? "Доброй ночи" : hr < 12 ? "Доброе утро" : hr < 18 ? "Добрый день" : "Добрый вечер") + (name ? ", " + name : "") + "!";
+    els.homeDate.textContent = longDay(dayKey(new Date()));
+    var n = badgeCounts(), items = state.items.length, doing = (state.tasks || []).filter(function (t) { return t.status === "doing"; }).length;
+    var tiles = [
+      { page: "prompts", title: "Промты", text: items ? items + " " + plural(items, "промт", "промта", "промтов") + " в базе" : "Пока пусто: добавьте первый" },
+      { page: "calendar", title: "Календарь", text: n.calendar ? "Сегодня ещё " + n.calendar + " " + plural(n.calendar, "дело", "дела", "дел") : "На сегодня дел больше нет" },
+      { page: "tasks", title: "Задачи", text: n.tasks ? n.tasks + " " + plural(n.tasks, "задача не готова", "задачи не готовы", "задач не готово") + (doing ? ", в процессе " + doing : "") : "Все задачи готовы" },
+      { page: "assistant", title: "LLM", text: n.assistant ? "Новых ответов: " + n.assistant : hist.list.length + " " + plural(hist.list.length, "разговор", "разговора", "разговоров") + " в истории" },
+      { page: "generator", title: "Генератор", text: "Картинки и видео — скоро" }
+    ];
+    els.homeGrid.replaceChildren.apply(els.homeGrid, tiles.map(function (t) {
+      return h("button", { type: "button", class: "home-tile", onclick: function () { setPage(t.page); } },
+        h("span", { class: "ico", html: ICONS[TABS[t.page].icon], "aria-hidden": "true" }), h("b", { text: t.title }), h("span", { text: t.text }));
+    }));
+  }
+
+  // "Ближайшие дела" in the sidebar: what is going on now and next, by day. The current one pulses in its colour.
+  var UP_MAX = 6;
+  function renderUpcoming() {
+    var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
+    var tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    var list = (state.events || []).filter(function (e) {
+      if (e.date !== today) return e.date > today;
+      var end = e.to ? minutesOf(e.to) : minutesOf(e.from) + 30;
+      return end > mins;
+    }).sort(function (a, b) { return (a.date + a.from).localeCompare(b.date + b.from); }).slice(0, UP_MAX);
+    var kids = [], lastDay = null;
+    list.forEach(function (e) {
+      if (e.date !== lastDay) {
+        lastDay = e.date;
+        var label = e.date === today ? "Сегодня" : e.date === dayKey(tomorrow) ? "Завтра" : shortDayLabel(e.date);
+        kids.push(h("p", { class: "up-day", text: label }));
+      }
+      var on = isNowEvent(e);
+      kids.push(h("button", { type: "button", class: "up-ev ev-" + kindOfEvent(e).id + (on ? " now" : ""),
+        title: (on ? "Идёт сейчас: " : "") + timeRange(e) + " " + e.title + (e.note ? " — " + e.note : ""), onclick: function () { openCalendarDay(e.date); } },
+        h("i", { "aria-hidden": "true" }), h("span", { class: "tt", text: e.title }), h("span", { class: "tm", text: on ? "сейчас" : e.from })));
+    });
+    if (!kids.length) kids.push(h("p", { class: "up-empty", text: "Ближайших дел нет." }));
+    kids.push(h("button", { type: "button", class: "up-more", onclick: function () { setPage("calendar"); } }, "Весь календарь"));
+    els.upList.replaceChildren.apply(els.upList, kids);
+  }
+  function shortDayLabel(k) {
+    var d = keyToDate(k);
+    return ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][d.getDay()] + ", " + d.getDate() + " " + MONTHS[d.getMonth()];
+  }
+  setInterval(function () { renderUpcoming(); renderBadges(); }, 30 * 1000);
 
   /* ---------- statistics ---------- */
   function dayTotal(day) {
@@ -1275,8 +1452,9 @@
         if (state.editorOpen) closeEditor(false);
         // Conversations live in the data folder too: show the ones from the new folder.
         api.assistantReset();
-        clearChat();
+        sessions.forEach(function (se) { clearChat(se); });
         refreshChats();
+        saveTabs();
         closeEventForm();
         state.expanded.clear();
         tileCache.clear();
@@ -1564,9 +1742,16 @@
     els.calGrid.replaceChildren.apply(els.calGrid, kids);
     els.calMeta.textContent = count ? "В этом месяце " + count + " " + plural(count, "дело", "дела", "дел") : "В этом месяце дел нет";
   }
+  // The event that is going on right now (one without an end counts as half an hour).
+  function isNowEvent(e) {
+    var now = new Date();
+    if (e.date !== dayKey(now) || !e.from) return false;
+    var m = now.getHours() * 60 + now.getMinutes(), s0 = minutesOf(e.from), s1 = e.to ? minutesOf(e.to) : s0 + 30;
+    return m >= s0 && m < s1;
+  }
   function eventBlock(e) {
-    var k = kindOfEvent(e);
-    return h("button", { type: "button", class: "cal-ev ev-" + k.id, title: "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
+    var k = kindOfEvent(e), now = isNowEvent(e);
+    return h("button", { type: "button", class: "cal-ev ev-" + k.id + (now ? " now" : ""), title: now ? "Идёт сейчас. Изменить дело" : "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
       h("span", { class: "row1" }, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: e.title }), h("span", { class: "kind", text: k.label })),
       e.note ? h("span", { class: "note", text: e.note }) : null,
       e.remind ? h("span", { class: "bell", text: "Напомнить " + (REMIND_LABELS[e.remind] || "") }) : null);
@@ -1587,11 +1772,11 @@
           inHour.map(eventBlock))));
     }
     els.calTimeline.replaceChildren.apply(els.calTimeline, rows);
-    var now = new Date();
-    if (k === dayKey(now) && now.getHours() >= firstHour) {
+    var now = new Date(), row = rows[now.getHours() - firstHour];
+    if (k === dayKey(now) && row) {
       var line = h("div", { class: "cal-now", "aria-hidden": "true" });
-      line.style.top = ((now.getHours() - firstHour + now.getMinutes() / 60) * 46) + "px";
-      els.calTimeline.append(line);
+      els.calTimeline.prepend(line);
+      line.style.top = (row.offsetTop + row.offsetHeight * now.getMinutes() / 60) + "px";
     }
   }
 
@@ -1832,22 +2017,39 @@
   // The red "now" line moves on its own.
   setInterval(function () { if (state.page === "calendar" && !els.calDialog.open) renderCalendar(); }, 60 * 1000);
 
-  /* ---------- assistant ---------- */
-  // The open conversation lives here; after every finished message it is saved to chats.json (the "История" list).
+  /* ---------- assistant: conversations ---------- */
+  // Every LLM tab has its own conversation (a session), and the small assistant window one more.
+  // A session: { quick, id, title, messages, streamId, current, waiting, early, box, draft, loadId }.
+  // "chat" is the session of the LLM tab on screen; answers in the other sessions keep coming in the background.
   // main.js gets the whole conversation on every message and streams the answer back through api.onAssistant.
+  // After every finished message a conversation is saved to chats.json (the "История" list); the small window is not saved.
   var IDEAS = ["Добавь промт «Неоновый город»", "Улучши промт: кот в космосе", "Поставь созвон на завтра в 15:00", "Сколько у меня промтов?"];
+  var QUICK_IDEAS = ["Открой календарь и задачи", "Что у меня на завтра?", "Добавь задачу смонтировать рилс"];
   var LIST_RE = /^\s*([-*•]|\d+[.)])\s+/;
-  var chat = {
-    id: null,           // null until the first message: an empty "Новый разговор" is not saved
-    title: "",
-    list: [],           // saved conversations for the history list: { id, title, createdAt, updatedAt }
-    confirmId: null,    // the history item asking "Удалить разговор?"
-    messages: [],       // { role: "user" | "assistant", text, el, body?, extra?, foot?, actions?, streaming?, note?, failed? }
-    streamId: null,     // the answer being written now
-    current: null,      // its message
-    waiting: false,     // sent, but main.js has not said the stream id yet
-    early: []           // events that came before the id
-  };
+  var hist = { list: [], confirmId: null };   // saved conversations: { id, title, createdAt, updatedAt }; the one asking "Удалить разговор?"
+  var sessions = [];
+  function newSession(isQuick) {
+    var se = {
+      quick: !!isQuick,
+      id: null,           // null until the first message: an empty "Новый разговор" is not saved
+      title: "",
+      messages: [],       // { role: "user" | "assistant", text, el, body?, extra?, foot?, actions?, streaming?, note?, failed? }
+      streamId: null,     // the answer being written now
+      current: null,      // its message
+      waiting: false,     // sent, but main.js has not said the stream id yet
+      early: [],          // events that came before the id
+      box: h("div", { class: "chat-log" }),
+      draft: "",          // what was typed in the box before switching to another tab
+      loadId: null        // a saved conversation to load when the tab is first opened
+    };
+    sessions.push(se);
+    return se;
+  }
+  function dropSession(se) { var i = sessions.indexOf(se); if (i !== -1) sessions.splice(i, 1); }
+  function sessionOf(msg) { return sessions.find(function (se) { return se.messages.indexOf(msg) !== -1; }) || null; }
+  var chat = newSession(false);   // until an LLM tab opens
+  var quick = newSession(true);
+  function onScreen(se) { return se.quick ? !els.qa.hidden : se === chat && state.page === "assistant"; }
 
   // A small part of Markdown, enough for answers: paragraphs, lists, **bold**, `code`, ``` blocks and # headings.
   function inline(text) {
@@ -1896,16 +2098,20 @@
     return nodes;
   }
 
-  function nearBottom() { var s = els.scroller; return s.scrollHeight - s.scrollTop - s.clientHeight < 90; }
-  function scrollChat() {
-    if (state.page !== "assistant") return;
-    els.scroller.scrollTop = els.scroller.scrollHeight;
+  function scrollerOf(se) { return se.quick ? els.qaList : els.scroller; }
+  function nearBottom(se) { var el = scrollerOf(se); return el.scrollHeight - el.scrollTop - el.clientHeight < 90; }
+  function scrollChat(se) {
+    se = se || chat;
+    if (!onScreen(se)) return;
+    var el = scrollerOf(se);
+    el.scrollTop = el.scrollHeight;
   }
   // Keeps the newest text in view, unless the user scrolled up to read something.
-  function follow(fn) {
-    var stick = nearBottom();
+  function follow(se, fn) {
+    if (!onScreen(se)) { fn(); return; }
+    var stick = nearBottom(se);
     fn();
-    if (stick) scrollChat();
+    if (stick) scrollChat(se);
   }
 
   function renderBody(msg) {
@@ -1965,18 +2171,33 @@
     } else kids.push(h("div", { class: "act-when", text: whenLine2(e) }));
     var done = { add: "Дело добавлено в календарь", update: "Дело изменено", delete: "Дело удалено из календаря" }[kind];
     var foot = cardFooter(msg, a, done, "Отменено, календарь не изменился", kind === "delete" ? null : function () { openCalendarDay(e.date); });
-    if (foot) kids.push(foot);
-    else {
-      var busy = a.status === "busy";
-      kids.push(h("div", { class: "act-buttons" },
-        h("button", { type: "button", class: "btn " + (kind === "delete" ? "btn-danger" : "btn-primary"), disabled: busy, onclick: function () { decide(msg, a, true); } },
-          busy ? "Секунду…" : { add: "Добавить", update: "Изменить", delete: "Удалить" }[kind]),
-        h("button", { type: "button", class: "btn btn-ghost", disabled: busy, onclick: function () { decide(msg, a, false); } }, "Отмена")));
-    }
+    kids.push(foot || cardButtons(msg, a, { add: "Добавить", update: "Изменить", delete: "Удалить" }[kind], kind === "delete"));
+    return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
+  }
+  function cardButtons(msg, a, label, danger) {
+    var busy = a.status === "busy";
+    return h("div", { class: "act-buttons" },
+      h("button", { type: "button", class: "btn " + (danger ? "btn-danger" : "btn-primary"), disabled: busy, onclick: function () { decide(msg, a, true); } }, busy ? "Секунду…" : label),
+      h("button", { type: "button", class: "btn btn-ghost", disabled: busy, onclick: function () { decide(msg, a, false); } }, "Отмена"));
+  }
+  var TASK_COLUMNS = { todo: "Предстоит", doing: "В процессе", done: "Готово" };
+  function taskCard(msg, a) {
+    var t = a.task || {};
+    var kind = a.kind === "task-add" ? "add" : a.kind === "task-update" ? "update" : "delete";
+    var head = { add: "Добавить задачу «", update: "Изменить задачу «", delete: "Удалить задачу «" }[kind] + (t.title || a.title) + "»?";
+    var kids = [h("div", { class: "act-head" }, h("span", { class: "ico", html: kind === "delete" ? ICONS.trash : ICONS.tasks, "aria-hidden": "true" }), h("span", { text: head }))];
+    if (kind === "update" && a.prevTask) {
+      kids.push(h("div", { class: "act-when was", text: "Было: «" + a.prevTask.title + "», " + (TASK_COLUMNS[a.prevTask.status] || "") }),
+        h("div", { class: "act-when", text: "Станет: «" + t.title + "», " + (TASK_COLUMNS[t.status] || "") }));
+    } else kids.push(h("div", { class: "act-when", text: "Столбец «" + (TASK_COLUMNS[t.status] || "Предстоит") + "»" + (t.note ? " · " + t.note : "") }));
+    var done = { add: "Задача добавлена", update: "Задача изменена", delete: "Задача удалена" }[kind];
+    var foot = cardFooter(msg, a, done, "Отменено, задачи не изменились", kind === "delete" ? null : function () { setPage("tasks"); });
+    kids.push(foot || cardButtons(msg, a, { add: "Добавить", update: "Изменить", delete: "Удалить" }[kind], kind === "delete"));
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
   function actionCard(msg, a) {
     if (/^calendar-/.test(a.kind)) return calendarCard(msg, a);
+    if (/^task-/.test(a.kind)) return taskCard(msg, a);
     var cat = categoryOf(a.category);
     var kids = [
       h("div", { class: "act-head" }, icon("spark"), h("span", { text: "Создать промт «" + a.title + "»?" })),
@@ -1996,6 +2217,10 @@
   function renderActions(msg) {
     msg.extra.replaceChildren.apply(msg.extra, msg.actions.map(function (a) { return actionCard(msg, a); }));
   }
+  var DONE_TOASTS = {
+    "calendar-add": "Дело «%» добавлено в календарь", "calendar-update": "Дело «%» изменено", "calendar-delete": "Дело «%» удалено",
+    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "create-prompt": "Промт «%» добавлен"
+  };
   function decide(msg, a, accept) {
     if (a.status) return;
     a.status = "busy";
@@ -2004,13 +2229,10 @@
       a.status = r ? (accept ? "done" : "canceled") : null;
       if (r && accept) {
         render();
-        if (a.kind === "calendar-add") toast("Дело «" + a.title + "» добавлено в календарь");
-        else if (a.kind === "calendar-update") toast("Дело «" + a.title + "» изменено");
-        else if (a.kind === "calendar-delete") toast("Дело «" + a.title + "» удалено");
-        else toast("Промт «" + a.title + "» добавлен");
+        toast((DONE_TOASTS[a.kind] || DONE_TOASTS["create-prompt"]).replace("%", a.title));
       }
       renderActions(msg);
-      persist();
+      persist(sessionOf(msg));
     });
   }
   function undoAction(msg, a) {
@@ -2018,12 +2240,14 @@
       a.undoable = false;
       if (r) { a.status = "undone"; render(); toast("Отменено"); }
       renderActions(msg);
-      persist();
+      persist(sessionOf(msg));
     });
   }
 
-  function addMessage(role, text) {
-    els.chatEmpty.hidden = true;
+  function addMessage(role, text, se) {
+    se = se || chat;
+    if (se === chat) els.chatEmpty.hidden = true;
+    if (se === quick) els.qaEmpty.hidden = true;
     var msg = { role: role, text: text || "" };
     if (role === "user") {
       msg.el = h("div", { class: "msg msg-user" }, h("div", { class: "bubble", text: msg.text }));
@@ -2036,158 +2260,195 @@
         h("span", { class: "bot-mark", html: ICONS.spark, "aria-hidden": "true" }),
         h("div", { class: "msg-main" }, msg.body, msg.extra, msg.foot));
     }
-    chat.messages.push(msg);
-    els.chat.append(msg.el);
+    se.messages.push(msg);
+    se.box.append(msg.el);
     return msg;
   }
 
-  function setBusy(busy) {
-    els.composer.classList.toggle("busy", busy);
-    els.chatSend.setAttribute("aria-label", busy ? "Остановить ответ" : "Отправить");
-    els.chatSend.title = els.chatSend.getAttribute("aria-label");
+  // The send button turns into "stop" while the answer is written: in the LLM tab on screen or in the small window.
+  function showBusy(se) {
+    var busy = !!se.current;
+    if (se.quick) {
+      els.qaForm.classList.toggle("busy", busy);
+      els.qaSend.setAttribute("aria-label", busy ? "Остановить ответ" : "Отправить");
+      els.qaSend.title = els.qaSend.getAttribute("aria-label");
+    } else if (se === chat) {
+      els.composer.classList.toggle("busy", busy);
+      els.chatSend.setAttribute("aria-label", busy ? "Остановить ответ" : "Отправить");
+      els.chatSend.title = els.chatSend.getAttribute("aria-label");
+    }
   }
   function finish(msg, note, failed) {
+    var se = sessionOf(msg);
     msg.streaming = false;
     msg.note = note || "";
     msg.failed = !!failed;
-    if (chat.current === msg) { chat.current = null; chat.streamId = null; }
+    if (se && se.current === msg) { se.current = null; se.streamId = null; }
     renderBody(msg);
     renderFoot(msg);
-    setBusy(false);
-    persist();
+    if (!se) return;
+    showBusy(se);
+    persist(se);
+    renderTabs();
   }
 
   // What main.js gets: finished messages only, without the empty answers that failed or were stopped at once.
   function cardOutcome(a) {
-    var e = a.event || {};
+    var e = a.event || {}, t = a.task || {};
     var what = a.kind === "calendar-add" ? "Добавить в календарь «" + e.title + "» " + e.date + " " + timeRange(e)
       : a.kind === "calendar-update" ? "Изменить дело «" + e.title + "»: теперь " + e.date + " " + timeRange(e)
       : a.kind === "calendar-delete" ? "Удалить из календаря «" + e.title + "» " + e.date + " " + timeRange(e)
+      : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + (TASK_COLUMNS[t.status] || "") + "»"
+      : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + (TASK_COLUMNS[t.status] || "") + "»"
+      : a.kind === "task-delete" ? "Удалить задачу «" + t.title + "»"
       : "Создать промт «" + a.title + "»";
     var how = a.status === "done" ? "сделано" : a.status === "canceled" ? "пользователь отменил" : a.status === "undone" ? "сделано, но пользователь отменил"
       : a.status === "failed" ? "не получилось" : "пользователь не ответил";
     return "[Карточка: " + what + " — " + how + "]";
   }
-  function history() {
-    return chat.messages.filter(function (m) { return (m.text || (m.actions && m.actions.length)) && !m.streaming; }).map(function (m) {
+  function history(se) {
+    return (se || chat).messages.filter(function (m) { return (m.text || (m.actions && m.actions.length)) && !m.streaming; }).map(function (m) {
       var content = m.text;
       if (m.actions && m.actions.length) content = (content ? content + "\n\n" : "") + m.actions.map(cardOutcome).join("\n");
       return { role: m.role, content: content };
     });
   }
-  function startReply() {
-    var msg = addMessage("assistant", "");
+  function startReply(se) {
+    var msg = addMessage("assistant", "", se);
     msg.streaming = true;
     renderBody(msg);
-    chat.current = msg;
-    chat.streamId = null;
-    chat.waiting = true;
-    chat.early = [];
-    setBusy(true);
-    scrollChat();
-    api.assistantSend(history()).then(function (r) {
-      chat.waiting = false;
-      if (chat.current !== msg) return;
+    se.current = msg;
+    se.streamId = null;
+    se.waiting = true;
+    se.early = [];
+    showBusy(se);
+    scrollChat(se);
+    renderTabs();
+    api.assistantSend(history(se), se.quick ? { quick: true } : undefined).then(function (r) {
+      se.waiting = false;
+      if (se.current !== msg) return;
       if (!r || !r.ok) { finish(msg, (r && r.error) || "Ассистент не ответил. Попробуйте ещё раз.", true); return; }
-      chat.streamId = r.id;
-      var early = chat.early;
-      chat.early = [];
+      se.streamId = r.id;
+      var early = se.early;
+      se.early = [];
       early.forEach(onAssistantEvent);
     }, function () {
-      chat.waiting = false;
-      if (chat.current === msg) finish(msg, "Ассистент не ответил. Попробуйте ещё раз.", true);
+      se.waiting = false;
+      if (se.current === msg) finish(msg, "Ассистент не ответил. Попробуйте ещё раз.", true);
     });
   }
-  function sendChat(text) {
+  function newChatId() { return "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function sendChat(text, se) {
+    se = se || chat;
     text = String(text || "").replace(/\s+$/, "");
-    if (!text.trim() || chat.current) return;
-    if (!chat.id) {
-      chat.id = "c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      chat.title = text.trim().replace(/\s+/g, " ").slice(0, 70);
+    if (!text.trim() || se.current) return;
+    if (!se.id) {
+      se.id = newChatId();
+      se.title = text.trim().replace(/\s+/g, " ").slice(0, 70);
     }
-    addMessage("user", text);
-    persist();
-    els.chatInput.value = "";
-    growInput();
-    startReply();
+    addMessage("user", text, se);
+    persist(se);
+    if (se.quick) els.qaInput.value = "";
+    else if (se === chat) { els.chatInput.value = ""; growInput(); }
+    startReply(se);
+    if (!se.quick) saveTabs();
   }
-  function stopChat() {
-    var msg = chat.current;
+  function stopChat(se) {
+    se = se || chat;
+    var msg = se.current;
     if (!msg) return;
-    if (chat.streamId) api.assistantStop(chat.streamId);
+    if (se.streamId) api.assistantStop(se.streamId);
     finish(msg, "Ответ остановлен");
   }
   function retry(msg) {
-    var i = chat.messages.indexOf(msg);
-    if (i === -1 || chat.current) return;
-    chat.messages.splice(i, 1);
+    var se = sessionOf(msg);
+    var i = se ? se.messages.indexOf(msg) : -1;
+    if (i === -1 || se.current) return;
+    se.messages.splice(i, 1);
     msg.el.remove();
-    startReply();
+    startReply(se);
   }
   /* ---------- history ---------- */
   // The conversation as it is saved: text and what the user answered on cards, no page elements.
-  function savedMessages() {
-    return chat.messages.filter(function (m) { return !m.streaming && (m.text || m.note || (m.actions && m.actions.length)); }).map(function (m) {
+  function savedMessages(se) {
+    return se.messages.filter(function (m) { return !m.streaming && (m.text || m.note || (m.actions && m.actions.length)); }).map(function (m) {
       var out = { role: m.role, text: m.text };
       if (m.note) out.note = m.note;
       if (m.failed) out.failed = true;
       if (m.cost) out.cost = m.cost;
       if (m.actions && m.actions.length) out.actions = m.actions.map(function (a) {
-        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev };
+        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev, task: a.task, prevTask: a.prevTask };
       });
       return out;
     });
   }
-  function persist() {
-    if (!chat.id) return;
-    var messages = savedMessages();
+  function persist(se) {
+    se = se || chat;
+    if (!se || se.quick || !se.id) return;
+    var messages = savedMessages(se);
     if (!messages.length) return;
-    api.chatSave({ id: chat.id, title: chat.title, messages: messages }).then(function (r) {
-      if (r && r.ok) { chat.list = r.chats; renderHistory(); }
+    api.chatSave({ id: se.id, title: se.title, messages: messages }).then(function (r) {
+      if (r && r.ok) { hist.list = r.chats; renderHistory(); renderTabs(); }
     }, function () {});
   }
-  // Before opening another conversation: stop the answer and turn unanswered cards into "устарела"
-  // (main.js forgets them on assistantReset).
-  function leaveChat() {
-    if (chat.current) stopChat();
-    chat.messages.forEach(function (m) {
+  // Before another conversation opens in this tab: stop the answer and turn unanswered cards into "устарела".
+  function leaveChat(se) {
+    se = se || chat;
+    if (se.current) stopChat(se);
+    se.messages.forEach(function (m) {
       (m.actions || []).forEach(function (a) { if (!a.status || a.status === "busy") a.status = "stale"; });
     });
-    persist();
-    api.assistantReset();
+    persist(se);
   }
-  function clearChat() {
-    chat.id = null;
-    chat.title = "";
-    chat.messages = [];
-    chat.current = null;
-    chat.streamId = null;
-    chat.waiting = false;
-    chat.early = [];
-    els.chat.replaceChildren(els.chatEmpty);
-    els.chatEmpty.hidden = false;
-    setBusy(false);
+  function clearChat(se) {
+    se = se || chat;
+    se.id = null;
+    se.title = "";
+    se.messages = [];
+    se.current = null;
+    se.streamId = null;
+    se.waiting = false;
+    se.early = [];
+    se.loadId = null;
+    se.box.replaceChildren();
+    if (se === chat) els.chatEmpty.hidden = false;
+    if (se === quick) els.qaEmpty.hidden = false;
+    showBusy(se);
+  }
+  // The LLM tab on screen changed: its conversation goes into the page, with what was typed in it.
+  function showSession(se) {
+    if (chat !== se) chat.draft = els.chatInput.value;
+    chat = se;
+    se.unread = false;
+    els.chat.replaceChildren(els.chatEmpty, se.box);
+    els.chatEmpty.hidden = se.messages.length > 0;
+    els.chatInput.value = se.draft || "";
+    growInput();
+    showBusy(se);
+    renderHistory();
+    setHistoryOpen(false);
+    if (se.loadId) { var id = se.loadId; se.loadId = null; loadChatInto(se, id); }
   }
   function newChat() {
-    leaveChat();
-    clearChat();
+    leaveChat(chat);
+    clearChat(chat);
     els.chatInput.value = "";
     growInput();
     renderHistory();
+    renderTabs();
+    saveTabs();
     setHistoryOpen(false);
     els.scroller.scrollTop = 0;
     els.chatInput.focus();
   }
-  function openChat(id) {
-    if (id === chat.id) { setHistoryOpen(false); return; }
-    leaveChat();
+  function loadChatInto(se, id) {
     api.chatGet(id).then(function (r) {
-      if (!r || !r.ok) { toast((r && r.error) || "Не получилось открыть разговор."); return; }
-      clearChat();
-      chat.id = r.chat.id;
-      chat.title = r.chat.title;
+      if (!r || !r.ok) { toast((r && r.error) || "Не получилось открыть разговор."); renderTabs(); return; }
+      clearChat(se);
+      se.id = r.chat.id;
+      se.title = r.chat.title;
       r.chat.messages.forEach(function (m) {
-        var msg = addMessage(m.role, m.text);
+        var msg = addMessage(m.role, m.text, se);
         if (m.role !== "assistant") return;
         msg.note = m.note || "";
         msg.failed = !!m.failed;
@@ -2198,35 +2459,51 @@
         renderFoot(msg);
       });
       renderHistory();
-      setHistoryOpen(false);
-      scrollChat();
-      els.chatInput.focus({ preventScroll: true });
+      renderTabs();
+      saveTabs();
+      scrollChat(se);
+      if (se === chat) els.chatInput.focus({ preventScroll: true });
     });
+  }
+  // A conversation from "История": if another tab already shows it, go there; otherwise it replaces this tab's one.
+  function openChat(id) {
+    if (id === chat.id) { setHistoryOpen(false); return; }
+    var at = tabs.list.findIndex(function (t) { return t.session && (t.session.id === id || t.session.loadId === id); });
+    if (at !== -1) { activateTab(at); return; }
+    leaveChat(chat);
+    loadChatInto(chat, id);
+    setHistoryOpen(false);
   }
   function removeChat(id) {
     api.chatDelete(id).then(function (r) {
-      chat.confirmId = null;
-      if (r && r.ok) chat.list = r.chats;
-      if (id === chat.id) { api.assistantReset(); clearChat(); }
+      hist.confirmId = null;
+      if (r && r.ok) hist.list = r.chats;
+      sessions.forEach(function (se) {
+        if (se.id !== id && se.loadId !== id) return;
+        if (se.current) stopChat(se);
+        clearChat(se);
+      });
       renderHistory();
+      renderTabs();
+      saveTabs();
       toast("Разговор удалён");
     }, function () { toast("Не получилось удалить разговор."); });
   }
   function historyItem(c) {
-    if (chat.confirmId === c.id) {
+    if (hist.confirmId === c.id) {
       return h("div", { class: "ch-item confirm" },
         h("span", { text: "Удалить разговор?" }),
         h("button", { type: "button", class: "link-btn danger", onclick: function () { removeChat(c.id); } }, "Удалить"),
-        h("button", { type: "button", class: "link-btn", onclick: function () { chat.confirmId = null; renderHistory(); } }, "Отмена"));
+        h("button", { type: "button", class: "link-btn", onclick: function () { hist.confirmId = null; renderHistory(); } }, "Отмена"));
     }
     return h("div", { class: "ch-item" },
       h("button", { type: "button", class: "ch-open", "aria-current": c.id === chat.id ? "true" : null, title: c.title, onclick: function () { openChat(c.id); } },
         h("span", { class: "ch-name", text: c.title }), h("span", { class: "ch-when", text: fmtWhen(c.updatedAt) })),
       h("button", { type: "button", class: "ch-del", "aria-label": "Удалить разговор «" + c.title + "»", title: "Удалить разговор", html: ICONS.x,
-        onclick: function () { chat.confirmId = c.id; renderHistory(); } }));
+        onclick: function () { hist.confirmId = c.id; renderHistory(); } }));
   }
   function renderHistory() {
-    var kids = chat.list.map(historyItem);
+    var kids = hist.list.map(historyItem);
     if (!kids.length) kids = [h("p", { class: "ch-empty", text: "Здесь появятся ваши разговоры с ассистентом." })];
     els.chatList.replaceChildren.apply(els.chatList, kids);
   }
@@ -2236,15 +2513,22 @@
     els.chatHistoryBtn.setAttribute("aria-expanded", String(open));
   }
   function refreshChats() {
-    api.chatList().then(function (r) { if (r && r.ok) { chat.list = r.chats; renderHistory(); } }, function () {});
+    api.chatList().then(function (r) { if (r && r.ok) { hist.list = r.chats; renderHistory(); renderTabs(); } }, function () {});
   }
 
+  // Events come for any session: each answer is found by its stream id.
   function onAssistantEvent(e) {
-    if (!e) return;
-    if (chat.waiting && chat.current) { chat.early.push(e); return; }
-    var msg = chat.current;
-    if (!msg || e.id !== chat.streamId) return;   // an answer that was stopped or belongs to an old conversation
-    follow(function () {
+    if (!e || e.seen) return;
+    var se = sessions.find(function (x) { return x.current && x.streamId === e.id; });
+    if (!se) {
+      // The id is not known yet: keep the event for the sessions still waiting for theirs.
+      sessions.forEach(function (x) { if (x.waiting && x.current) x.early.push(e); });
+      return;
+    }
+    e.seen = true;
+    var msg = se.current;
+    if (e.kind === "open") { openTabsFromAssistant(e.tabs); return; }
+    follow(se, function () {
       if (e.kind === "delta") { msg.text += e.text || ""; renderBody(msg); }
       else if (e.kind === "action" && e.action) {
         msg.actions.push(Object.assign({ status: null }, e.action));
@@ -2257,9 +2541,12 @@
     if ((e.kind === "done" || e.kind === "error") && e.assistant && state.info) {
       state.info.assistant = e.assistant;
       renderAssistantSettings();
+      els.qaModel.textContent = quickModelName();
     }
-    if ((e.kind === "done" || e.kind === "error") && state.page !== "assistant" && document.hasFocus()) {
-      toast(e.kind === "done" ? "Ассистент ответил" : "Ассистент не смог ответить");
+    if ((e.kind === "done" || e.kind === "error") && !onScreen(se) && !se.quick) { se.unread = true; renderTabs(); renderBadges(); }
+    if ((e.kind === "done" || e.kind === "error") && !onScreen(se) && document.hasFocus()) {
+      var where = se.quick ? "Ассистент" : "«" + (se.title || "LLM") + "»";
+      toast(e.kind === "done" ? where + ": ответ готов" : where + ": не получилось ответить");
     }
   }
   api.onAssistant(onAssistantEvent);
@@ -2293,6 +2580,57 @@
   els.chatNew.addEventListener("click", newChat);
   els.chatHistoryBtn.addEventListener("click", function () { setHistoryOpen(!els.chatHistory.classList.contains("open")); });
   refreshChats();
+
+  /* ---------- the small assistant window ---------- */
+  // Opens above the profile button for quick errands (calendar, tasks, tabs) and hides again.
+  // main.js answers it with the cheapest model and quick thinking; "Открыть в LLM" moves the conversation into a tab.
+  els.qaList.replaceChildren(els.qaEmpty, quick.box);
+  function quickModelName() {
+    var a = state.info && state.info.assistant, id = a && a.quickModel;
+    var m = id ? MODELS.find(function (x) { return x.id === id; }) : null;
+    return m ? m.name + " · Быстро" : "Заглушка · ключа нет";
+  }
+  function setQuick(open) {
+    els.qa.hidden = !open;
+    els.qaBtn.setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    els.qaModel.textContent = quickModelName();
+    scrollChat(quick);
+    els.qaInput.focus();
+  }
+  els.qaIdeas.replaceChildren.apply(els.qaIdeas, QUICK_IDEAS.map(function (idea) {
+    return h("button", { type: "button", class: "fchip", onclick: function () { sendChat(idea, quick); } }, idea);
+  }));
+  els.qaBtn.addEventListener("click", function () { setQuick(els.qa.hidden); });
+  els.qaClose.addEventListener("click", function () { setQuick(false); els.qaBtn.focus(); });
+  els.qaNew.addEventListener("click", function () { if (quick.current) stopChat(quick); clearChat(quick); els.qaInput.focus(); });
+  els.qaFull.addEventListener("click", function () {
+    setQuick(false);
+    if (!quick.messages.length) { openTab("assistant", { fresh: true }); return; }
+    // The conversation goes on in a tab of its own (and into "История"); the small window starts clean.
+    var se = quick;
+    se.quick = false;
+    quick = newSession(true);
+    els.qaList.replaceChildren(els.qaEmpty, quick.box);
+    els.qaEmpty.hidden = false;
+    showBusy(quick);
+    persist(se);
+    openTab("assistant", { session: se });
+  });
+  els.qaForm.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (quick.current) stopChat(quick); else sendChat(els.qaInput.value, quick);
+    els.qaInput.focus();
+  });
+  els.qaInput.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    if (quick.current) stopChat(quick); else { setQuick(false); els.qaBtn.focus(); }
+  });
+  // A click elsewhere hides the window; an answer still being written keeps coming.
+  document.addEventListener("mousedown", function (e) {
+    if (!els.qa.hidden && !els.qa.contains(e.target) && !els.qaBtn.contains(e.target) && !e.target.closest("dialog")) setQuick(false);
+  });
 
   /* ---------- assistant settings ---------- */
   // Keys themselves never come back from main.js: the page only knows which ones are saved.
@@ -2352,6 +2690,7 @@
     return "$" + n.toFixed(2).replace(/\.00$/, "");
   }
   function renderAssistantSettings() {
+    els.qaModel.textContent = quickModelName();
     var a = state.info && state.info.assistant;
     if (!a) return;
     var model = byId(MODELS, a.model), effort = byId(EFFORTS, a.effort);
@@ -2538,6 +2877,146 @@
   });
   els.chatConnect.addEventListener("click", function () { goToKey("openai"); });
 
+  /* ---------- tasks board (alpha) ---------- */
+  // Three columns: «Предстоит», «В процессе», «Готово». Cards are added at the bottom of a column,
+  // dragged between columns (or up and down), renamed by a double click. Stored in tasks.json.
+  var TASK_COLS = [{ id: "todo", name: "Предстоит" }, { id: "doing", name: "В процессе" }, { id: "done", name: "Готово" }];
+  var tb = { adding: null, editing: null, confirmDel: null, dragId: null, focus: false };
+  function findTask(id) { return state.tasks.find(function (t) { return t.id === id; }) || null; }
+  function sortTasks() {
+    var col = { todo: 0, doing: 1, done: 2 };
+    state.tasks.sort(function (a, b) { return col[a.status] - col[b.status] || a.order - b.order; });
+  }
+  function saveTaskNow(t) { return call(api.taskSave(t)).then(function (r) { render(); return r; }); }
+  function renderTasks() {
+    var all = state.tasks || [];
+    var done = all.filter(function (t) { return t.status === "done"; }).length;
+    els.tasksMeta.textContent = all.length ? all.length + " " + plural(all.length, "задача", "задачи", "задач") + (done ? ", готово " + done : "") : "Пока задач нет: добавьте первую в столбец «Предстоит»";
+    els.board.replaceChildren.apply(els.board, TASK_COLS.map(function (c) {
+      var list = all.filter(function (t) { return t.status === c.id; });
+      var col = h("section", { class: "tcol tc-" + c.id, "aria-label": c.name },
+        h("div", { class: "tcol-h" }, h("span", { class: "tcol-name" }, h("i", { "aria-hidden": "true" }), c.name), h("span", { class: "tcol-n", text: String(list.length) })),
+        list.map(taskItem), addRow(c.id));
+      col.addEventListener("dragover", function (e) { if (!tb.dragId) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; col.classList.add("drop"); });
+      col.addEventListener("dragleave", function (e) { if (!col.contains(e.relatedTarget)) col.classList.remove("drop"); });
+      col.addEventListener("drop", function (e) {
+        if (!tb.dragId) return;
+        e.preventDefault();
+        col.classList.remove("drop");
+        dropTask(c.id, e.target.closest(".task[data-id]"), list);
+      });
+      return col;
+    }));
+    if (tb.focus) {
+      tb.focus = false;
+      var inp = els.board.querySelector(".task-input");
+      if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+    }
+  }
+  // Dropped on a card: goes right above it; on the empty part of a column: to its bottom.
+  function dropTask(status, targetEl, list) {
+    var id = tb.dragId;
+    tb.dragId = null;
+    var task = findTask(id);
+    if (!task) return;
+    var rest = list.filter(function (t) { return t.id !== id; });
+    var order;
+    if (targetEl) {
+      if (targetEl.dataset.id === id) return;
+      var target = findTask(targetEl.dataset.id), at = rest.indexOf(target), before = rest[at - 1];
+      order = before ? (before.order + target.order) / 2 : target.order - 1;
+    } else {
+      if (task.status === status && rest.length && rest[rest.length - 1].order < task.order) return;
+      order = rest.length ? rest[rest.length - 1].order + 1 : Date.now();
+    }
+    task.status = status;
+    task.order = order;
+    sortTasks();
+    renderTasks();
+    saveTaskNow({ id: id, status: status, order: order });
+  }
+  function taskItem(t) {
+    if (tb.editing === t.id) {
+      var area = h("textarea", { class: "task-input", rows: "2", maxlength: "300", "aria-label": "Название задачи" });
+      area.value = t.title;
+      var finishEdit = function (save) {
+        if (tb.editing !== t.id) return;
+        tb.editing = null;
+        var v = area.value.trim();
+        if (save && v && v !== t.title) { t.title = v; saveTaskNow({ id: t.id, title: v }); } else renderTasks();
+      };
+      area.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finishEdit(true); }
+        else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finishEdit(false); }
+      });
+      area.addEventListener("blur", function () { finishEdit(true); });
+      return h("div", { class: "task editing" }, area);
+    }
+    if (tb.confirmDel === t.id) {
+      return h("div", { class: "task confirm" }, h("span", { text: "Удалить «" + t.title + "»?" }),
+        h("button", { type: "button", class: "link-btn danger", onclick: function () {
+          tb.confirmDel = null;
+          state.tasks = state.tasks.filter(function (x) { return x.id !== t.id; });
+          renderTasks();
+          call(api.taskDelete(t.id)).then(function () { render(); });
+        } }, "Удалить"),
+        h("button", { type: "button", class: "link-btn", onclick: function () { tb.confirmDel = null; renderTasks(); } }, "Отмена"));
+    }
+    var edit = function () { tb.editing = t.id; tb.focus = true; renderTasks(); };
+    var el = h("div", { class: "task", draggable: "true", "data-id": t.id, title: "Перетащите в другой столбец. Двойной клик — изменить", ondblclick: edit },
+      h("span", { class: "task-t", text: t.title }),
+      t.note ? h("span", { class: "task-note", text: t.note }) : null,
+      h("span", { class: "task-acts" },
+        h("button", { type: "button", class: "task-btn", title: "Изменить", "aria-label": "Изменить задачу «" + t.title + "»", html: ICONS.pencil, onclick: edit }),
+        h("button", { type: "button", class: "task-btn", title: "Удалить", "aria-label": "Удалить задачу «" + t.title + "»", html: ICONS.trash,
+          onclick: function () { tb.confirmDel = t.id; renderTasks(); } })));
+    el.addEventListener("dragstart", function (e) {
+      tb.dragId = t.id;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", t.title);
+      el.classList.add("dragging");
+    });
+    el.addEventListener("dragend", function () {
+      tb.dragId = null;
+      el.classList.remove("dragging");
+      els.board.querySelectorAll(".tcol.drop").forEach(function (c) { c.classList.remove("drop"); });
+    });
+    return el;
+  }
+  // "+ Новая задача": Enter adds it and keeps the field open for the next one; Esc or an empty field closes it.
+  function addRow(status) {
+    if (tb.adding !== status) {
+      return h("button", { type: "button", class: "task-add", onclick: function () { tb.adding = status; tb.focus = true; renderTasks(); } }, icon("plus"), "Новая задача");
+    }
+    var inp = h("textarea", { class: "task-input", rows: "2", maxlength: "300", placeholder: "Что нужно сделать? Enter — добавить", "aria-label": "Новая задача" });
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        var v = inp.value.trim();
+        if (!v) { tb.adding = null; renderTasks(); return; }
+        tb.focus = true;
+        inp.value = "";
+        saveTaskNow({ title: v, status: status });
+      } else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); tb.adding = null; renderTasks(); }
+    });
+    inp.addEventListener("blur", function () {
+      setTimeout(function () {
+        if (tb.adding !== status || document.activeElement && document.activeElement.classList.contains("task-input")) return;
+        var v = inp.value.trim();
+        tb.adding = null;
+        if (v) saveTaskNow({ title: v, status: status }); else renderTasks();
+      }, 120);
+    });
+    return inp;
+  }
+
+  // The generator is not there yet: the two buttons show what is coming.
+  document.querySelectorAll(".gen-card").forEach(function (b) {
+    b.addEventListener("click", function () {
+      toast(b.dataset.gen === "video" ? "Генерация видео появится в следующих версиях. Пока это пример." : "Генерация картинок появится в следующих версиях. Пока это пример.", true);
+    });
+  });
+
   /* ---------- drag and drop ---------- */
   function hasFiles(e) {
     var t = e.dataTransfer && e.dataTransfer.types;
@@ -2622,6 +3101,15 @@
   document.addEventListener("keydown", function (e) {
     if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open) return;
     var mod = e.ctrlKey || e.metaKey;
+    // Tabs like in a browser, and the small assistant window.
+    if (mod && !e.altKey && e.code === "Tab") {
+      e.preventDefault();
+      if (tabs.list.length > 1) activateTab((tabs.active + (e.shiftKey ? -1 : 1) + tabs.list.length) % tabs.list.length);
+      return;
+    }
+    if (mod && !e.shiftKey && !e.altKey && e.code === "KeyT") { e.preventDefault(); setTabMenu(true); return; }
+    if (mod && !e.shiftKey && !e.altKey && e.code === "KeyW") { e.preventDefault(); closeTab(tabs.active); return; }
+    if (mod && !e.shiftKey && !e.altKey && e.code === "KeyK") { e.preventDefault(); setQuick(els.qa.hidden); return; }
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();
       setPage("prompts");
@@ -2641,7 +3129,7 @@
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(queueMeasure);
 
   /* ---------- start ---------- */
-  if (api.platform === "win32") els.titlebar.hidden = false;
+  if (api.platform === "win32") els.titlebar.classList.add("win");
   render();
   api.onDataChanged(function (prompts) {
     setItems(prompts);
@@ -2650,7 +3138,7 @@
   });
   call(api.load()).then(function (r) {
     state.loaded = true;
-    render();
+    restoreTabs(r && r.info && r.info.tabs);
     if (!r) return;
     if (state.profile && !state.profile.welcomed) openProfile(true);
     var n = r.notice;

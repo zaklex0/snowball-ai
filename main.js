@@ -6,17 +6,18 @@ const fsp = fs.promises;
 const Anthropic = require('@anthropic-ai/sdk').default;
 const OpenAI = require('openai').default;
 const os = require('os');
-const { Store, copyDataTo, hasData, normalizeEvent, sanitizeName } = require('./storage');
+const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, TASK_STATUSES, sanitizeName } = require('./storage');
 const { writeZip, extractZip } = require('./archive');
 
 const APP_TITLE = 'Snowball.ai';
 // Names used by earlier versions (newest first). Their data folder and settings are moved over on first start.
 const LEGACY_TITLES = ['Промты Snowball.ai', 'Промты VideoSmile'];
 const IS_WIN = process.platform === 'win32';
-const TITLEBAR_HEIGHT = 36;
+const TITLEBAR_HEIGHT = 40;
 // "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
 const THEMES = ['system', 'light', 'dark', 'white', 'black'];
-const MODES = ['base', 'gen'];   // "Моя база данных" and "Генератор"
+// What a tab on top of the window can show. LLM ("assistant") tabs may be open many times, one conversation each.
+const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'generator', 'stats'];
 
 // Prompts a fresh install starts with (only when the data folder has no prompts.json yet).
 // Empty for now; example prompts for each type can go here later.
@@ -309,7 +310,7 @@ nativeTheme.on('updated', () => {
 
 /* ---------- IPC ---------- */
 function ok(extra) {
-  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView() }, extra || {});
+  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView() }, extra || {});
 }
 function fail(e) {
   const code = e && e.code;
@@ -326,7 +327,7 @@ function handle(name, fn) {
   });
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), mode: MODES.includes(settings.mode) ? settings.mode : 'base', assistant: assistantInfo() };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), tabs: tabsSetting(), assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -436,11 +437,19 @@ handle('set-theme', async (theme) => {
   return { ok: true, info: info() };
 });
 
-handle('set-mode', async (mode) => {
-  if (!MODES.includes(mode)) return { ok: false, error: 'Такого режима нет.' };
-  settings.mode = mode;
+// The tabs on top of the window, so they come back after a restart: [{ kind, chatId? }] and which one is open.
+function tabsSetting() {
+  const t = settings.tabs;
+  if (!t || !Array.isArray(t.list)) return null;
+  const list = t.list.filter((x) => x && TAB_KINDS.includes(x.kind)).slice(0, 30)
+    .map((x) => (x.kind === 'assistant' && typeof x.chatId === 'string' ? { kind: x.kind, chatId: x.chatId.slice(0, 64) } : { kind: x.kind }));
+  return { list, active: Math.max(0, Math.min(list.length - 1, Number(t.active) || 0)) };
+}
+handle('set-tabs', async (tabs) => {
+  settings.tabs = tabs && typeof tabs === 'object' ? tabs : null;
+  settings.tabs = tabsSetting();
   saveSettings();
-  return { ok: true, info: info() };
+  return { ok: true };
 });
 
 handle('update-state', async () => {
@@ -518,7 +527,7 @@ handle('change-data-dir', async () => {
 // Both are zip archives (archive.js) with manifest.json on top; API keys never go into them.
 const BACKUP_EXT = 'snowball';
 const SHARE_EXT = 'snowprompt';
-const SETTINGS_IN_BACKUP = ['theme', 'mode', 'assistantModel', 'assistantEffort', 'confirm', 'notify'];
+const SETTINGS_IN_BACKUP = ['theme', 'assistantModel', 'assistantEffort', 'confirm', 'notify'];
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 function manifest(kind, counts) {
   return { name: 'manifest.json', data: JSON.stringify({ format: kind === 'backup' ? 'snowball-backup' : 'snowball-prompts', version: 1, app: app.getVersion(), createdAt: new Date().toISOString(), counts }, null, 2) };
@@ -746,8 +755,33 @@ function stubCalendar(text, t) {
   return { text: (settings.confirm === false ? 'Поставил.' : 'Вот что я поставлю. Проверьте и нажмите **«Добавить»**.') + ' Напомню за час, время напоминания можно поменять.', action: { kind: 'calendar-add', title: event.title, event } };
 }
 
+// "открой календарь и генератор" → the tabs to open.
+const TAB_WORDS = [['home', /главн|домашн/], ['prompts', /промт/], ['calendar', /календар/], ['tasks', /задач|туду|to-?do|доск/], ['assistant', /\bllm\b|ллм|чат|разговор/], ['generator', /генератор|генерац|изображ|картинк|видео/], ['stats', /статистик/]];
+const TAB_NAMES = { home: 'Главная', prompts: 'Промты', calendar: 'Календарь', tasks: 'Задачи', assistant: 'LLM', generator: 'Генератор', stats: 'Статистика' };
+const TASK_COLUMNS = { todo: 'Предстоит', doing: 'В процессе', done: 'Готово' };
+function stubTasks(text, t) {
+  if (/(добав|созда|запиш|постав|закин)\S*\s.*задач/.test(t)) {
+    const title = (afterColon(text) || text.replace(/^.*?задач\S*\s*/i, '')).trim();
+    if (!title) return { text: 'Напишите, какую задачу добавить, например: **«добавь задачу смонтировать рилс»**.' };
+    const status = /в процесс|в работ/.test(t) ? 'doing' : 'todo';
+    const task = normalizeTask({ title: title.charAt(0).toUpperCase() + title.slice(1), status });
+    return { text: settings.confirm === false ? 'Добавил.' : 'Вот что я добавлю в «Задачи». Нажмите **«Добавить»**, если всё верно.', action: { kind: 'task-add', title: task.title, task } };
+  }
+  const list = store.tasksView();
+  if (!list.length) return { text: 'На доске «Задачи» пока пусто. Напишите, например, **«добавь задачу смонтировать рилс»**.' };
+  return { text: 'Сейчас на доске:\n' + TASK_STATUSES.map((st) => {
+    const col = list.filter((x) => x.status === st);
+    return '**' + TASK_COLUMNS[st] + '** — ' + (col.length ? col.map((x) => x.title).join(', ') : 'пусто');
+  }).join('\n') };
+}
+
 function stubAnswer(last) {
   const t = last.toLowerCase();
+  if (/(открой|покажи|перейди|запусти)/.test(t) && !/что у меня|какие/.test(t)) {
+    const kinds = TAB_WORDS.filter((w) => w[1].test(t)).map((w) => w[0]);
+    if (kinds.length) return { text: 'Открыл: ' + kinds.map((k) => '«' + TAB_NAMES[k] + '»').join(', ') + '.', open: kinds };
+  }
+  if (/задач/.test(t) && !/календар/.test(t)) return stubTasks(last, t);
   if (/(добав|созда|сохран|запиш)\S*\s.*промт/.test(t)) {
     const title = stubTitle(last);
     const category = stubType(last);
@@ -810,6 +844,7 @@ async function* stubSource(messages, signal) {
     await sleep(25 + Math.random() * 45, signal);
   }
   if (answer.action) yield { type: 'action', action: answer.action };
+  if (answer.open) yield { type: 'open', tabs: answer.open };
 }
 
 /* Real models: ChatGPT (OpenAI) and Claude (Anthropic). Each user brings their own API key
@@ -842,6 +877,8 @@ const SYSTEM_PROMPT = [
   'У пользователя в программе есть календарь, и ты можешь с ним работать: calendar_list показывает дела за период, calendar_add добавляет дело, calendar_update меняет или переносит существующее, calendar_delete удаляет. Результат вызова говорит, сделано ли изменение сразу или пользователь должен подтвердить его кнопкой на карточке: пиши в ответе именно так, как там сказано. Чтобы перенести или изменить дело, найди его через calendar_list и вызови calendar_update с его id (не удаляй и не создавай заново). Перед удалением тоже найди id через calendar_list.',
   'Название дела — только суть, 2–5 слов, без слова, обозначающего тип (созвон, звонок, встреча, съёмка, монтаж — тип и так виден по цвету), и без служебных слов. Например, «на завтра забей созвон на 14:00 с Димой по поводу правок по монтажу видео на ютуб» → название «Дима, правки монтажа YouTube», тип call. Важные подробности можно положить в note. Тип: task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж. Если время окончания не названо, оставь to пустым.',
   'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
+  'Ещё у пользователя есть доска «Задачи» с тремя столбцами: todo — «Предстоит», doing — «В процессе», done — «Готово». tasks_list показывает все задачи, task_add добавляет, task_update меняет название, заметку или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
+  'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
 
@@ -892,6 +929,49 @@ const TOOLS = [
     }
   },
   {
+    name: 'tasks_list',
+    description: 'Показывает все задачи с доски «Задачи»: id, название, столбец (todo, doing, done) и заметку.',
+    parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
+  },
+  {
+    name: 'task_add',
+    description: 'Добавляет задачу на доску «Задачи» (или показывает карточку для подтверждения — это скажет результат).',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['title', 'status', 'note'],
+      properties: {
+        title: { type: 'string', description: 'Коротко, что нужно сделать' },
+        status: { type: 'string', enum: TASK_STATUSES, description: 'Столбец: todo — «Предстоит» (обычно), doing — «В процессе», done — «Готово»' },
+        note: { type: 'string', description: 'Подробности или пустая строка' }
+      }
+    }
+  },
+  {
+    name: 'task_update',
+    description: 'Меняет задачу: название, заметку или столбец (например, перенести в «Готово»). Передай все поля; то, что не меняется, — как было в tasks_list.',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['id', 'title', 'status', 'note'],
+      properties: {
+        id: { type: 'string', description: 'id задачи из tasks_list' },
+        title: { type: 'string' },
+        status: { type: 'string', enum: TASK_STATUSES },
+        note: { type: 'string', description: 'Подробности или пустая строка' }
+      }
+    }
+  },
+  {
+    name: 'task_delete',
+    description: 'Удаляет задачу с доски (или показывает карточку для подтверждения — это скажет результат).',
+    parameters: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', description: 'id задачи из tasks_list' } } }
+  },
+  {
+    name: 'open_tabs',
+    description: 'Сразу открывает вкладки программы вверху окна. Если такая вкладка уже открыта, переключается на неё; llm каждый раз открывает новый разговор.',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['tabs'],
+      properties: { tabs: { type: 'array', items: { type: 'string', enum: ['home', 'prompts', 'calendar', 'tasks', 'llm', 'generator', 'stats'] }, description: 'Какие вкладки открыть, по порядку' } }
+    }
+  },
+  {
     name: 'calendar_delete',
     description: 'Удаляет дело из календаря (или показывает карточку для подтверждения — это скажет результат).',
     parameters: {
@@ -931,6 +1011,32 @@ function runTool(name, input) {
     const event = store.findEvent(String(a.id || ''));
     if (!event) return { output: 'Дела с таким id нет. Найди его через calendar_list.', error: true };
     return { output: after('Удалить из календаря: ' + eventLine(event)), action: { kind: 'calendar-delete', title: event.title, event } };
+  }
+  if (name === 'tasks_list') {
+    const list = store.tasksView().map((t) => ({ id: t.id, title: t.title, status: t.status, note: t.note }));
+    return { output: list.length ? JSON.stringify(list) : 'На доске задач пока ничего нет.' };
+  }
+  const taskLine = (t) => '«' + t.title + '» (' + TASK_COLUMNS[t.status] + ')';
+  if (name === 'task_add') {
+    const task = normalizeTask({ title: a.title, status: a.status, note: a.note });
+    if (!task) return { output: 'Ошибка: нужно название задачи.', error: true };
+    return { output: after('Добавить задачу ' + taskLine(task)), action: { kind: 'task-add', title: task.title, task } };
+  }
+  if (name === 'task_update') {
+    const prev = store.findTask(String(a.id || ''));
+    if (!prev) return { output: 'Задачи с таким id нет. Найди её через tasks_list.', error: true };
+    const task = normalizeTask(Object.assign({}, prev, { title: a.title || prev.title, status: a.status, note: a.note }));
+    return { output: after('Изменить задачу: ' + taskLine(prev) + ' → ' + taskLine(task)), action: { kind: 'task-update', title: task.title, task, prevTask: prev } };
+  }
+  if (name === 'task_delete') {
+    const task = store.findTask(String(a.id || ''));
+    if (!task) return { output: 'Задачи с таким id нет. Найди её через tasks_list.', error: true };
+    return { output: after('Удалить задачу ' + taskLine(task)), action: { kind: 'task-delete', title: task.title, task } };
+  }
+  if (name === 'open_tabs') {
+    const tabs = (Array.isArray(a.tabs) ? a.tabs : []).map((k) => (k === 'llm' ? 'assistant' : k)).filter((k) => TAB_KINDS.includes(k)).slice(0, 8);
+    if (!tabs.length) return { output: 'Ошибка: не названо ни одной вкладки.', error: true };
+    return { output: 'Открыто: ' + tabs.map((k) => TAB_NAMES[k]).join(', ') + '.', open: tabs };
   }
   return { output: 'Такого инструмента нет.', error: true };
 }
@@ -1004,7 +1110,7 @@ function assistantInfo() {
   return {
     hasKey: !!(keys.openai || keys.anthropic),
     keys: { openai: !!keys.openai, anthropic: !!keys.anthropic },
-    model: currentModel().id, effort: currentEffort(), models: MODELS, efforts: EFFORTS,
+    model: currentModel().id, effort: currentEffort(), models: MODELS, efforts: EFFORTS, quickModel: (quickModel() || {}).id || null,
     spend: spendInfo(), notify: settings.notify !== false, confirm: settings.confirm !== false,
     prices: PRICES, fixedChars: SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + 200
   };
@@ -1056,7 +1162,9 @@ function openaiUsage(response) {
 }
 
 // Answers and, when the model asks for a tool, runs it and asks again with the result (at most MAX_TOOL_ROUNDS times).
-async function* openaiSource(model, messages, signal) {
+async function* openaiSource(model, messages, signal, opts) {
+  const effort = (opts && opts.effort) || currentEffort();
+  const extra = (opts && opts.extra) ? '\n\n' + opts.extra : '';
   const client = new OpenAI({ apiKey: keys.openai });
   const tools = TOOLS.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: true }));
   let input = messages.map((m) => ({ role: m.role, content: m.content }));
@@ -1064,10 +1172,10 @@ async function* openaiSource(model, messages, signal) {
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const stream = await client.responses.create({
       model: model.id,
-      instructions: SYSTEM_PROMPT + '\n\n' + nowLine(),
+      instructions: SYSTEM_PROMPT + '\n\n' + nowLine() + extra,
       input,
       tools,
-      reasoning: { effort: currentEffort() },
+      reasoning: { effort },
       max_output_tokens: 32000,   // thinking counts too, so leave room at "Максимум"
       store: false,               // do not keep the conversation on OpenAI's servers
       stream: true
@@ -1102,12 +1210,15 @@ async function* openaiSource(model, messages, signal) {
       try { args = JSON.parse(c.arguments || '{}'); } catch (e) { args = null; }
       const r = args ? runTool(c.name, args) : { output: 'Ошибка: аргументы не прочитались, повтори вызов.', error: true };
       if (r.action) yield { type: 'action', action: r.action };
+      if (r.open) yield { type: 'open', tabs: r.open };
       input.push({ type: 'function_call_output', call_id: c.call_id, output: r.output });
     }
   }
 }
 
-async function* claudeSource(model, messages, signal) {
+async function* claudeSource(model, messages, signal, opts) {
+  const effort = (opts && opts.effort) || currentEffort();
+  const extra = (opts && opts.extra) ? '\n\n' + opts.extra : '';
   const client = new Anthropic({ apiKey: keys.anthropic });
   const tools = TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters, strict: true }));
   let msgs = messages.slice();
@@ -1118,9 +1229,9 @@ async function* claudeSource(model, messages, signal) {
       max_tokens: 16000,
       tools,
       // The instructions are cached; the current time goes after them so it does not break the cache.
-      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: nowLine() }],
+      system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: nowLine() + extra }],
       messages: msgs,
-      output_config: { effort: currentEffort() }
+      output_config: { effort }
     };
     // If Opus declines for safety reasons, the API retries on a suitable model inside the same request.
     // Haiku has no such fallback, so a refusal is shown as an error.
@@ -1146,18 +1257,25 @@ async function* claudeSource(model, messages, signal) {
       if (b.type !== 'tool_use') continue;
       const r = runTool(b.name, b.input);
       if (r.action) yield { type: 'action', action: r.action };
+      if (r.open) yield { type: 'open', tabs: r.open };
       results.push({ type: 'tool_result', tool_use_id: b.id, content: r.output, is_error: !!r.error });
     }
     msgs.push({ role: 'user', content: results });
   }
 }
 
-// Who answers: the chosen model if there is a key for it, otherwise the stub.
-function pickSource() {
-  const model = currentModel();
-  if (!keys[model.provider]) return (messages, signal) => stubSource(messages, signal);
+// The small assistant window does calendar and tasks errands: the cheapest model and quick thinking are enough.
+const QUICK_MODELS = ['gpt-6-luna', 'claude-haiku-5-5'];
+const QUICK_LINE = 'Это маленькое окно ассистента для быстрых дел: календарь, задачи, вкладки. Отвечай одной-двумя короткими фразами.';
+function quickModel() { return QUICK_MODELS.map(modelById).find((m) => m && keys[m.provider]) || null; }
+
+// Who answers: the chosen model if there is a key for it (in the small window, the cheapest one), otherwise the stub.
+function pickSource(quick) {
+  const model = quick ? quickModel() : currentModel();
+  if (!model || !keys[model.provider]) return (messages, signal) => stubSource(messages, signal);
   const source = model.provider === 'openai' ? openaiSource : claudeSource;
-  return (messages, signal) => source(model, messages, signal);
+  const opts = quick ? { effort: 'low', extra: QUICK_LINE } : null;
+  return (messages, signal) => source(model, messages, signal, opts);
 }
 
 /* Notifications: when an answer is ready and the window is minimized, hidden or behind another window,
@@ -1188,8 +1306,8 @@ function notifyAnswer(text, failed) {
   if (win && !win.isDestroyed()) win.flashFrame(true);
 }
 
-async function runAssistant(id, messages, controller) {
-  const source = pickSource();
+async function runAssistant(id, messages, controller, quick) {
+  const source = pickSource(quick);
   let full = '';
   try {
     for await (const piece of source(messages, controller.signal)) {
@@ -1213,11 +1331,11 @@ async function runAssistant(id, messages, controller) {
         pending.set(action.id, action);
         const shown = Object.assign({}, action, { undo: undefined, undoable: !!action.undo });
         sendAssistant({ id, kind: 'action', action: shown, data });
-      }
+      } else if (piece.type === 'open') sendAssistant({ id, kind: 'open', tabs: piece.tabs });
     }
     if (!controller.signal.aborted) {
       sendAssistant({ id, kind: 'done', assistant: assistantInfo(), cost: runCost.get(controller.signal) || 0 });
-      notifyAnswer(full, false);
+      if (!quick) notifyAnswer(full, false);
     }
   } catch (e) {
     if (!controller.signal.aborted) {
@@ -1226,7 +1344,7 @@ async function runAssistant(id, messages, controller) {
       else if (!e.userMessage) console.error('assistant', e);
       const error = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
       sendAssistant({ id, kind: 'error', error, assistant: assistantInfo(), cost: runCost.get(controller.signal) || 0 });
-      notifyAnswer(error, true);
+      if (!quick) notifyAnswer(error, true);
     }
   } finally {
     streams.delete(id);
@@ -1234,7 +1352,8 @@ async function runAssistant(id, messages, controller) {
 }
 
 // messages: [{ role: 'user' | 'assistant', content: string }], the whole conversation so far.
-handle('assistant-send', async (messages) => {
+// opts.quick: the small assistant window (cheapest model, short answers, no Windows notification).
+handle('assistant-send', async (messages, opts) => {
   const list = (Array.isArray(messages) ? messages : [])
     .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
     .map((m) => ({ role: m.role, content: m.content.slice(0, 100000) }));
@@ -1243,7 +1362,7 @@ handle('assistant-send', async (messages) => {
   const controller = new AbortController();
   streams.set(id, controller);
   store.recordAssistant();
-  runAssistant(id, list, controller);
+  runAssistant(id, list, controller, !!(opts && opts.quick));
   return { ok: true, id };
 });
 
@@ -1252,6 +1371,10 @@ handle('assistant-stop', async (id) => {
   if (c) c.abort();
   return { ok: true };
 });
+
+// Tasks board, stored in tasks.json beside the prompts.
+handle('task-save', async (t) => { const saved = await store.saveTask(t); return ok({ taskId: saved.id }); });
+handle('task-delete', async (id) => { await store.deleteTask(id); return ok(); });
 
 // Calendar, stored in calendar.json beside the prompts.
 handle('cal-save', async (ev) => { const saved = await store.saveEvent(ev); return ok({ id: saved.id, date: saved.date }); });
@@ -1330,6 +1453,20 @@ async function applyAction(action) {
     if (!gone) throw userError('Этого дела уже нет в календаре.');
     return { undo: { restore: gone }, extra: { date: gone.date } };
   }
+  if (action.kind === 'task-add') {
+    const t = await store.saveTask(Object.assign({}, action.task, { id: undefined, order: undefined }));
+    return { undo: { taskId: t.id }, extra: { taskId: t.id } };
+  }
+  if (action.kind === 'task-update') {
+    if (!store.findTask(action.prevTask.id)) throw userError('Этой задачи уже нет на доске.');
+    const t = await store.saveTask({ id: action.prevTask.id, title: action.task.title, status: action.task.status, note: action.task.note });
+    return { undo: { restoreTask: action.prevTask }, extra: { taskId: t.id } };
+  }
+  if (action.kind === 'task-delete') {
+    const gone = await store.deleteTask(action.task.id);
+    if (!gone) throw userError('Этой задачи уже нет на доске.');
+    return { undo: { restoreTask: gone }, extra: {} };
+  }
   throw userError('Такое действие ассистент пока не умеет.');
 }
 
@@ -1352,6 +1489,8 @@ handle('assistant-undo', async (actionId) => {
   if (u.promptId) await store.deletePrompt(u.promptId);
   if (u.eventId) await store.deleteEvent(u.eventId);
   if (u.restore) await store.saveEvent(u.restore);   // puts the old version back under the same id
+  if (u.taskId) await store.deleteTask(u.taskId);
+  if (u.restoreTask) await store.saveTask(u.restoreTask);
   return ok({ date: u.restore ? u.restore.date : undefined });
 });
 

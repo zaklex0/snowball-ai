@@ -10,52 +10,24 @@
 </head>
 <body>
 <div class="app">
-  <div class="titlebar" id="titlebar" hidden>
-    <img src="../assets/icon.png" alt="">
-    <span>Snowball.ai</span>
-  </div>
-
   <div class="shell">
     <nav class="side" aria-label="Разделы">
+      <div class="side-head">
+        <img src="../assets/icon.png" alt="">
+        <span>Snowball.ai</span>
+      </div>
       <div class="side-top">
-      <div class="mode-wrap">
-        <button type="button" class="mode-btn" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu" title="Режим работы">
-          <span class="mode-ico" id="mode-ico" aria-hidden="true"></span>
-          <span class="mode-text"><span class="mode-kicker">Режим</span><span class="mode-name" id="mode-name">Моя база данных</span></span>
-          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-        </button>
-        <div class="menu mode-menu" id="mode-menu" role="menu" hidden>
-          <button type="button" role="menuitemradio" aria-checked="true" data-mode="base">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/><path d="M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/></svg>
-            <span class="mm-text"><span class="mm-name">Моя база данных</span><span class="mm-sub">Промты, календарь, ассистент</span></span>
-            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
-          </button>
-          <button type="button" role="menuitemradio" aria-checked="false" data-mode="gen">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>
-            <span class="mm-text"><span class="mm-name">Генератор</span><span class="mm-sub">Скоро: картинки, видео и другое</span></span>
-            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
-          </button>
-        </div>
+      <div class="side-icons" id="nav-open" role="toolbar" aria-label="Разделы">
+        <button type="button" class="nav-icon" data-page="home" title="Главная" aria-label="Главная"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg></button>
+        <button type="button" class="nav-icon" data-page="prompts" title="Промты" aria-label="Промты"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg></button>
+        <button type="button" class="nav-icon" data-page="calendar" title="Календарь: дел на сегодня" aria-label="Календарь: дел на сегодня"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span class="nav-badge" data-badge="calendar" hidden></span></button>
+        <button type="button" class="nav-icon" data-page="tasks" title="Задачи (альфа): ещё не готово" aria-label="Задачи (альфа): ещё не готово"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg><span class="nav-badge" data-badge="tasks" hidden></span></button>
+        <button type="button" class="nav-icon" data-page="assistant" title="LLM: разговоры с ChatGPT или Claude" aria-label="LLM: разговоры с ChatGPT или Claude"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg><span class="nav-badge" data-badge="assistant" hidden></span></button>
+        <button type="button" class="nav-icon" data-page="generator" title="Генератор (скоро)" aria-label="Генератор (скоро)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg><span class="nav-badge" data-badge="generator" hidden></span></button>
       </div>
-      <div class="side-group" id="nav-base">
-        <button type="button" class="nav-item" data-page="prompts" title="Промты">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>
-          <span>Промты</span>
-        </button>
-        <button type="button" class="nav-item" data-page="calendar" title="Календарь">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
-          <span>Календарь</span>
-        </button>
-        <button type="button" class="nav-item" data-page="assistant" title="Ассистент">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg>
-          <span>Ассистент</span>
-        </button>
-      </div>
-      <div class="side-group" id="nav-gen" hidden>
-        <button type="button" class="nav-item" data-page="generator" title="Генератор">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>
-          <span>Генератор</span><span class="soon">скоро</span>
-        </button>
+      <div class="upcoming" id="upcoming" aria-labelledby="upcoming-title">
+        <p class="side-h" id="upcoming-title">Ближайшие дела</p>
+        <div class="up-list" id="up-list"></div>
       </div>
       </div>
       <div class="side-group side-bottom">
@@ -63,6 +35,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>
           <span>Статистика</span>
         </button>
+        <div class="profile-row">
         <div class="profile-wrap">
           <div class="menu" id="menu" role="menu" hidden>
             <div class="menu-head">
@@ -133,8 +106,19 @@
             <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
           </button>
         </div>
+        <button type="button" class="qa-btn" id="qa-btn" aria-expanded="false" aria-controls="qa" title="Ассистент: календарь, задачи, вкладки (Ctrl + K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg></button>
+        </div>
       </div>
     </nav>
+
+    <div class="main-col">
+    <div class="titlebar" id="titlebar">
+      <div class="tabs" id="tabs" role="tablist" aria-label="Вкладки"></div>
+      <button type="button" class="tab-plus" id="tab-plus" aria-haspopup="true" aria-expanded="false" aria-controls="tab-menu" title="Новая вкладка (Ctrl + T)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div class="menu tab-menu" id="tab-menu" role="menu" aria-label="Новая вкладка" hidden></div>
 
     <main class="scroller" id="scroller">
       <div class="page">
@@ -254,6 +238,17 @@
           </section>
         </section>
 
+        <section class="view" id="view-home" aria-labelledby="home-title" hidden>
+          <header class="top">
+            <div class="top-text">
+              <p class="eyebrow" id="home-date"></p>
+              <h1 id="home-title">Привет!</h1>
+              <p class="meta">Главная пока простая: отсюда можно перейти в любой раздел. Позже здесь появится сводка дня.</p>
+            </div>
+          </header>
+          <div class="home-grid" id="home-grid"></div>
+        </section>
+
         <section class="view" id="view-generator" aria-labelledby="generator-title" hidden>
           <header class="top">
             <div class="top-text">
@@ -261,13 +256,33 @@
               <h1 id="generator-title">Генератор</h1>
             </div>
           </header>
-          <section class="card">
-            <div class="state">
-              <div class="dots" aria-hidden="true"><i class="cat-static"></i><i class="cat-video"></i><i class="cat-system"></i></div>
-              <h2>Здесь появится генератор</h2>
-              <p>Создание картинок, видео и другого прямо в Snowball.ai: выбрали промт из своей базы, нажали — и получили результат. Вернуться к промтам, календарю и ассистенту можно в переключателе «Режим» вверху слева.</p>
+          <p class="gen-lead">Здесь появится генерация по промтам из вашей базы: выбрали промт, нажали — и получили результат.</p>
+          <div class="gen-grid">
+            <button type="button" class="gen-card" data-gen="image">
+              <span class="gen-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m20.5 16-4.5-4.5L7 19.5"/></svg></span>
+              <span class="gen-name">Изображение</span>
+              <span class="gen-sub">Картинка по промту из вашей базы</span>
+              <span class="gen-soon">Скоро</span>
+            </button>
+            <button type="button" class="gen-card gen-video" data-gen="video">
+              <span class="gen-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3z"/></svg></span>
+              <span class="gen-name">Видео</span>
+              <span class="gen-sub">Ролик по видео-промту</span>
+              <span class="gen-soon">Скоро</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="view" id="view-tasks" aria-labelledby="tasks-title" hidden>
+          <header class="top">
+            <div class="top-text">
+              <p class="eyebrow">Альфа-версия: будет дорабатываться</p>
+              <h1 id="tasks-title">Задачи <span class="alpha alpha-big">Альфа</span></h1>
+              <p class="meta" id="tasks-meta"></p>
             </div>
-          </section>
+          </header>
+          <div class="board" id="board"></div>
+          <p class="board-hint">Перетаскивайте задачи между столбцами. Двойной клик — изменить. Ассистент тоже умеет: «добавь задачу …», «перенеси … в готово».</p>
         </section>
 
         <section class="view" id="view-calendar" aria-labelledby="calendar-title" hidden>
@@ -338,8 +353,8 @@
         <section class="view view-chat" id="view-assistant" aria-labelledby="assistant-title" hidden>
           <header class="top">
             <div class="top-text">
-              <p class="eyebrow">Помощник по промтам</p>
-              <h1 id="assistant-title">Ассистент</h1>
+              <p class="eyebrow">Разговор с ChatGPT или Claude</p>
+              <h1 id="assistant-title">LLM</h1>
               <p class="meta" id="chat-meta" hidden></p>
             </div>
             <div class="top-actions">
@@ -370,7 +385,7 @@
                 <div class="chat-empty" id="chat-empty">
                   <div class="dots" aria-hidden="true"><i class="cat-static"></i><i class="cat-video"></i><i class="cat-system"></i></div>
                   <h2>О чём поговорим?</h2>
-                  <p>Ассистент поможет придумать или улучшить промт для картинки или видео и сохранить его в таблицу. Ничего не меняется без вашего подтверждения.</p>
+                  <p>Здесь длинные разговоры: придумать или улучшить промт для картинки или видео и сохранить его в таблицу. В каждой вкладке LLM свой разговор. Для быстрых дел — кнопка со звёздочкой внизу слева.</p>
                   <div class="chat-ideas" id="chat-ideas"></div>
                 </div>
               </div>
@@ -403,6 +418,7 @@
 
       </div>
     </main>
+    </div>
   </div>
 </div>
 
@@ -541,6 +557,10 @@
           <section class="card set-card" aria-labelledby="set-keys-title">
             <h2 class="card-title" id="set-keys-title">Горячие клавиши</h2>
             <dl class="shortcuts">
+              <dt><kbd>Ctrl</kbd> + <kbd>T</kbd></dt><dd>Новая вкладка</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>W</kbd></dt><dd>Закрыть вкладку</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>Tab</kbd></dt><dd>Следующая вкладка (с <kbd>Shift</kbd> — предыдущая)</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>K</kbd></dt><dd>Маленькое окно ассистента</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>N</kbd></dt><dd>Новый промт</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>F</kbd></dt><dd>Поиск по промтам</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></dt><dd>Крупнее, мельче, обычный масштаб</dd>
@@ -617,6 +637,30 @@
     <p class="pd-restore" id="pd-restore" hidden>Уже пользовались Snowball.ai? <button type="button" class="link-btn" id="pd-restore-btn">Восстановить из резервной копии…</button></p>
   </form>
 </dialog>
+
+<div class="qa" id="qa" role="dialog" aria-labelledby="qa-title" hidden>
+  <div class="qa-head">
+    <span class="qa-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg></span>
+    <span class="qa-who"><span class="qa-title" id="qa-title">Ассистент</span><span class="qa-model" id="qa-model"></span></span>
+    <button type="button" class="link-btn" id="qa-new" title="Начать разговор заново">Заново</button>
+    <button type="button" class="link-btn" id="qa-full" title="Продолжить этот разговор в отдельной вкладке LLM">Открыть в LLM</button>
+    <button type="button" class="qa-close" id="qa-close" aria-label="Закрыть" title="Закрыть (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="qa-list" id="qa-list" aria-live="polite">
+    <div class="qa-empty" id="qa-empty">
+      <p>Быстрые дела: календарь, задачи, вкладки. Отвечает самая дешёвая модель, коротко.</p>
+      <div class="qa-ideas" id="qa-ideas"></div>
+    </div>
+  </div>
+  <form class="qa-form" id="qa-form" novalidate>
+    <label for="qa-input" class="sr-only">Сообщение ассистенту</label>
+    <input class="input" id="qa-input" type="text" maxlength="4000" autocomplete="off" placeholder="Попросите что-нибудь…">
+    <button type="submit" class="send-btn" id="qa-send" aria-label="Отправить" title="Отправить">
+      <svg class="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      <svg class="i-stop" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+    </button>
+  </form>
+</div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
