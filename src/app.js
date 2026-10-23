@@ -13,14 +13,22 @@
   var VIDEO_EXT = ["mp4", "webm", "mov", "m4v", "ogv", "mkv"];
   var AUDIO_EXT = ["mp3", "wav", "ogg", "m4a", "flac", "aac", "opus"];
   // Kinds of actions counted on the statistics page (storage.js counts them).
-  var ACTIONS = ["created", "edited", "files", "copied"];
+  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant"];
+  // How the statistics page groups them in "Что вы чаще всего делаете".
+  var USE_GROUPS = [
+    { name: "Промты: новые и правки", keys: ["created", "edited"], icon: "pencil" },
+    { name: "Календарь", keys: ["calendar"], icon: "calendar" },
+    { name: "Ассистент", keys: ["assistant"], icon: "spark" },
+    { name: "Копирование промтов", keys: ["copied"], icon: "copy" },
+    { name: "Файлы к промтам", keys: ["files"], icon: "clip" }
+  ];
   var MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
   var MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   var WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 
   var state = {
     loaded: false,
-    page: "prompts",      // a key of els.views: "prompts", "skills", "calendar", "assistant", "stats", "settings"
+    page: "prompts",      // a key of els.views: "prompts", "calendar", "assistant", "generator", "stats", "settings"
     items: [],
     info: null,
     profile: null,        // { name, welcomed, avatar }
@@ -46,29 +54,33 @@
     fTitle: $("f-title"), fCat: $("f-cat"), fText: $("f-text"), fComment: $("f-comment"), fFiles: $("f-files"),
     saveBtn: $("save-btn"), cancelBtn: $("cancel-btn"), formMsg: $("form-msg"),
     toolbar: $("toolbar"), search: $("search"), filters: $("filters"),
-    table: $("table"), rows: $("rows"), stateBox: $("state"), dirLine: $("dir-line"), toast: $("toast"),
+    table: $("table"), rows: $("rows"), stateBox: $("state"), toast: $("toast"),
     viewer: $("viewer"), viewerTitle: $("viewer-title"), viewerBody: $("viewer-body"),
     viewerOpen: $("viewer-open"), viewerShow: $("viewer-show"), viewerClose: $("viewer-close"),
     navItems: Array.prototype.slice.call(document.querySelectorAll(".nav-item[data-page]")),
     views: {
-      prompts: $("view-prompts"), skills: $("view-skills"), calendar: $("view-calendar"), assistant: $("view-assistant"),
+      prompts: $("view-prompts"), generator: $("view-generator"), calendar: $("view-calendar"), assistant: $("view-assistant"),
       stats: $("view-stats"), settings: $("view-settings")
     },
     sideAvatar: $("side-avatar"), sideName: $("side-name"),
     menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
     statsAvatar: $("stats-avatar"), statsName: $("stats-name"), statsSince: $("stats-since"), statsEdit: $("stats-edit"),
-    metrics: $("metrics"), heat: $("heat"), heatTip: $("heat-tip"), breakdown: $("breakdown"),
+    metrics: $("metrics"), topList: $("top-list"), heat: $("heat"), heatTip: $("heat-tip"), breakdown: $("breakdown"),
     settingsVersion: $("settings-version"),
     chat: $("chat"), chatEmpty: $("chat-empty"), chatIdeas: $("chat-ideas"), chatNew: $("chat-new"),
     composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"),
     calMeta: $("cal-meta"), calAdd: $("cal-add"), calTitle: $("cal-title"), calToday: $("cal-today"), calPrev: $("cal-prev"), calNext: $("cal-next"),
+    calDialog: $("cal-dialog"), calViewBtn: $("cal-view-btn"), calViewMenu: $("cal-view-menu"), calViewName: $("cal-view-name"),
+    calMonthView: $("cal-month-view"), calWeekView: $("cal-week-view"), cwHead: $("cw-head"), cwBody: $("cw-body"),
     calGrid: $("cal-grid"), calDayTitle: $("cal-day-title"), calDaySub: $("cal-day-sub"), calDayAdd: $("cal-day-add"), calDayBadge: $("cal-day-badge"),
     calForm: $("cal-form"), calFormTitle: $("cal-form-title"), cfTitle: $("cf-title"), cfDate: $("cf-date"), cfFrom: $("cf-from"), cfTo: $("cf-to"),
     cfKind: $("cf-kind"), cfRemind: $("cf-remind"), cfNote: $("cf-note"), cfSave: $("cf-save"), cfCancel: $("cf-cancel"), cfDelete: $("cf-delete"), cfMsg: $("cf-msg"),
     calTimeline: $("cal-timeline"),
-    chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"),
+    chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
+    setDir: $("set-dir"), setDirChange: $("set-dir-change"), themeValue: $("theme-value"),
+    modeBtn: $("mode-btn"), modeMenu: $("mode-menu"), modeName: $("mode-name"), modeIco: $("mode-ico"), navBase: $("nav-base"), navGen: $("nav-gen"),
     chatHistory: $("chat-history"), chatHistoryBtn: $("chat-history-btn"), chatList: $("chat-list"),
-    modelBtn: $("model-btn"), modelBtnText: $("model-btn-text"), modelMenu: $("model-menu"),
+    chatCost: $("chat-cost"), modelBtn: $("model-btn"), modelBtnText: $("model-btn-text"), modelMenu: $("model-menu"),
     profileDlg: $("profile-dlg"), pdForm: $("pd-form"), pdTitle: $("pd-title"), pdText: $("pd-text"),
     pdAvatar: $("pd-avatar"), pdPick: $("pd-pick"), pdRemove: $("pd-remove"), pdName: $("pd-name"),
     pdSave: $("pd-save"), pdCancel: $("pd-cancel"), pdMsg: $("pd-msg")
@@ -90,6 +102,7 @@
     calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>',
     bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>'
   };
@@ -227,6 +240,13 @@
       };
     });
   }
+  function applyData(r) {
+    if (r.prompts) setItems(r.prompts);
+    if (r.info) state.info = r.info;
+    if (r.profile) state.profile = r.profile;
+    if (r.activity) state.activity = r.activity;
+    if (r.events) state.events = r.events;
+  }
   // Every call returns { ok, prompts?, error? }. Fresh prompts replace the list.
   function call(promise) {
     return Promise.resolve(promise).then(function (r) {
@@ -234,11 +254,7 @@
         toast((r && r.error) || "Не получилось. Попробуйте ещё раз.", true);
         return null;
       }
-      if (r.prompts) setItems(r.prompts);
-      if (r.info) state.info = r.info;
-      if (r.profile) state.profile = r.profile;
-      if (r.activity) state.activity = r.activity;
-      if (r.events) state.events = r.events;
+      applyData(r);
       return r;
     }, function () {
       toast("Не получилось. Попробуйте ещё раз.", true);
@@ -789,10 +805,9 @@
     els.filters.replaceChildren.apply(els.filters, chips);
 
     if (state.info) {
-      els.dirLine.replaceChildren("Промты и файлы хранятся в папке ", h("code", { text: state.info.dataDir }), " ",
-        h("button", { type: "button", class: "link-btn", onclick: function () { call(api.openDataDir()); } }, "Открыть"),
-        state.info.version ? " · Версия " + state.info.version : "");
+      els.setDir.replaceChildren(h("span", { class: "ico", html: ICONS.folder, "aria-hidden": "true" }), h("code", { text: state.info.dataDir }));
       markTheme(state.info.theme);
+      renderMode();
       els.settingsVersion.textContent = state.info.version ? "Версия " + state.info.version : "";
       renderAssistantSettings();
     }
@@ -826,9 +841,56 @@
     if (state.page === "calendar") renderCalendar();
   }
 
+  /* ---------- work modes ---------- */
+  // "Моя база данных" shows prompts, calendar and the assistant; "Генератор" is the future place for making pictures and videos.
+  var MODES = {
+    base: { name: "Моя база данных", first: "prompts", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/><path d="M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/></svg>' },
+    gen: { name: "Генератор", first: "generator", icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>' }
+  };
+  var BASE_PAGES = ["prompts", "calendar", "assistant"];
+  function currentMode() { return (state.info && MODES[state.info.mode]) ? state.info.mode : "base"; }
+  function renderMode() {
+    var m = currentMode();
+    els.modeName.textContent = MODES[m].name;
+    if (els.modeIco.dataset.mode !== m) { els.modeIco.innerHTML = MODES[m].icon; els.modeIco.dataset.mode = m; }
+    els.navBase.hidden = m !== "base";
+    els.navGen.hidden = m !== "gen";
+    els.modeMenu.querySelectorAll("[data-mode]").forEach(function (b) { b.setAttribute("aria-checked", String(b.dataset.mode === m)); });
+  }
+  function setModeMenu(open) {
+    els.modeMenu.hidden = !open;
+    els.modeBtn.setAttribute("aria-expanded", String(open));
+    if (open) { var c = els.modeMenu.querySelector('[aria-checked="true"]'); if (c) c.focus(); }
+  }
+  els.modeBtn.addEventListener("click", function () { setModeMenu(els.modeMenu.hidden); });
+  els.modeMenu.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-mode]");
+    if (!b) return;
+    setModeMenu(false);
+    var m = b.dataset.mode;
+    if (m === currentMode()) return;
+    call(api.setMode(m)).then(function (r) {
+      if (!r) return;
+      var inMode = m === "base" ? BASE_PAGES.indexOf(state.page) !== -1 : state.page === "generator";
+      if (!inMode && state.page !== "stats" && state.page !== "settings") setPage(MODES[m].first); else render();
+    });
+  });
+  els.modeMenu.addEventListener("keydown", function (e) {
+    var items = Array.prototype.slice.call(els.modeMenu.querySelectorAll("button"));
+    var i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); setModeMenu(false); els.modeBtn.focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
+  });
+  document.addEventListener("mousedown", function (e) {
+    if (!els.modeMenu.hidden && !els.modeMenu.contains(e.target) && !els.modeBtn.contains(e.target)) setModeMenu(false);
+  });
+
   /* ---------- pages and sidebar ---------- */
   function setPage(page) {
     setMenu(false);
+    // Opening a page of the other mode (Ctrl + N, a notification) switches the mode with it.
+    var wanted = BASE_PAGES.indexOf(page) !== -1 ? "base" : page === "generator" ? "gen" : null;
+    if (wanted && state.info && currentMode() !== wanted) { state.info.mode = wanted; api.setMode(wanted); }
     if (state.page === page) return;
     state.page = page;
     els.scroller.scrollTop = 0;
@@ -891,6 +953,8 @@
     if (day.edited) parts.push("правок " + day.edited);
     if (day.files) parts.push("файлов " + day.files);
     if (day.copied) parts.push("скопировано " + day.copied);
+    if (day.calendar) parts.push("в календаре " + day.calendar);
+    if (day.assistant) parts.push("ассистенту " + day.assistant);
     return head + ": " + n + " " + plural(n, "действие", "действия", "действий") + " (" + parts.join(", ") + ")";
   }
 
@@ -925,6 +989,23 @@
     els.heat.replaceChildren.apply(els.heat, kids);
   }
 
+  // The page forbids inline style attributes (CSP), so sizes are set through el.style.
+  function fillBar(width, label) { var f = h("span", { class: "top-fill", text: label }); f.style.width = width + "%"; return f; }
+  // Bars from the most used to the least, like "Desktop usage": share of all actions over the year.
+  function renderTopUse(s) {
+    var rows = USE_GROUPS.map(function (g) {
+      return { g: g, n: g.keys.reduce(function (t, k) { return t + (s.by[k] || 0); }, 0) };
+    }).sort(function (a, b) { return b.n - a.n; });
+    var total = rows.reduce(function (t, r) { return t + r.n; }, 0);
+    if (!total) { els.topList.replaceChildren(h("p", { class: "muted", text: "Пока пусто: здесь появится, чем вы пользуетесь чаще всего." })); return; }
+    els.topList.replaceChildren.apply(els.topList, rows.map(function (r) {
+      var pct = Math.round(r.n / total * 100);
+      return h("div", { class: "top-row" },
+        h("span", { class: "top-ico", html: ICONS[r.g.icon], "aria-hidden": "true" }),
+        h("span", { class: "top-bar" }, fillBar(Math.max(pct, r.n ? 8 : 0), pct + "%")),
+        h("span", { class: "top-name" }, h("b", { text: fmtNum(r.n) }), " " + r.g.name.toLowerCase()));
+    }));
+  }
   function metric(label, value, sub) {
     return h("div", { class: "metric" }, h("span", { class: "k", text: label }), h("span", { class: "v", text: value }), sub ? h("span", { class: "s", text: sub }) : null);
   }
@@ -944,7 +1025,9 @@
     var chip = function (label, n) { return h("span", { class: "bchip" }, label + " ", h("b", { text: fmtNum(n) })); };
     els.breakdown.replaceChildren(
       chip("Создано промтов", s.by.created), chip("Правок", s.by.edited),
-      chip("Прикреплено файлов", s.by.files), chip("Скопировано", s.by.copied));
+      chip("Прикреплено файлов", s.by.files), chip("Скопировано", s.by.copied),
+      chip("Дел в календаре", s.by.calendar), chip("Сообщений ассистенту", s.by.assistant));
+    renderTopUse(s);
     renderHeat();
     fillAvatar(els.statsAvatar, p.avatar, p.name);
   }
@@ -1020,23 +1103,52 @@
   function setMenu(open) {
     els.menu.hidden = !open;
     els.menuBtn.setAttribute("aria-expanded", String(open));
+    if (!open) openSub(null);
     if (open) { var f = els.menu.querySelector("button"); if (f) f.focus(); }
   }
+  // "Тема ›" and "Промты ›" open a second list to the right: on hover, on click or with the right arrow.
+  function openSub(name, focusFirst) {
+    els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
+      var btn = w.querySelector(".has-sub"), on = !!name && btn.dataset.sub === name;
+      w.classList.toggle("open", on);
+      btn.setAttribute("aria-expanded", String(on));
+      if (on && focusFirst) { var f = w.querySelector(".submenu button[aria-checked=\"true\"]") || w.querySelector(".submenu button"); if (f) f.focus(); }
+    });
+  }
+  els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
+    var name = w.querySelector(".has-sub").dataset.sub;
+    w.addEventListener("mouseenter", function () { openSub(name); });
+    w.addEventListener("mouseleave", function () { if (!w.contains(document.activeElement)) openSub(null); });
+    w.querySelector(".has-sub").addEventListener("click", function () { openSub(name, true); });
+  });
+  els.menu.querySelectorAll(":scope > button, :scope > hr").forEach(function (b) {
+    b.addEventListener("mouseenter", function () { openSub(null); });
+  });
   els.menuBtn.addEventListener("click", function () { setMenu(els.menu.hidden); });
   document.addEventListener("mousedown", function (e) {
     if (!els.menu.hidden && !els.menu.contains(e.target) && !els.menuBtn.contains(e.target)) setMenu(false);
   });
   els.menu.addEventListener("keydown", function (e) {
-    var items = Array.prototype.slice.call(els.menu.querySelectorAll("button"));
+    var sub = document.activeElement && document.activeElement.closest(".submenu");
+    var scope = sub || els.menu;
+    var items = Array.prototype.slice.call(scope.querySelectorAll(sub ? "button" : ":scope > button, :scope > .sub-wrap > .has-sub"));
     var i = items.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); setMenu(false); els.menuBtn.focus(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); openSub(document.activeElement.dataset.sub, true); }
+    else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); var w = sub.closest(".sub-wrap"); openSub(null); w.querySelector(".has-sub").focus(); }
   });
+  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная" };
   function markTheme(theme) {
+    var t = theme || "system";
     els.menu.querySelectorAll("button[data-theme]").forEach(function (b) {
-      b.setAttribute("aria-checked", String(b.dataset.theme === (theme || "system")));
+      b.setAttribute("aria-checked", String(b.dataset.theme === t));
     });
+    els.themeValue.textContent = THEME_NAMES[t] || "";
+    // "Белая" and "Чёрная" are colour sets on top of the light and dark ones (styles.css, :root[data-theme]).
+    if (t === "white" || t === "black") document.documentElement.dataset.theme = t;
+    else delete document.documentElement.dataset.theme;
   }
   // Theme items keep the menu open, so the change can be seen right away.
   els.menu.addEventListener("click", function (e) {
@@ -1052,23 +1164,8 @@
     if (a === "edit-profile") openProfile(false);
     else if (a === "settings") setPage("settings");
     else if (a === "open-dir") call(api.openDataDir());
-    else if (a === "change-dir") {
-      if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
-      call(api.changeDataDir()).then(function (r) {
-        if (!r || r.canceled) return;
-        if (state.editorOpen) closeEditor(false);
-        // Conversations live in the data folder too: show the ones from the new folder.
-        api.assistantReset();
-        clearChat();
-        refreshChats();
-        closeEventForm();
-        state.expanded.clear();
-        tileCache.clear();
-        render();
-        if (r.mode === "copied") showBanner("Промты и файлы скопированы в новую папку. Старая папка осталась на месте: " + r.oldDir + ". Её можно удалить, когда убедитесь, что всё на месте.");
-        else toast("Открыл промты из выбранной папки", true);
-      });
-    } else if (a === "export") {
+    else if (a === "change-dir") changeDir();
+    else if (a === "export") {
       call(api.exportJson()).then(function (r) {
         if (!r || r.canceled) return;
         toast("Сохранено: " + r.count + " " + plural(r.count, "промт", "промта", "промтов") + ". Прикреплённые файлы в этот файл не входят.", true);
@@ -1084,6 +1181,25 @@
       call(api.checkUpdates()).then(function (r) { if (r) toast("Проверяю обновления…"); });
     }
   });
+  function changeDir() {
+      if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
+      call(api.changeDataDir()).then(function (r) {
+        if (!r || r.canceled) return;
+        if (state.editorOpen) closeEditor(false);
+        // Conversations live in the data folder too: show the ones from the new folder.
+        api.assistantReset();
+        clearChat();
+        refreshChats();
+        closeEventForm();
+        state.expanded.clear();
+        tileCache.clear();
+        render();
+        if (r.mode === "copied") showBanner("Промты и файлы скопированы в новую папку. Старая папка осталась на месте: " + r.oldDir + ". Её можно удалить, когда убедитесь, что всё на месте.");
+        else toast("Открыл промты из выбранной папки", true);
+      });
+  }
+  els.setDir.addEventListener("click", function () { call(api.openDataDir()); });
+  els.setDirChange.addEventListener("click", changeDir);
 
   /* ---------- updates ---------- */
   // A new version is downloaded only after the user presses "Скачать".
@@ -1133,10 +1249,15 @@
   });
 
   /* ---------- calendar ---------- */
-  var KINDS = [{ id: "task", label: "Задача" }, { id: "meet", label: "Встреча" }, { id: "call", label: "Звонок" }];
+  var KINDS = [
+    { id: "task", label: "Задача" }, { id: "meet", label: "Встреча" }, { id: "call", label: "Звонок" },
+    { id: "shoot", label: "Съёмка" }, { id: "edit", label: "Монтаж" }
+  ];
   var REMIND_LABELS = { 15: "за 15 минут", 30: "за 30 минут", 60: "за час", 1440: "за день" };
   var WEEKDAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   var MONTHS_NOM = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+  var CAL_VIEWS = { month: { name: "Месяц", days: 0 }, week: { name: "Неделя", days: 7 }, "3days": { name: "3 дня", days: 3 }, day: { name: "День", days: 1 } };
+  var HOUR_H = 48;   // height of one hour in the week, 3-day and day views, px
   // Official days off in Russia. The holidays are the same every year; moved days off come from the government
   // decree for each year (2027: decree of 17.09.2026 No. 1187) and have to be added here when a new one comes out.
   var HOLIDAYS = {
@@ -1149,7 +1270,8 @@
     2026: ["01-09", "03-09", "05-11", "12-31"],
     2027: ["02-22", "05-03", "05-10", "06-14", "11-05", "12-31"]
   };
-  var cal = { view: null, selected: null, editing: null, confirmDelete: false };
+  var cal = { mode: "month", view: null, selected: null, editing: null, confirmDelete: false };
+  try { if (CAL_VIEWS[localStorage.getItem("calView")]) cal.mode = localStorage.getItem("calView"); } catch (e) {}
 
   function keyToDate(k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
   function holidayName(d) {
@@ -1160,8 +1282,8 @@
   function isDayOff(d) { return d.getDay() === 0 || d.getDay() === 6 || !!holidayName(d); }
   function eventsOn(k) { return state.events.filter(function (e) { return e.date === k; }); }
   function busyLevel(n) { return n <= 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : 3; }
-  function kindOfEvent(e) { return byKind(e.kind) || KINDS[0]; }
   function byKind(id) { return KINDS.find(function (k) { return k.id === id; }) || null; }
+  function kindOfEvent(e) { return byKind(e.kind) || KINDS[0]; }
   function weekdayName(d) { return WEEKDAYS[(d.getDay() + 6) % 7]; }
   // "Вторник, 3 ноября" (with the year when it is not this year).
   function longDay(k) {
@@ -1169,6 +1291,7 @@
     return name.charAt(0).toUpperCase() + name.slice(1) + ", " + fmtDay(d, d.getFullYear() !== new Date().getFullYear());
   }
   function timeRange(e) { return e.from + (e.to ? "–" + e.to : ""); }
+  function minutesOf(t) { return +t.slice(0, 2) * 60 + +t.slice(3); }
 
   function ensureCal() {
     if (cal.view) return;
@@ -1176,6 +1299,21 @@
     cal.view = new Date(t.getFullYear(), t.getMonth(), 1);
     cal.selected = dayKey(t);
   }
+  // The days the week / 3-day / day views show.
+  function shownDays() {
+    var sel = keyToDate(cal.selected);
+    var start = cal.mode === "week" ? addDays(sel, -((sel.getDay() + 6) % 7)) : sel;
+    var out = [];
+    for (var i = 0; i < CAL_VIEWS[cal.mode].days; i++) out.push(addDays(start, i));
+    return out;
+  }
+  function rangeTitle(days) {
+    var a = days[0], b = days[days.length - 1], y = b.getFullYear();
+    if (days.length === 1) return longDay(dayKey(a)) + (a.getFullYear() !== new Date().getFullYear() ? "" : " " + y);
+    if (a.getMonth() === b.getMonth()) return a.getDate() + "–" + b.getDate() + " " + MONTHS[b.getMonth()] + " " + y;
+    return fmtDay(a, a.getFullYear() !== y) + " – " + fmtDay(b) + " " + y;
+  }
+
   function renderMonth() {
     var y = cal.view.getFullYear(), m = cal.view.getMonth();
     els.calTitle.textContent = MONTHS_NOM[m] + " " + y;
@@ -1192,14 +1330,14 @@
       var cls = "cal-cell";
       if (d.getMonth() !== m) cls += " other";
       if (isDayOff(d)) cls += " off";
-      if (hol) cls += " holiday";
       if (busyLevel(list.length)) cls += " b" + busyLevel(list.length);
       if (k === todayKey) cls += " today";
       if (k === cal.selected) cls += " sel";
       var shown = hol ? 1 : 2;
       var tip = (hol ? hol + ". " : "") + (list.length ? list.length + " " + plural(list.length, "дело", "дела", "дел") : "Свободно");
       kids.push(h("button", { type: "button", class: cls, title: tip, "aria-label": fmtDay(d) + ". " + tip, "aria-pressed": String(k === cal.selected),
-        onclick: (function (k) { return function () { selectDay(k); }; })(k) },
+        onclick: (function (k) { return function () { selectDay(k); }; })(k),
+        ondblclick: (function (k) { return function () { cal.selected = k; setCalMode("day"); }; })(k) },
         h("span", { class: "num", text: String(d.getDate()) }),
         hol ? h("span", { class: "hol", text: hol }) : null,
         list.slice(0, shown).map(function (e) { return h("span", { class: "ev ev-" + kindOfEvent(e).id }, h("i"), e.from + " " + e.title); }),
@@ -1238,13 +1376,98 @@
       els.calTimeline.append(line);
     }
   }
+
+  // Week, 3 days and one day: a column per day, events placed by their time like in Google Calendar.
+  function renderWeek() {
+    var days = shownDays(), todayKey = dayKey(today());
+    els.calTitle.textContent = rangeTitle(days);
+    var all = [];
+    days.forEach(function (d) { all = all.concat(eventsOn(dayKey(d))); });
+    els.calMeta.textContent = all.length ? all.length + " " + plural(all.length, "дело", "дела", "дел") + " за эти дни" : "В эти дни дел нет";
+    var startHour = Math.min(7, all.length ? Math.min.apply(null, all.map(function (e) { return +e.from.slice(0, 2); })) : 7);
+    var cols = "52px repeat(" + days.length + ", minmax(0, 1fr))";
+    els.cwHead.style.gridTemplateColumns = cols;
+    els.cwBody.style.gridTemplateColumns = cols;
+    els.cwHead.replaceChildren.apply(els.cwHead, [h("div")].concat(days.map(function (d) {
+      var k = dayKey(d), hol = holidayName(d);
+      return h("button", { type: "button", class: "cw-day" + (isDayOff(d) ? " off" : "") + (k === todayKey ? " today" : ""), title: "Открыть день",
+        onclick: function () { cal.selected = k; setCalMode("day"); } },
+        h("span", { class: "wd", text: WEEKDAYS_SHORT[(d.getDay() + 6) % 7] }), h("span", { class: "num", text: String(d.getDate()) }),
+        hol ? h("span", { class: "hol", text: hol }) : null);
+    })));
+    var hours = [];
+    for (var hr = startHour; hr <= 23; hr++) hours.push(h("div", { class: "cw-t", text: pad2(hr) + ":00" }));
+    var height = (24 - startHour) * HOUR_H;
+    var columns = days.map(function (d) {
+      var k = dayKey(d), list = eventsOn(k);
+      var col = h("div", { class: "cw-col" + (isDayOff(d) ? " off" : "") });
+      col.style.height = height + "px";
+      col.style.backgroundSize = "100% " + HOUR_H + "px";
+      col.addEventListener("click", function (e) {
+        if (e.target !== col) return;
+        var hrClicked = startHour + Math.floor(e.offsetY / HOUR_H);
+        cal.selected = k;
+        openEventForm(null, pad2(Math.min(23, hrClicked)) + ":00");
+      });
+      // Overlapping events share the width: each goes to the first free lane.
+      var lanes = [], placed = [];
+      list.forEach(function (e) {
+        var s0 = minutesOf(e.from), s1 = e.to ? minutesOf(e.to) : s0 + 30;
+        var lane = lanes.findIndex(function (end) { return end <= s0; });
+        if (lane === -1) { lane = lanes.length; lanes.push(s1); } else lanes[lane] = s1;
+        placed.push({ e: e, s0: s0, s1: s1, lane: lane });
+      });
+      placed.forEach(function (pl) {
+        var b = eventBlock(pl.e);
+        b.classList.add("cw-ev");
+        if (pl.s1 - pl.s0 <= 45) b.classList.add("short");
+        b.style.top = ((pl.s0 - startHour * 60) / 60 * HOUR_H) + "px";
+        b.style.height = Math.max(24, (pl.s1 - pl.s0) / 60 * HOUR_H - 2) + "px";
+        b.style.left = "calc(" + (pl.lane / lanes.length * 100) + "% + 2px)";
+        b.style.width = "calc(" + (100 / lanes.length) + "% - 4px)";
+        col.append(b);
+      });
+      if (k === todayKey) {
+        var now = new Date(), line = h("div", { class: "cal-now", "aria-hidden": "true" });
+        line.style.left = "0";
+        line.style.top = ((now.getHours() * 60 + now.getMinutes() - startHour * 60) / 60 * HOUR_H) + "px";
+        if (now.getHours() >= startHour) col.append(line);
+      }
+      return col;
+    });
+    els.cwBody.replaceChildren.apply(els.cwBody, [h("div", { class: "cw-hours" }, hours)].concat(columns));
+    els.cwBody.classList.toggle("one-day", days.length === 1);
+    // The day header lines up with the columns even when the hours have a scrollbar.
+    els.cwHead.style.paddingRight = (els.cwBody.offsetWidth - els.cwBody.clientWidth) + "px";
+    cal.startHour = startHour;
+  }
+
   function renderCalendar() {
     ensureCal();
-    renderMonth();
-    renderDay();
+    var month = cal.mode === "month";
+    els.calMonthView.hidden = !month;
+    els.calWeekView.hidden = month;
+    els.calViewName.textContent = CAL_VIEWS[cal.mode].name;
+    els.calViewMenu.querySelectorAll("[data-view]").forEach(function (b) { b.setAttribute("aria-checked", String(b.dataset.view === cal.mode)); });
+    if (month) { renderMonth(); renderDay(); }
+    else renderWeek();
+  }
+  function setCalMode(mode) {
+    cal.mode = mode;
+    try { localStorage.setItem("calView", mode); } catch (e) {}
+    var d = keyToDate(cal.selected);
+    cal.view = new Date(d.getFullYear(), d.getMonth(), 1);
+    renderCalendar();
+    // Start the hour grid around the working day rather than at night.
+    if (mode !== "month") scrollToWorkday();
+  }
+  // Opens the hour grid at 8 in the morning (or at the first event of the shown days if it is later).
+  function scrollToWorkday() {
+    var days = shownDays(), first = 24;
+    days.forEach(function (d) { eventsOn(dayKey(d)).forEach(function (e) { var hr = +e.from.slice(0, 2); if (hr >= 7 && hr < first) first = hr; }); });
+    els.cwBody.scrollTop = Math.max(0, (Math.min(8, first) - (cal.startHour || 0)) * HOUR_H);
   }
   function selectDay(k) {
-    if (cal.editing !== null && !els.calForm.hidden && k !== cal.selected) closeEventForm();
     cal.selected = k;
     var d = keyToDate(k);
     cal.view = new Date(d.getFullYear(), d.getMonth(), 1);
@@ -1255,44 +1478,105 @@
     setPage("calendar");
     selectDay(k);
   }
+  function stepCalendar(dir) {
+    ensureCal();
+    if (cal.mode === "month") { cal.view = new Date(cal.view.getFullYear(), cal.view.getMonth() + dir, 1); renderMonth(); return; }
+    cal.selected = dayKey(addDays(keyToDate(cal.selected), dir * CAL_VIEWS[cal.mode].days));
+    renderCalendar();
+    scrollToWorkday();
+  }
+
+  /* the view switcher */
+  function setCalViewMenu(open) {
+    els.calViewMenu.hidden = !open;
+    els.calViewBtn.setAttribute("aria-expanded", String(open));
+    if (open) { var c = els.calViewMenu.querySelector('[aria-checked="true"]'); if (c) c.focus(); }
+  }
+  els.calViewBtn.addEventListener("click", function () { setCalViewMenu(els.calViewMenu.hidden); });
+  els.calViewMenu.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-view]");
+    if (!b) return;
+    setCalViewMenu(false);
+    ensureCal();
+    setCalMode(b.dataset.view);
+  });
+  els.calViewMenu.addEventListener("keydown", function (e) {
+    var items = Array.prototype.slice.call(els.calViewMenu.querySelectorAll("button")), i = items.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); setCalViewMenu(false); els.calViewBtn.focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
+  });
+  document.addEventListener("mousedown", function (e) {
+    if (!els.calViewMenu.hidden && !els.calViewMenu.contains(e.target) && !els.calViewBtn.contains(e.target)) setCalViewMenu(false);
+  });
+
+  /* time with a 10-minute step: two lists instead of the Windows clock control */
+  function buildTimePick(box, allowEmpty) {
+    var hs = h("select", { class: "input tp-h", "aria-label": "Часы" }), ms = h("select", { class: "input tp-m", "aria-label": "Минуты" });
+    if (allowEmpty) hs.append(h("option", { value: "", text: "—" }));
+    for (var i = 0; i < 24; i++) hs.append(h("option", { value: pad2(i), text: pad2(i) }));
+    for (var m = 0; m < 60; m += 10) ms.append(h("option", { value: pad2(m), text: pad2(m) }));
+    hs.addEventListener("change", function () { ms.disabled = !hs.value; });
+    box.replaceChildren(hs, h("span", { class: "tp-sep", text: ":" }), ms);
+  }
+  function setTime(box, t) {
+    var hs = box.querySelector(".tp-h"), ms = box.querySelector(".tp-m");
+    if (!t) { hs.value = ""; ms.value = "00"; ms.disabled = true; return; }
+    var mm = t.slice(3);
+    // A time an assistant set off the 10-minute grid (14:15) stays as it is.
+    if (!ms.querySelector('option[value="' + mm + '"]')) {
+      var opt = h("option", { value: mm, text: mm, "data-extra": "1" });
+      var after = Array.prototype.find.call(ms.options, function (o) { return o.value > mm; });
+      ms.insertBefore(opt, after || null);
+    }
+    hs.value = t.slice(0, 2);
+    ms.value = mm;
+    ms.disabled = false;
+  }
+  function getTime(box) {
+    var hs = box.querySelector(".tp-h"), ms = box.querySelector(".tp-m");
+    return hs.value ? hs.value + ":" + ms.value : "";
+  }
+  buildTimePick(els.cfFrom, false);
+  buildTimePick(els.cfTo, true);
+  els.cfKind.replaceChildren.apply(els.cfKind, KINDS.map(function (k) {
+    return h("label", { class: "ev-" + k.id }, h("input", { type: "radio", name: "cf-kind", value: k.id }), h("span", { text: k.label }));
+  }));
 
   // e: an event to change, or null for a new one (time: the hour that was clicked).
   function openEventForm(e, time) {
     ensureCal();
     cal.editing = e ? e.id : "";
     cal.confirmDelete = false;
-    els.calForm.hidden = false;
     els.calFormTitle.textContent = e ? "Изменить дело" : "Новое дело";
     els.cfTitle.value = e ? e.title : "";
     els.cfDate.value = e ? e.date : cal.selected;
-    els.cfFrom.value = e ? e.from : (time || "10:00");
-    els.cfTo.value = e ? e.to : (time ? pad2(Math.min(23, +time.slice(0, 2) + 1)) + ":00" : "");
-    els.cfRemind.value = String(e ? e.remind : 0);
+    setTime(els.cfFrom, e ? e.from : (time || "10:00"));
+    setTime(els.cfTo, e ? e.to : (time ? pad2(Math.min(23, +time.slice(0, 2) + 1)) + ":00" : ""));
+    els.cfRemind.value = String(e ? e.remind : 60);
     els.cfNote.value = e ? e.note : "";
     els.cfKind.querySelectorAll("input").forEach(function (i) { i.checked = i.value === (e ? e.kind : "task"); });
     els.cfDelete.hidden = !e;
     els.cfDelete.textContent = "Удалить дело";
     els.cfMsg.textContent = "";
     els.cfSave.disabled = false;
-    try { els.calForm.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); } catch (x) {}
-    els.cfTitle.focus({ preventScroll: true });
+    if (!els.calDialog.open) els.calDialog.showModal();
+    els.cfTitle.focus();
   }
   function closeEventForm() {
-    els.calForm.hidden = true;
+    if (els.calDialog.open) els.calDialog.close();
     cal.editing = null;
     cal.confirmDelete = false;
   }
   els.calForm.addEventListener("submit", function (e) {
     e.preventDefault();
     if (els.cfSave.disabled) return;
-    var title = els.cfTitle.value.trim();
+    var title = els.cfTitle.value.trim(), from = getTime(els.cfFrom), to = getTime(els.cfTo);
     if (!title) { els.cfMsg.textContent = "Напишите, что за дело."; els.cfTitle.focus(); return; }
     if (!els.cfDate.value) { els.cfMsg.textContent = "Выберите день."; els.cfDate.focus(); return; }
-    if (!els.cfFrom.value) { els.cfMsg.textContent = "Укажите время начала."; els.cfFrom.focus(); return; }
-    if (els.cfTo.value && els.cfTo.value <= els.cfFrom.value) { els.cfMsg.textContent = "Окончание должно быть позже начала."; els.cfTo.focus(); return; }
+    if (to && to <= from) { els.cfMsg.textContent = "Окончание должно быть позже начала."; els.cfTo.querySelector("select").focus(); return; }
     var checked = els.cfKind.querySelector("input:checked");
     var isNew = !cal.editing;
-    var ev = { id: cal.editing || undefined, date: els.cfDate.value, from: els.cfFrom.value, to: els.cfTo.value, title: title,
+    var ev = { id: cal.editing || undefined, date: els.cfDate.value, from: from, to: to, title: title,
       kind: checked ? checked.value : "task", remind: +els.cfRemind.value, note: els.cfNote.value.trim() };
     els.cfSave.disabled = true;
     call(api.calSave(ev)).then(function (r) {
@@ -1314,16 +1598,17 @@
     });
   });
   els.cfCancel.addEventListener("click", closeEventForm);
-  els.calForm.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeEventForm(); } });
+  els.calDialog.addEventListener("click", function (e) { if (e.target === els.calDialog) closeEventForm(); });
+  els.calDialog.addEventListener("close", function () { cal.editing = null; cal.confirmDelete = false; });
   els.calAdd.addEventListener("click", function () { openEventForm(null); });
   els.calDayAdd.addEventListener("click", function () { openEventForm(null); });
-  els.calPrev.addEventListener("click", function () { ensureCal(); cal.view = new Date(cal.view.getFullYear(), cal.view.getMonth() - 1, 1); renderMonth(); });
-  els.calNext.addEventListener("click", function () { ensureCal(); cal.view = new Date(cal.view.getFullYear(), cal.view.getMonth() + 1, 1); renderMonth(); });
-  els.calToday.addEventListener("click", function () { selectDay(dayKey(today())); });
+  els.calPrev.addEventListener("click", function () { stepCalendar(-1); });
+  els.calNext.addEventListener("click", function () { stepCalendar(1); });
+  els.calToday.addEventListener("click", function () { ensureCal(); selectDay(dayKey(today())); });
   // A click on a reminder notification opens that day.
   api.onCalendarOpen(function (date) { openCalendarDay(date); });
   // The red "now" line moves on its own.
-  setInterval(function () { if (state.page === "calendar" && els.calForm.hidden) renderDay(); }, 60 * 1000);
+  setInterval(function () { if (state.page === "calendar" && !els.calDialog.open) renderCalendar(); }, 60 * 1000);
 
   /* ---------- assistant ---------- */
   // The open conversation lives here; after every finished message it is saved to chats.json (the "История" list).
@@ -1422,53 +1707,63 @@
       } }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
       kids.push(btn);
     }
+    if (msg.cost > 0) kids.push(h("span", { class: "msg-cost", title: "Столько стоил этот ответ по ценам модели (примерно)", text: fmtCost(msg.cost) }));
     msg.foot.replaceChildren.apply(msg.foot, kids);
     msg.foot.hidden = !kids.length;
   }
 
+  function whenLine2(e) {
+    return (e.date ? longDay(e.date) : "") + (e.from ? " · " + timeRange(e) : "") +
+      (e.remind ? " · напомнить " + (REMIND_LABELS[e.remind] || "") : "") + (e.note ? " · " + e.note : "");
+  }
+  // What a card ends with once it is answered; "Отменить" while main.js still remembers how to undo it.
+  function cardFooter(msg, a, doneText, offText, openPage) {
+    if (a.status === "done") {
+      return h("div", { class: "act-done" }, icon("check"), h("span", { text: doneText }),
+        openPage ? h("button", { type: "button", class: "link-btn", onclick: openPage }, "Открыть") : null,
+        a.undoable ? h("button", { type: "button", class: "link-btn", onclick: function () { undoAction(msg, a); } }, "Отменить") : null);
+    }
+    if (a.status === "undone") return h("div", { class: "act-done off" }, h("span", { text: "Отменено, всё вернул как было" }));
+    if (a.status === "canceled") return h("div", { class: "act-done off" }, h("span", { text: offText }));
+    if (a.status === "failed") return h("div", { class: "act-done bad" }, h("span", { text: a.error || "Не получилось" }));
+    if (a.status === "stale") return h("div", { class: "act-done off" }, h("span", { text: "Карточка устарела. Попросите ассистента ещё раз, если нужно" }));
+    return null;
+  }
   function calendarCard(msg, a) {
     var e = a.event || {};
-    var adding = a.kind === "calendar-add";
+    var kind = a.kind === "calendar-add" ? "add" : a.kind === "calendar-update" ? "update" : "delete";
     var k = kindOfEvent(e);
+    var head = { add: "Добавить в календарь «", update: "Изменить в календаре «", delete: "Удалить из календаря «" }[kind] + (e.title || a.title) + "»?";
     var kids = [
-      h("div", { class: "act-head" }, h("span", { class: "ico", html: adding ? ICONS.calendar : ICONS.trash, "aria-hidden": "true" }),
-        h("span", { text: (adding ? "Добавить в календарь «" : "Удалить из календаря «") + (e.title || a.title) + "»?" })),
-      h("div", { class: "act-meta" }, h("span", { class: "chip ev-" + k.id, text: k.label })),
-      h("div", { class: "act-when", text: (e.date ? longDay(e.date) : "") + (e.from ? " · " + timeRange(e) : "") +
-        (e.remind ? " · напомнить " + (REMIND_LABELS[e.remind] || "") : "") + (e.note ? " · " + e.note : "") })
+      h("div", { class: "act-head" }, h("span", { class: "ico", html: kind === "delete" ? ICONS.trash : ICONS.calendar, "aria-hidden": "true" }), h("span", { text: head })),
+      h("div", { class: "act-meta" }, h("span", { class: "chip ev-" + k.id, text: k.label }))
     ];
-    if (a.status === "done") {
-      kids.push(h("div", { class: "act-done" }, icon("check"), h("span", { text: adding ? "Дело добавлено в календарь" : "Дело удалено из календаря" }),
-        h("button", { type: "button", class: "link-btn", onclick: function () { openCalendarDay(e.date); } }, "Открыть календарь")));
-    } else if (a.status === "canceled") {
-      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Отменено, календарь не изменился" })));
-    } else if (a.status === "stale") {
-      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Карточка устарела. Попросите ассистента ещё раз, если нужно" })));
-    } else {
+    if (kind === "update" && a.prev) {
+      kids.push(h("div", { class: "act-when was", text: "Было: " + whenLine2(a.prev) }), h("div", { class: "act-when", text: "Станет: " + whenLine2(e) }));
+    } else kids.push(h("div", { class: "act-when", text: whenLine2(e) }));
+    var done = { add: "Дело добавлено в календарь", update: "Дело изменено", delete: "Дело удалено из календаря" }[kind];
+    var foot = cardFooter(msg, a, done, "Отменено, календарь не изменился", kind === "delete" ? null : function () { openCalendarDay(e.date); });
+    if (foot) kids.push(foot);
+    else {
       var busy = a.status === "busy";
       kids.push(h("div", { class: "act-buttons" },
-        h("button", { type: "button", class: "btn " + (adding ? "btn-primary" : "btn-danger"), disabled: busy, onclick: function () { decide(msg, a, true); } },
-          busy ? "Секунду…" : adding ? "Добавить" : "Удалить"),
+        h("button", { type: "button", class: "btn " + (kind === "delete" ? "btn-danger" : "btn-primary"), disabled: busy, onclick: function () { decide(msg, a, true); } },
+          busy ? "Секунду…" : { add: "Добавить", update: "Изменить", delete: "Удалить" }[kind]),
         h("button", { type: "button", class: "btn btn-ghost", disabled: busy, onclick: function () { decide(msg, a, false); } }, "Отмена")));
     }
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
   function actionCard(msg, a) {
-    if (a.kind === "calendar-add" || a.kind === "calendar-delete") return calendarCard(msg, a);
+    if (/^calendar-/.test(a.kind)) return calendarCard(msg, a);
     var cat = categoryOf(a.category);
     var kids = [
       h("div", { class: "act-head" }, icon("spark"), h("span", { text: "Создать промт «" + a.title + "»?" })),
       h("div", { class: "act-meta" }, h("span", { class: "chip " + catClass(a.category) }, cat ? cat.label : a.category || "Без типа")),
       h("div", { class: "act-text", text: a.text })
     ];
-    if (a.status === "done") {
-      kids.push(h("div", { class: "act-done" }, icon("check"), h("span", { text: "Промт сохранён в таблицу" }),
-        h("button", { type: "button", class: "link-btn", onclick: function () { setPage("prompts"); } }, "Открыть «Промты»")));
-    } else if (a.status === "canceled") {
-      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Отменено, ничего не сохранено" })));
-    } else if (a.status === "stale") {
-      kids.push(h("div", { class: "act-done off" }, h("span", { text: "Карточка устарела. Попросите ассистента ещё раз, если промт нужен" })));
-    } else {
+    var foot = cardFooter(msg, a, "Промт сохранён в таблицу", "Отменено, ничего не сохранено", function () { setPage("prompts"); });
+    if (foot) kids.push(foot);
+    else {
       var busy = a.status === "busy";
       kids.push(h("div", { class: "act-buttons" },
         h("button", { type: "button", class: "btn btn-primary", disabled: busy, onclick: function () { decide(msg, a, true); } }, busy ? "Сохраняю…" : "Создать"),
@@ -1488,9 +1783,18 @@
       if (r && accept) {
         render();
         if (a.kind === "calendar-add") toast("Дело «" + a.title + "» добавлено в календарь");
+        else if (a.kind === "calendar-update") toast("Дело «" + a.title + "» изменено");
         else if (a.kind === "calendar-delete") toast("Дело «" + a.title + "» удалено");
         else toast("Промт «" + a.title + "» добавлен");
       }
+      renderActions(msg);
+      persist();
+    });
+  }
+  function undoAction(msg, a) {
+    call(api.assistantUndo(a.id)).then(function (r) {
+      a.undoable = false;
+      if (r) { a.status = "undone"; render(); toast("Отменено"); }
       renderActions(msg);
       persist();
     });
@@ -1535,9 +1839,11 @@
   function cardOutcome(a) {
     var e = a.event || {};
     var what = a.kind === "calendar-add" ? "Добавить в календарь «" + e.title + "» " + e.date + " " + timeRange(e)
+      : a.kind === "calendar-update" ? "Изменить дело «" + e.title + "»: теперь " + e.date + " " + timeRange(e)
       : a.kind === "calendar-delete" ? "Удалить из календаря «" + e.title + "» " + e.date + " " + timeRange(e)
       : "Создать промт «" + a.title + "»";
-    var how = a.status === "done" ? "пользователь подтвердил, сделано" : a.status === "canceled" ? "пользователь отменил" : "пользователь не ответил";
+    var how = a.status === "done" ? "сделано" : a.status === "canceled" ? "пользователь отменил" : a.status === "undone" ? "сделано, но пользователь отменил"
+      : a.status === "failed" ? "не получилось" : "пользователь не ответил";
     return "[Карточка: " + what + " — " + how + "]";
   }
   function history() {
@@ -1603,8 +1909,9 @@
       var out = { role: m.role, text: m.text };
       if (m.note) out.note = m.note;
       if (m.failed) out.failed = true;
+      if (m.cost) out.cost = m.cost;
       if (m.actions && m.actions.length) out.actions = m.actions.map(function (a) {
-        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, status: a.status === "busy" ? null : a.status };
+        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev };
       });
       return out;
     });
@@ -1662,6 +1969,7 @@
         if (m.role !== "assistant") return;
         msg.note = m.note || "";
         msg.failed = !!m.failed;
+        msg.cost = m.cost || 0;
         msg.actions = (m.actions || []).map(function (a) { return Object.assign({}, a); });
         renderBody(msg);
         renderActions(msg);
@@ -1716,9 +2024,13 @@
     if (!msg || e.id !== chat.streamId) return;   // an answer that was stopped or belongs to an old conversation
     follow(function () {
       if (e.kind === "delta") { msg.text += e.text || ""; renderBody(msg); }
-      else if (e.kind === "action" && e.action) { msg.actions.push(Object.assign({ status: null }, e.action)); renderActions(msg); }
-      else if (e.kind === "done") finish(msg);
-      else if (e.kind === "error") finish(msg, e.error || "Ассистент не ответил. Попробуйте ещё раз.", true);
+      else if (e.kind === "action" && e.action) {
+        msg.actions.push(Object.assign({ status: null }, e.action));
+        if (e.data) { applyData(e.data); render(); }
+        renderActions(msg);
+      }
+      else if (e.kind === "done") { msg.cost = e.cost || 0; finish(msg); }
+      else if (e.kind === "error") { msg.cost = e.cost || 0; finish(msg, e.error || "Ассистент не ответил. Попробуйте ещё раз.", true); }
     });
     if ((e.kind === "done" || e.kind === "error") && e.assistant && state.info) {
       state.info.assistant = e.assistant;
@@ -1736,6 +2048,7 @@
     var t = els.chatInput;
     t.style.height = "auto";
     t.style.height = Math.min(t.scrollHeight + 2, 220) + "px";
+    updateCostHint();
   }
   els.chatIdeas.replaceChildren.apply(els.chatIdeas, IDEAS.map(function (idea) {
     return h("button", { type: "button", class: "fchip", onclick: function () { sendChat(idea); } }, idea);
@@ -1773,12 +2086,13 @@
     { id: "claude-haiku-5-5", provider: "anthropic", name: "Claude Haiku 5.5", short: "Haiku 5.5", text: "Быстрая и примерно в 40 раз дешевле Opus" }
   ];
   // How long the model thinks before answering (reasoning effort in the API). Deeper is slower and costs more.
+  // out: how many tokens an answer usually takes at this level, thinking included (for the price estimate).
   var EFFORTS = [
-    { id: "low", name: "Быстро", text: "Отвечает сразу, почти не раздумывая. Дешевле всего" },
-    { id: "medium", name: "Средне", text: "Подходит для большинства задач" },
-    { id: "high", name: "Глубоко", text: "Дольше думает: для сложных промтов и разборов" },
-    { id: "xhigh", name: "Очень глубоко", text: "Ещё дольше и дороже" },
-    { id: "max", name: "Максимум", text: "Думает, сколько нужно. Самый медленный и дорогой" }
+    { id: "low", name: "Быстро", text: "Почти не раздумывает, дешевле всего", out: 500 },
+    { id: "medium", name: "Средне", text: "Подходит для большинства задач", badge: "Рекомендуется", out: 1500 },
+    { id: "high", name: "Глубоко", text: "Для сложных промтов и разборов", out: 3500 },
+    { id: "xhigh", name: "Очень глубоко", text: "Дольше и дороже", warn: "≈2× дороже", out: 7000 },
+    { id: "max", name: "Максимум", text: "Самый медленный и дорогой", warn: "3–5× дороже", out: 12000 }
   ];
   function byId(list, id) { return list.find(function (x) { return x.id === id; }) || null; }
   function assistantState() { return (state.info && state.info.assistant) || { keys: {} }; }
@@ -1803,6 +2117,12 @@
     c.input.focus({ preventScroll: true });
   }
 
+  // The price of one answer: they are often fractions of a cent.
+  function fmtCost(n) {
+    if (!(n > 0)) return "$0";
+    if (n < 0.001) return "меньше $0.001";
+    return "$" + (n < 0.1 ? n.toFixed(3) : n.toFixed(2));
+  }
   function fmtUsd(n) {
     if (!(n > 0)) return "$0";
     if (n < 0.01) return "меньше $0.01";
@@ -1818,8 +2138,10 @@
     els.chatMeta.textContent = a.hasKey ? "Отвечает " + (model ? model.name : a.model) +
       (sp && sp.left !== null ? " · на счёте осталось примерно " + fmtUsd(sp.left) : "") + "." : "";
     els.setNotify.checked = a.notify !== false;
-    els.modelBtnText.textContent = (model ? model.short : a.model) + " · " + (effort ? effort.name : a.effort);
+    els.setConfirm.checked = a.confirm !== false;
+    els.modelBtnText.textContent = a.hasKey ? (model ? model.short : a.model) + " · " + (effort ? effort.name : a.effort) : "Заглушка · " + (effort ? effort.name : a.effort);
     if (!els.modelMenu.hidden) renderModelMenu();
+    updateCostHint();
     keyCards.forEach(function (c) {
       var has = !!a.keys[c.provider];
       c.status.textContent = has ? "Ключ сохранён" : "Ключа нет";
@@ -1836,40 +2158,53 @@
   }
 
   /* ---------- "Модель" button in the message box ---------- */
-  function modelOption(kind, item, checked, disabled) {
-    return h("button", { type: "button", class: "mm-item" + (disabled ? " off" : ""), role: "menuitemradio", "aria-checked": String(checked),
-      "aria-disabled": disabled ? "true" : null,
-      onclick: function () {
-        if (disabled) { setModelMenu(false); goToKey(item.provider); return; }
-        pickOption(kind, item);
-      } },
-      h("span", { class: "mm-text" }, h("span", { class: "mm-name", text: item.name }),
-        h("span", { class: "mm-sub", text: disabled ? "Нужен ключ " + PROVIDERS[item.provider].owner + ": добавьте его в «Настройках»" : item.text })),
+  var effortOpen = false;
+  function modelOption(item, checked, onpick) {
+    return h("button", { type: "button", class: "mm-item", role: "menuitemradio", "aria-checked": String(checked), onclick: onpick },
+      h("span", { class: "mm-text" },
+        h("span", { class: "mm-name" }, item.name,
+          item.badge ? h("span", { class: "mm-badge", text: item.badge }) : null,
+          item.warn ? h("span", { class: "mm-warn", text: item.warn }) : null),
+        h("span", { class: "mm-sub", text: item.text })),
       h("span", { class: "mm-tick", html: ICONS.check, "aria-hidden": "true" }));
   }
   function renderModelMenu() {
     var a = assistantState();
     var kids = [];
     if (!a.hasKey) {
-      kids.push(h("div", { class: "mm-note" }, "Сейчас отвечает заглушка. Выбор заработает, когда добавите ключ ChatGPT или Claude. ",
+      kids.push(h("div", { class: "mm-note" }, "Сейчас отвечает заглушка. Модели появятся здесь, когда добавите ключ ChatGPT или Claude. ",
         h("button", { type: "button", class: "link-btn", onclick: function () { setModelMenu(false); goToKey("openai"); } }, "Подключить")));
     }
-    Object.keys(PROVIDERS).forEach(function (pr, i) {
+    // Only the services with a saved key.
+    Object.keys(PROVIDERS).filter(hasKeyFor).forEach(function (pr, i) {
       if (i) kids.push(h("hr"));
       kids.push(h("div", { class: "mm-label", text: PROVIDERS[pr].name }));
       MODELS.filter(function (m) { return m.provider === pr; }).forEach(function (m) {
-        kids.push(modelOption("model", m, a.hasKey && m.id === a.model, a.hasKey && !hasKeyFor(pr)));
+        kids.push(modelOption(m, m.id === a.model, function () { pickOption("model", m); }));
       });
     });
-    kids.push(h("hr"), h("div", { class: "mm-label", text: "Размышления" }));
-    EFFORTS.forEach(function (e) { kids.push(modelOption("effort", e, e.id === a.effort, false)); });
+    var effort = byId(EFFORTS, a.effort) || EFFORTS[1];
+    if (kids.length) kids.push(h("hr"));
+    var list = h("div", { class: "menu submenu mm-efforts", role: "menu", "aria-label": "Размышления" },
+      EFFORTS.map(function (e) { return modelOption(e, e.id === a.effort, function () { pickOption("effort", e); }); }));
+    var row = h("button", { type: "button", class: "mm-item has-sub", "aria-haspopup": "true", "aria-expanded": String(effortOpen),
+      onclick: function () { effortOpen = !effortOpen; wrap.classList.toggle("open", effortOpen); row.setAttribute("aria-expanded", String(effortOpen)); if (effortOpen) focusEffort(); } },
+      h("span", { class: "mm-text" }, h("span", { class: "mm-name", text: "Размышления" })),
+      h("span", { class: "sub-value", text: effort.name }),
+      h("span", { class: "sub-chev", html: ICONS.right, "aria-hidden": "true" }));
+    var wrap = h("div", { class: "sub-wrap" + (effortOpen ? " open" : "") }, row, list);
+    wrap.addEventListener("mouseenter", function () { effortOpen = true; wrap.classList.add("open"); row.setAttribute("aria-expanded", "true"); });
+    wrap.addEventListener("mouseleave", function () { if (wrap.contains(document.activeElement) && document.activeElement !== row) return; effortOpen = false; wrap.classList.remove("open"); row.setAttribute("aria-expanded", "false"); });
+    kids.push(wrap);
     els.modelMenu.replaceChildren.apply(els.modelMenu, kids);
   }
+  function focusEffort() { var f = els.modelMenu.querySelector('.mm-efforts [aria-checked="true"]') || els.modelMenu.querySelector(".mm-efforts button"); if (f) f.focus(); }
   function setModelMenu(open) {
+    if (!open) effortOpen = false;
     if (open) renderModelMenu();
     els.modelMenu.hidden = !open;
     els.modelBtn.setAttribute("aria-expanded", String(open));
-    if (open) { var c = els.modelMenu.querySelector('[aria-checked="true"]') || els.modelMenu.querySelector(".mm-item"); if (c) c.focus(); }
+    if (open) { var c = els.modelMenu.querySelector(':scope > .mm-item[aria-checked="true"]') || els.modelMenu.querySelector(".mm-item"); if (c) c.focus(); }
   }
   // The menu stays open, so model and thinking can be picked one after the other, like in Claude.
   function pickOption(kind, item) {
@@ -1879,8 +2214,9 @@
       if (!r) return;
       renderAssistantSettings();
       renderModelMenu();
-      var f = els.modelMenu.querySelectorAll(".mm-item");
-      for (var i = 0; i < f.length; i++) if (f[i].querySelector(".mm-name").textContent === item.name) f[i].focus();
+      updateCostHint();
+      var f = Array.prototype.find.call(els.modelMenu.querySelectorAll(".mm-item"), function (b) { var n = b.querySelector(".mm-name"); return n && n.firstChild && n.firstChild.textContent === item.name; });
+      if (f) f.focus();
     });
   }
   els.modelBtn.addEventListener("click", function () { setModelMenu(els.modelMenu.hidden); });
@@ -1888,12 +2224,34 @@
     if (!els.modelMenu.hidden && !els.modelMenu.contains(e.target) && !els.modelBtn.contains(e.target)) setModelMenu(false);
   });
   els.modelMenu.addEventListener("keydown", function (e) {
-    var items = Array.prototype.slice.call(els.modelMenu.querySelectorAll(".mm-item"));
+    var inList = document.activeElement && document.activeElement.closest(".mm-efforts");
+    var items = Array.prototype.slice.call(els.modelMenu.querySelectorAll(inList ? ".mm-efforts .mm-item" : ":scope > .mm-item, :scope > .sub-wrap > .mm-item"));
     var i = items.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setModelMenu(false); els.modelBtn.focus(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+    else if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); document.activeElement.click(); }
+    else if (e.key === "ArrowLeft" && inList) { e.preventDefault(); effortOpen = false; var w = inList.closest(".sub-wrap"); w.classList.remove("open"); w.querySelector(".has-sub").focus(); }
   });
+
+  /* ---------- price estimate before sending ---------- */
+  // A rough guess from the length of the conversation (about 3 characters per token for Russian text) and the
+  // usual length of an answer at the chosen thinking level. The exact price appears under the answer.
+  function estimateCost() {
+    var a = assistantState();
+    if (!a.hasKey || !a.prices) return 0;
+    var price = a.prices[a.model], effort = byId(EFFORTS, a.effort) || EFFORTS[1];
+    if (!price) return 0;
+    var chars = (a.fixedChars || 0) + els.chatInput.value.length;
+    chat.messages.forEach(function (m) { chars += (m.text || "").length; });
+    return (chars / 3 * price.input + effort.out * price.output) / 1e6;
+  }
+  function updateCostHint() {
+    var n = estimateCost();
+    els.chatCost.hidden = !(n > 0);
+    els.chatCost.textContent = n > 0 ? "≈ " + fmtCost(n) + " за ответ" : "";
+  }
+  els.chatInput.addEventListener("input", updateCostHint);
 
   keyCards.forEach(function (c) {
     var name = PROVIDERS[c.provider].name;
@@ -1940,6 +2298,9 @@
       }, function () { c.balMsg.textContent = "Не получилось сохранить."; });
     });
     c.balInput.addEventListener("input", function () { c.balMsg.textContent = ""; });
+  });
+  els.setConfirm.addEventListener("change", function () {
+    call(api.setConfirm(els.setConfirm.checked)).then(function (r) { if (r) renderAssistantSettings(); });
   });
   els.setNotify.addEventListener("change", function () {
     call(api.setNotify(els.setNotify.checked)).then(function (r) { if (r) renderAssistantSettings(); });
@@ -2026,7 +2387,7 @@
   els.fTitle.addEventListener("input", function () { if (els.formMsg.textContent) setMsg(""); });
   els.search.addEventListener("input", function () { state.query = els.search.value; render(); });
   document.addEventListener("keydown", function (e) {
-    if (els.viewer.open || els.profileDlg.open) return;
+    if (els.viewer.open || els.profileDlg.open || els.calDialog.open) return;
     var mod = e.ctrlKey || e.metaKey;
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();

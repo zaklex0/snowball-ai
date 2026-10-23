@@ -12,7 +12,9 @@ const APP_TITLE = 'Snowball.ai';
 const LEGACY_TITLES = ['Промты Snowball.ai', 'Промты VideoSmile'];
 const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 36;
-const THEMES = ['system', 'light', 'dark'];
+// "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
+const THEMES = ['system', 'light', 'dark', 'white', 'black'];
+const MODES = ['base', 'gen'];   // "Моя база данных" and "Генератор"
 
 // Prompts a fresh install starts with (only when the data folder has no prompts.json yet).
 // Empty for now; example prompts for each type can go here later.
@@ -109,16 +111,25 @@ async function openStore() {
 
 /* ---------- window ---------- */
 // 'system' follows Windows; the page's prefers-color-scheme and the title bar follow this too.
+function currentTheme() { return THEMES.includes(settings.theme) ? settings.theme : 'system'; }
 function applyTheme() {
-  nativeTheme.themeSource = THEMES.includes(settings.theme) ? settings.theme : 'system';
+  const t = currentTheme();
+  nativeTheme.themeSource = t === 'black' ? 'dark' : t === 'white' ? 'light' : t;
 }
 
-function overlayColors() {
-  return nativeTheme.shouldUseDarkColors
-    ? { color: '#2C201B', symbolColor: '#F5E6DC', height: TITLEBAR_HEIGHT }
-    : { color: '#F9E3D4', symbolColor: '#4B3128', height: TITLEBAR_HEIGHT };
+// Title bar and window background for each theme (the page draws the rest).
+const WINDOW_COLORS = {
+  light: { bar: '#F9E3D4', symbol: '#4B3128', bg: '#FCEEE4' },
+  dark: { bar: '#2C201B', symbol: '#F5E6DC', bg: '#251B17' },
+  white: { bar: '#F7F7F8', symbol: '#1F1F23', bg: '#FFFFFF' },
+  black: { bar: '#000000', symbol: '#F2F2F2', bg: '#000000' }
+};
+function windowColors() {
+  const t = currentTheme();
+  return WINDOW_COLORS[t === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : t];
 }
-function bgColor() { return nativeTheme.shouldUseDarkColors ? '#251B17' : '#FCEEE4'; }
+function overlayColors() { const c = windowColors(); return { color: c.bar, symbolColor: c.symbol, height: TITLEBAR_HEIGHT }; }
+function bgColor() { return windowColors().bg; }
 
 function visibleBounds(b) {
   if (!b || !b.width || !b.height) return null;
@@ -274,7 +285,7 @@ function handle(name, fn) {
   });
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: nativeTheme.themeSource, assistant: assistantInfo() };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), mode: MODES.includes(settings.mode) ? settings.mode : 'base', assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -375,6 +386,18 @@ handle('set-theme', async (theme) => {
   if (!THEMES.includes(theme)) return { ok: false, error: 'Такой темы нет.' };
   settings.theme = theme;
   applyTheme();
+  // nativeTheme fires 'updated' only when light/dark flips; "Тёмная" -> "Чёрная" needs the bar repainted too.
+  if (win && !win.isDestroyed()) {
+    win.setBackgroundColor(bgColor());
+    if (IS_WIN) { try { win.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } }
+  }
+  saveSettings();
+  return { ok: true, info: info() };
+});
+
+handle('set-mode', async (mode) => {
+  if (!MODES.includes(mode)) return { ok: false, error: 'Такого режима нет.' };
+  settings.mode = mode;
   saveSettings();
   return { ok: true, info: info() };
 });
@@ -544,7 +567,7 @@ function stubCalendar(text, t) {
     const words = t.split(/[^a-zа-яё0-9]+/i).filter((w) => w.length >= 4 && !/^(удали|убери|отмени|календар|завтра|сегодня|послезавтра)/.test(w)).map((w) => w.slice(0, Math.max(4, w.length - 2)));
     const hit = store.calendarView().find((e) => (!date || e.date === date) && words.some((w) => e.title.toLowerCase().includes(w)));
     if (!hit) return { text: 'Не нашёл такого дела в календаре. Напишите точнее: что и в какой день.' };
-    return { text: 'Нашёл это дело. Удалить его? Без вашей кнопки ничего не удалится.', action: { kind: 'calendar-delete', title: hit.title, event: hit } };
+    return { text: settings.confirm === false ? 'Удалил это дело.' : 'Нашёл это дело. Удалить его? Без вашей кнопки ничего не удалится.', action: { kind: 'calendar-delete', title: hit.title, event: hit } };
   }
   const tm = /(?:^|\s)в\s+(\d{1,2})(?::(\d{2}))?/.exec(t);   // \b does not work next to Russian letters
   if (/(что|какие).*(дел|план|календар|стоит)|календар.*(что|покажи)|что у меня/.test(t) && !tm) {
@@ -562,8 +585,9 @@ function stubCalendar(text, t) {
   let title = text.replace(/^(пожалуйста\s+)?(поставь|добавь|запиши|запланируй|напомни|создай)(\s+мне)?\s+/i, '')
     .replace(/\s*(в\s+календарь|на\s+(сегодня|завтра|послезавтра)|(на\s+)?\d{1,2}\s+[а-яё]+|(на\s+)?\d{1,2}\.\d{1,2}|сегодня|завтра|послезавтра|в\s+\d{1,2}(:\d{2})?)\s*/gi, ' ').trim();
   title = title ? title.charAt(0).toUpperCase() + title.slice(1) : 'Новое дело';
-  const event = normalizeEvent({ date, from, title, kind, remind: /напомни/.test(t) ? 15 : 0 });
-  return { text: 'Вот что я поставлю. Проверьте и нажмите **«Добавить»**: без вашего подтверждения календарь не меняется.', action: { kind: 'calendar-add', title: event.title, event } };
+  const kind2 = /съёмк|съемк|снять|снимаем/.test(t) ? 'shoot' : /монтаж/.test(t) ? 'edit' : kind;
+  const event = normalizeEvent({ date, from, title, kind: kind2, remind: /без напомин/.test(t) ? 0 : 60 });
+  return { text: (settings.confirm === false ? 'Поставил.' : 'Вот что я поставлю. Проверьте и нажмите **«Добавить»**.') + ' Напомню за час, время напоминания можно поменять.', action: { kind: 'calendar-add', title: event.title, event } };
 }
 
 function stubAnswer(last) {
@@ -659,7 +683,9 @@ const SYSTEM_PROMPT = [
   'Сам промт пиши на том языке, который лучше понимает нужная нейросеть (обычно английский). Каждый готовый промт помещай в отдельный блок кода ```, чтобы его можно было скопировать одной кнопкой.',
   'Если не хватает важной детали (для какой нейросети, картинка или видео, соотношение сторон), сначала предложи вариант, а потом коротко спроси.',
   'Из разметки используй только абзацы, списки, **жирный** и блоки кода. Таблицы не используй: программа их не показывает.',
-  'У пользователя в программе есть календарь, и ты можешь с ним работать: calendar_list показывает дела за период, calendar_add и calendar_delete предлагают добавить или удалить дело. Добавление и удаление происходят, только когда пользователь нажмёт кнопку на карточке, поэтому пиши «предлагаю добавить, подтвердите», а не «добавил». Перед удалением найди дело через calendar_list и передай его id. Если время окончания не названо, оставь to пустым. Напоминание ставь, только если о нём просят, иначе 0. Тип: task — задача, meet — встреча, call — звонок. Даты считай от текущего момента из строки «Сейчас».',
+  'У пользователя в программе есть календарь, и ты можешь с ним работать: calendar_list показывает дела за период, calendar_add добавляет дело, calendar_update меняет или переносит существующее, calendar_delete удаляет. Результат вызова говорит, сделано ли изменение сразу или пользователь должен подтвердить его кнопкой на карточке: пиши в ответе именно так, как там сказано. Чтобы перенести или изменить дело, найди его через calendar_list и вызови calendar_update с его id (не удаляй и не создавай заново). Перед удалением тоже найди id через calendar_list.',
+  'Название дела — только суть, 2–5 слов, без слова, обозначающего тип (созвон, звонок, встреча, съёмка, монтаж — тип и так виден по цвету), и без служебных слов. Например, «на завтра забей созвон на 14:00 с Димой по поводу правок по монтажу видео на ютуб» → название «Дима, правки монтажа YouTube», тип call. Важные подробности можно положить в note. Тип: task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж. Если время окончания не названо, оставь to пустым.',
+  'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
 
@@ -678,7 +704,7 @@ const TOOLS = [
   },
   {
     name: 'calendar_add',
-    description: 'Предлагает добавить дело в календарь. Пользователь увидит карточку и сам нажмёт «Добавить» или «Отмена»; до этого ничего не сохраняется.',
+    description: 'Добавляет дело в календарь (или показывает пользователю карточку для подтверждения — это скажет результат).',
     parameters: {
       type: 'object', additionalProperties: false, required: ['date', 'from', 'to', 'title', 'kind', 'note', 'remind'],
       properties: {
@@ -686,15 +712,32 @@ const TOOLS = [
         from: { type: 'string', description: 'Начало, HH:MM (24 часа)' },
         to: { type: 'string', description: 'Окончание, HH:MM, или пустая строка, если не названо' },
         title: { type: 'string', description: 'Коротко, что за дело' },
-        kind: { type: 'string', enum: ['task', 'meet', 'call'], description: 'task — задача, meet — встреча, call — звонок' },
-        note: { type: 'string', description: 'Заметка или пустая строка' },
-        remind: { type: 'integer', enum: [0, 15, 30, 60, 1440], description: 'За сколько минут напомнить, 0 — не напоминать' }
+        kind: { type: 'string', enum: ['task', 'meet', 'call', 'shoot', 'edit'], description: 'task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж' },
+        note: { type: 'string', description: 'Подробности или пустая строка' },
+        remind: { type: 'integer', enum: [0, 15, 30, 60, 1440], description: 'За сколько минут напомнить. Если не сказано — 60, «без напоминания» — 0' }
+      }
+    }
+  },
+  {
+    name: 'calendar_update',
+    description: 'Меняет существующее дело: перенос на другой день или время, новое название, тип, заметка, напоминание. Передай все поля; то, что не меняется, — как было в calendar_list.',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['id', 'date', 'from', 'to', 'title', 'kind', 'note', 'remind'],
+      properties: {
+        id: { type: 'string', description: 'id дела из calendar_list' },
+        date: { type: 'string', description: 'День, YYYY-MM-DD' },
+        from: { type: 'string', description: 'Начало, HH:MM' },
+        to: { type: 'string', description: 'Окончание, HH:MM, или пустая строка' },
+        title: { type: 'string', description: 'Коротко, суть дела' },
+        kind: { type: 'string', enum: ['task', 'meet', 'call', 'shoot', 'edit'] },
+        note: { type: 'string', description: 'Подробности или пустая строка' },
+        remind: { type: 'integer', enum: [0, 15, 30, 60, 1440] }
       }
     }
   },
   {
     name: 'calendar_delete',
-    description: 'Предлагает удалить дело из календаря. Пользователь подтверждает удаление кнопкой на карточке.',
+    description: 'Удаляет дело из календаря (или показывает карточку для подтверждения — это скажет результат).',
     parameters: {
       type: 'object', additionalProperties: false, required: ['id'],
       properties: { id: { type: 'string', description: 'id дела из calendar_list' } }
@@ -704,29 +747,34 @@ const TOOLS = [
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 // Runs one tool call: { output } goes back to the model, { action } becomes a card in the chat.
+// With confirmations off the card is applied by runAssistant before the model continues, so the output says "сделано".
 function runTool(name, input) {
   const a = input && typeof input === 'object' ? input : {};
+  const auto = settings.confirm === false;
+  const after = (what) => auto ? what + ' Сделано. Пользователь может отменить это кнопкой на карточке.' : 'Пользователю показана карточка «' + what + '». Изменение произойдёт, только если он нажмёт кнопку. Коротко попроси подтвердить.';
   if (name === 'calendar_list') {
     if (!DATE_ONLY.test(a.from || '') || !DATE_ONLY.test(a.to || '')) return { output: 'Ошибка: from и to должны быть датами YYYY-MM-DD.', error: true };
     const list = store.calendarView().filter((e) => e.date >= a.from && e.date <= a.to).slice(0, 200)
       .map((e) => ({ id: e.id, date: e.date, from: e.from, to: e.to, title: e.title, kind: e.kind, note: e.note, remind: e.remind }));
     return { output: list.length ? JSON.stringify(list) : 'В этот период дел нет.' };
   }
+  const fields = () => ({ date: a.date, from: a.from, to: a.to, title: a.title, kind: a.kind, note: a.note, remind: a.remind });
   if (name === 'calendar_add') {
-    const event = DATE_ONLY.test(a.date || '') ? normalizeEvent({ date: a.date, from: a.from, to: a.to, title: a.title, kind: a.kind, note: a.note, remind: a.remind }) : null;
+    const event = DATE_ONLY.test(a.date || '') ? normalizeEvent(fields()) : null;
     if (!event) return { output: 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.', error: true };
-    return {
-      output: 'Пользователю показана карточка «Добавить в календарь: ' + eventLine(event) + '». Дело появится, только если он нажмёт «Добавить». Коротко попроси подтвердить.',
-      action: { kind: 'calendar-add', title: event.title, event }
-    };
+    return { output: after('Добавить в календарь: ' + eventLine(event)), action: { kind: 'calendar-add', title: event.title, event } };
+  }
+  if (name === 'calendar_update') {
+    const prev = store.findEvent(String(a.id || ''));
+    if (!prev) return { output: 'Дела с таким id нет. Найди его через calendar_list.', error: true };
+    const event = DATE_ONLY.test(a.date || '') ? normalizeEvent(Object.assign(fields(), { id: prev.id })) : null;
+    if (!event) return { output: 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.', error: true };
+    return { output: after('Изменить в календаре: ' + eventLine(prev) + ' → ' + eventLine(event)), action: { kind: 'calendar-update', title: event.title, event, prev } };
   }
   if (name === 'calendar_delete') {
     const event = store.findEvent(String(a.id || ''));
     if (!event) return { output: 'Дела с таким id нет. Найди его через calendar_list.', error: true };
-    return {
-      output: 'Пользователю показана карточка «Удалить из календаря: ' + eventLine(event) + '». Дело удалится, только если он нажмёт «Удалить».',
-      action: { kind: 'calendar-delete', title: event.title, event }
-    };
+    return { output: after('Удалить из календаря: ' + eventLine(event)), action: { kind: 'calendar-delete', title: event.title, event } };
   }
   return { output: 'Такого инструмента нет.', error: true };
 }
@@ -765,12 +813,15 @@ function spendOf(provider) {
   return sp;
 }
 // usage: { input, cached, cacheWrite, output } in tokens; input is the part billed at the full price.
-function recordSpend(model, usage) {
+// What one answer cost so far, by the signal of its stream (an answer can be several requests when tools are used).
+const runCost = new WeakMap();
+function recordSpend(model, usage, signal) {
   const price = PRICES[model.id];
   if (!price || !usage) return;
   const usd = ((usage.input || 0) * price.input + (usage.cached || 0) * price.cached +
     (usage.cacheWrite || 0) * (price.cacheWrite || price.input) + (usage.output || 0) * price.output) / 1e6;
   if (!(usd > 0)) return;
+  if (signal) runCost.set(signal, (runCost.get(signal) || 0) + usd);
   const sp = spendOf(model.provider);
   sp.monthUsd += usd;
   sp.sinceUsd += usd;
@@ -798,7 +849,8 @@ function assistantInfo() {
     hasKey: !!(keys.openai || keys.anthropic),
     keys: { openai: !!keys.openai, anthropic: !!keys.anthropic },
     model: currentModel().id, effort: currentEffort(), models: MODELS, efforts: EFFORTS,
-    spend: spendInfo(), notify: settings.notify !== false
+    spend: spendInfo(), notify: settings.notify !== false, confirm: settings.confirm !== false,
+    prices: PRICES, fixedChars: SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + 200
   };
 }
 
@@ -870,9 +922,9 @@ async function* openaiSource(model, messages, signal) {
       if (event.type === 'response.output_item.added' && event.item && event.item.type === 'message' && wrote) yield { type: 'text', text: '\n\n' };
       else if (event.type === 'response.output_text.delta' && event.delta) { wrote = true; yield { type: 'text', text: event.delta }; }
       else if (event.type === 'response.refusal.delta') refused = true;
-      else if (event.type === 'response.completed') { final = event.response; recordSpend(model, openaiUsage(event.response)); }
+      else if (event.type === 'response.completed') { final = event.response; recordSpend(model, openaiUsage(event.response), signal); }
       else if (event.type === 'response.incomplete') {
-        recordSpend(model, openaiUsage(event.response));
+        recordSpend(model, openaiUsage(event.response), signal);
         const reason = event.response && event.response.incomplete_details && event.response.incomplete_details.reason;
         if (reason === 'content_filter') throw userError('ChatGPT отказался отвечать на этот запрос. Попробуйте сформулировать иначе.');
         throw userError('Ответ получился слишком длинным и оборвался. Попросите продолжить или сократить.');
@@ -927,7 +979,7 @@ async function* claudeSource(model, messages, signal) {
     }
     const final = await stream.finalMessage();
     const u = final.usage || {};
-    recordSpend(model, { input: u.input_tokens || 0, cached: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0, output: u.output_tokens || 0 });
+    recordSpend(model, { input: u.input_tokens || 0, cached: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0, output: u.output_tokens || 0 }, signal);
     if (final.stop_reason === 'refusal') throw userError('Claude отказался отвечать на этот запрос. Попробуйте сформулировать иначе.');
     if (final.stop_reason === 'max_tokens') throw userError('Ответ получился слишком длинным и оборвался. Попросите продолжить или сократить.');
     if (final.stop_reason !== 'tool_use') return;
@@ -989,12 +1041,26 @@ async function runAssistant(id, messages, controller) {
       if (piece.type === 'text') { full += piece.text; sendAssistant({ id, kind: 'delta', text: piece.text }); }
       else if (piece.type === 'action') {
         const action = Object.assign({ id: 'a' + (++actionSeq) }, piece.action);
+        let data = null;
+        if (settings.confirm === false) {
+          // No confirmation wanted: make the change now and keep what is needed for "Отменить".
+          try {
+            const r = await applyAction(action);
+            action.undo = r.undo;
+            action.status = 'done';
+            data = ok(r.extra);
+          } catch (e) {
+            action.status = 'failed';
+            action.error = e.userMessage || 'Не получилось.';
+          }
+        }
         pending.set(action.id, action);
-        sendAssistant({ id, kind: 'action', action });
+        const shown = Object.assign({}, action, { undo: undefined, undoable: !!action.undo });
+        sendAssistant({ id, kind: 'action', action: shown, data });
       }
     }
     if (!controller.signal.aborted) {
-      sendAssistant({ id, kind: 'done', assistant: assistantInfo() });
+      sendAssistant({ id, kind: 'done', assistant: assistantInfo(), cost: runCost.get(controller.signal) || 0 });
       notifyAnswer(full, false);
     }
   } catch (e) {
@@ -1003,7 +1069,7 @@ async function runAssistant(id, messages, controller) {
       if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('assistant', e.status, e.code || e.type);
       else if (!e.userMessage) console.error('assistant', e);
       const error = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
-      sendAssistant({ id, kind: 'error', error, assistant: assistantInfo() });
+      sendAssistant({ id, kind: 'error', error, assistant: assistantInfo(), cost: runCost.get(controller.signal) || 0 });
       notifyAnswer(error, true);
     }
   } finally {
@@ -1020,6 +1086,7 @@ handle('assistant-send', async (messages) => {
   const id = ++streamSeq;
   const controller = new AbortController();
   streams.set(id, controller);
+  store.recordAssistant();
   runAssistant(id, list, controller);
   return { ok: true, id };
 });
@@ -1087,26 +1154,49 @@ handle('assistant-reset', async () => {
   return { ok: true };
 });
 
-// The user pressed "Создать" (accept) or "Отмена" on a card the assistant suggested.
+// Makes the change a card describes. Returns what is needed to undo it.
+async function applyAction(action) {
+  if (action.kind === 'create-prompt') {
+    const r = await store.savePrompt({ item: { title: action.title, type: action.category, text: action.text } });
+    return { undo: { promptId: r.id }, extra: r };
+  }
+  if (action.kind === 'calendar-add') {
+    const ev = await store.saveEvent(Object.assign({}, action.event, { id: undefined }));
+    return { undo: { eventId: ev.id }, extra: { eventId: ev.id, date: ev.date } };
+  }
+  if (action.kind === 'calendar-update') {
+    if (!store.findEvent(action.prev.id)) throw userError('Этого дела уже нет в календаре.');
+    const ev = await store.saveEvent(Object.assign({}, action.event, { id: action.prev.id }));
+    return { undo: { restore: action.prev }, extra: { date: ev.date } };
+  }
+  if (action.kind === 'calendar-delete') {
+    const gone = await store.deleteEvent(action.event.id);
+    if (!gone) throw userError('Этого дела уже нет в календаре.');
+    return { undo: { restore: gone }, extra: { date: gone.date } };
+  }
+  throw userError('Такое действие ассистент пока не умеет.');
+}
+
+// The user pressed "Создать"/"Добавить" (accept) or "Отмена" on a card the assistant suggested.
 handle('assistant-decide', async (actionId, accept) => {
   const action = pending.get(actionId);
   if (!action) return { ok: false, error: 'Эта карточка устарела. Попросите ассистента ещё раз.' };
   pending.delete(actionId);
   if (!accept) return { ok: true };
-  if (action.kind === 'create-prompt') {
-    const r = await store.savePrompt({ item: { title: action.title, type: action.category, text: action.text } });
-    return ok(r);
-  }
-  if (action.kind === 'calendar-add') {
-    const ev = await store.saveEvent(Object.assign({}, action.event, { id: undefined }));
-    return ok({ eventId: ev.id, date: ev.date });
-  }
-  if (action.kind === 'calendar-delete') {
-    const gone = await store.deleteEvent(action.event.id);
-    if (!gone) return { ok: false, error: 'Этого дела уже нет в календаре.' };
-    return ok({ date: gone.date });
-  }
-  return { ok: false, error: 'Такое действие ассистент пока не умеет.' };
+  const r = await applyAction(action);
+  return ok(r.extra);
+});
+
+// "Отменить" on a card that was applied at once (confirmations off).
+handle('assistant-undo', async (actionId) => {
+  const action = pending.get(actionId);
+  if (!action || !action.undo) return { ok: false, error: 'Отменить уже нельзя: карточка устарела.' };
+  pending.delete(actionId);
+  const u = action.undo;
+  if (u.promptId) await store.deletePrompt(u.promptId);
+  if (u.eventId) await store.deleteEvent(u.eventId);
+  if (u.restore) await store.saveEvent(u.restore);   // puts the old version back under the same id
+  return ok({ date: u.restore ? u.restore.date : undefined });
 });
 
 // key: a new key from the settings field, or empty to check the saved one. A new key is saved only if it works
@@ -1168,6 +1258,13 @@ handle('assistant-set-balance', async (provider, amount) => {
   settings.balance = settings.balance && typeof settings.balance === 'object' ? settings.balance : {};
   if (n === null) delete settings.balance[provider];
   else { settings.balance[provider] = { amount: Math.round(n * 100) / 100, setAt: Date.now() }; spendOf(provider).sinceUsd = 0; }
+  saveSettings();
+  return { ok: true, info: info() };
+});
+
+// Off: the assistant makes calendar and prompt changes at once, and the card offers "Отменить".
+handle('set-confirm', async (on) => {
+  settings.confirm = !!on;
   saveSettings();
   return { ok: true, info: info() };
 });

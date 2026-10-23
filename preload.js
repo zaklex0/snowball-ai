@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('vsApi', {
   pickAvatar: () => ipcRenderer.invoke('pick-avatar'),
   saveProfile: (input) => ipcRenderer.invoke('save-profile', input),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
+  setMode: (mode) => ipcRenderer.invoke('set-mode', mode),
+  setConfirm: (on) => ipcRenderer.invoke('set-confirm', on),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
@@ -27,6 +29,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   assistantStop: (id) => ipcRenderer.invoke('assistant-stop', id),
   assistantReset: () => ipcRenderer.invoke('assistant-reset'),
   assistantDecide: (actionId, accept) => ipcRenderer.invoke('assistant-decide', actionId, accept),
+  assistantUndo: (actionId) => ipcRenderer.invoke('assistant-undo', actionId),
   calSave: (ev) => ipcRenderer.invoke('cal-save', ev),
   calDelete: (id) => ipcRenderer.invoke('cal-delete', id),
   onCalendarOpen: (fn) => {

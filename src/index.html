@@ -17,14 +17,30 @@
 
   <div class="shell">
     <nav class="side" aria-label="Разделы">
-      <div class="side-group">
+      <div class="side-top">
+      <div class="mode-wrap">
+        <button type="button" class="mode-btn" id="mode-btn" aria-haspopup="true" aria-expanded="false" aria-controls="mode-menu" title="Режим работы">
+          <span class="mode-ico" id="mode-ico" aria-hidden="true"></span>
+          <span class="mode-text"><span class="mode-kicker">Режим</span><span class="mode-name" id="mode-name">Моя база данных</span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="menu mode-menu" id="mode-menu" role="menu" hidden>
+          <button type="button" role="menuitemradio" aria-checked="true" data-mode="base">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="2.5"/><path d="M5 6v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V6"/><path d="M5 12v6c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5v-6"/></svg>
+            <span class="mm-text"><span class="mm-name">Моя база данных</span><span class="mm-sub">Промты, календарь, ассистент</span></span>
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+          </button>
+          <button type="button" role="menuitemradio" aria-checked="false" data-mode="gen">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>
+            <span class="mm-text"><span class="mm-name">Генератор</span><span class="mm-sub">Скоро: картинки, видео и другое</span></span>
+            <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="side-group" id="nav-base">
         <button type="button" class="nav-item" data-page="prompts" title="Промты">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>
           <span>Промты</span>
-        </button>
-        <button type="button" class="nav-item" data-page="skills" title="Скиллы — скоро">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>
-          <span>Скиллы</span><span class="soon">скоро</span>
         </button>
         <button type="button" class="nav-item" data-page="calendar" title="Календарь">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
@@ -34,6 +50,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/></svg>
           <span>Ассистент</span>
         </button>
+      </div>
+      <div class="side-group" id="nav-gen" hidden>
+        <button type="button" class="nav-item" data-page="generator" title="Генератор">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>
+          <span>Генератор</span><span class="soon">скоро</span>
+        </button>
+      </div>
       </div>
       <div class="side-group side-bottom">
         <button type="button" class="nav-item" data-page="stats" title="Статистика">
@@ -55,45 +78,58 @@
               Настройки
             </button>
             <hr>
-            <div class="menu-label" id="theme-label">Тема</div>
-            <div role="group" aria-labelledby="theme-label">
-              <button type="button" role="menuitemradio" aria-checked="false" data-theme="system">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2.5"/><path d="M9 20h6M12 16.5V20"/></svg>
-                Как в Windows
-                <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+            <div class="sub-wrap">
+              <button type="button" role="menuitem" class="has-sub" aria-haspopup="true" aria-expanded="false" data-sub="theme">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.9 1.8-1.9 0-.5-.2-.9-.5-1.3-.3-.3-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.8-4-6.8-9-6.8Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/></svg>
+                Тема <span class="sub-value" id="theme-value"></span><svg class="sub-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
               </button>
-              <button type="button" role="menuitemradio" aria-checked="false" data-theme="light">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
-                Светлая
-                <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              <div class="menu submenu" role="menu" aria-label="Тема" data-sub-of="theme">
+                <button type="button" role="menuitemradio" aria-checked="false" data-theme="system">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2.5"/><path d="M9 20h6M12 16.5V20"/></svg>
+                  Как в Windows <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-theme="light">
+                  <span class="theme-swatch sw-light" aria-hidden="true"></span>Светлая <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-theme="dark">
+                  <span class="theme-swatch sw-dark" aria-hidden="true"></span>Тёмная <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-theme="white">
+                  <span class="theme-swatch sw-white" aria-hidden="true"></span>Белая <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-theme="black">
+                  <span class="theme-swatch sw-black" aria-hidden="true"></span>Чёрная <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="sub-wrap">
+              <button type="button" role="menuitem" class="has-sub" aria-haspopup="true" aria-expanded="false" data-sub="prompts">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>
+                Промты <svg class="sub-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
               </button>
-              <button type="button" role="menuitemradio" aria-checked="false" data-theme="dark">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
-                Тёмная
-                <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
-              </button>
+              <div class="menu submenu" role="menu" aria-label="Промты" data-sub-of="prompts">
+                <button type="button" role="menuitem" data-action="open-dir">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>
+                  Открыть папку с промтами
+                </button>
+                <button type="button" role="menuitem" data-action="change-dir">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v2"/><path d="M3 9v8.5A2.5 2.5 0 0 0 5.5 20H12"/><path d="m16 17 2 2 4-4"/></svg>
+                  Выбрать другую папку…
+                </button>
+                <button type="button" role="menuitem" data-action="export">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></svg>
+                  Сохранить промты в файл…
+                </button>
+                <button type="button" role="menuitem" data-action="import">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 20h14"/></svg>
+                  Загрузить промты из файла…
+                </button>
+              </div>
             </div>
             <hr>
             <button type="button" role="menuitem" data-action="check-updates">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4.5h-4.5"/></svg>
               Проверить обновления
-            </button>
-            <hr>
-            <button type="button" role="menuitem" data-action="open-dir">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>
-              Открыть папку с промтами
-            </button>
-            <button type="button" role="menuitem" data-action="change-dir">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v2"/><path d="M3 9v8.5A2.5 2.5 0 0 0 5.5 20H12"/><path d="m16 17 2 2 4-4"/></svg>
-              Выбрать другую папку…
-            </button>
-            <button type="button" role="menuitem" data-action="export">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></svg>
-              Сохранить промты в файл…
-            </button>
-            <button type="button" role="menuitem" data-action="import">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 20h14"/></svg>
-              Загрузить промты из файла…
             </button>
           </div>
           <button type="button" class="profile-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Профиль, тема, обновления и папка с промтами">
@@ -187,10 +223,6 @@
             </div>
           </section>
 
-          <footer class="foot">
-            <p id="dir-line"></p>
-            <p>Перетащите файл на строку, чтобы прикрепить его к промту. <kbd>Ctrl</kbd> + <kbd>N</kbd> — новый промт, <kbd>Ctrl</kbd> + <kbd>F</kbd> — поиск, <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>−</kbd> — масштаб.</p>
-          </footer>
         </section>
 
         <section class="view" id="view-stats" aria-labelledby="stats-title" hidden>
@@ -198,7 +230,7 @@
             <div class="top-text">
               <p class="eyebrow">Ваша активность</p>
               <h1 id="stats-title">Статистика</h1>
-              <p class="meta">Новый промт, правка, прикреплённый файл и копирование промта — по одному действию.</p>
+              <p class="meta">Новый промт, правка, файл, копирование, дело в календаре и сообщение ассистенту — по одному действию.</p>
             </div>
           </header>
           <section class="card stats-card" aria-label="Профиль">
@@ -212,6 +244,10 @@
             </div>
             <div class="metrics" id="metrics"></div>
           </section>
+          <section class="card stats-card" aria-labelledby="top-title">
+            <h2 class="card-title" id="top-title">Что вы чаще всего делаете</h2>
+            <div class="top-list" id="top-list"></div>
+          </section>
           <section class="card stats-card" aria-labelledby="heat-title">
             <h2 class="card-title" id="heat-title">Активность за год</h2>
             <div class="heat" id="heat"></div>
@@ -223,18 +259,18 @@
           </section>
         </section>
 
-        <section class="view" id="view-skills" aria-labelledby="skills-title" hidden>
+        <section class="view" id="view-generator" aria-labelledby="generator-title" hidden>
           <header class="top">
             <div class="top-text">
               <p class="eyebrow">Скоро</p>
-              <h1 id="skills-title">Скиллы</h1>
+              <h1 id="generator-title">Генератор</h1>
             </div>
           </header>
           <section class="card">
             <div class="state">
               <div class="dots" aria-hidden="true"><i class="cat-static"></i><i class="cat-video"></i><i class="cat-system"></i></div>
-              <h2>Здесь появятся скиллы</h2>
-              <p>Готовые наборы инструкций для ассистента: например, как писать промты для картинок или видео в нужном стиле. Выбрали скилл, и ассистент работает по его правилам.</p>
+              <h2>Здесь появится генератор</h2>
+              <p>Создание картинок, видео и другого прямо в Snowball.ai: выбрали промт из своей базы, нажали — и получили результат. Вернуться к промтам, календарю и ассистенту можно в переключателе «Режим» вверху слева.</p>
             </div>
           </section>
         </section>
@@ -254,20 +290,32 @@
             </div>
           </header>
 
-          <div class="cal">
-            <section class="card cal-month" aria-labelledby="cal-title">
-              <div class="cal-month-head">
-                <h2 class="cal-month-title" id="cal-title"></h2>
-                <button type="button" class="btn btn-ghost" id="cal-today">Сегодня</button>
-                <button type="button" class="cal-icon-btn" id="cal-prev" aria-label="Предыдущий месяц"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
-                <button type="button" class="cal-icon-btn" id="cal-next" aria-label="Следующий месяц"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+          <div class="cal-toolbar">
+            <h2 class="cal-month-title" id="cal-title"></h2>
+            <button type="button" class="btn btn-ghost" id="cal-today">Сегодня</button>
+            <button type="button" class="cal-icon-btn" id="cal-prev" aria-label="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg></button>
+            <button type="button" class="cal-icon-btn" id="cal-next" aria-label="Вперёд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button>
+            <div class="cal-view-wrap">
+              <button type="button" class="btn btn-ghost cal-view-btn" id="cal-view-btn" aria-haspopup="true" aria-expanded="false" aria-controls="cal-view-menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M9.5 10v10.5M15 10v10.5"/></svg>
+                <span id="cal-view-name">Месяц</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+              <div class="menu cal-view-menu" id="cal-view-menu" role="menu" hidden>
+                <button type="button" role="menuitemradio" aria-checked="false" data-view="month">Месяц <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-view="week">Неделя <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-view="3days">3 дня <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                <button type="button" role="menuitemradio" aria-checked="false" data-view="day">День <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
               </div>
+            </div>
+          </div>
+
+          <div class="cal" id="cal-month-view">
+            <section class="card cal-month" aria-labelledby="cal-title">
               <div class="cal-grid" id="cal-grid"></div>
               <div class="cal-legend" aria-hidden="true">
                 <span><i class="lg-free"></i>Обычный день</span>
                 <span><i class="lg-b1"></i><i class="lg-b2"></i><i class="lg-b3"></i>Есть дела: чем больше, тем ярче</span>
-                <span><i class="lg-off"></i>Выходной</span>
-                <span><i class="lg-hol"></i>Праздник</span>
+                <span><i class="lg-off"></i>Выходной или праздник</span>
                 <span><i class="lg-offbusy"></i>Выходной или праздник с делами</span>
               </div>
             </section>
@@ -281,38 +329,15 @@
                 <button type="button" class="btn btn-ghost" id="cal-day-add">+ Дело</button>
               </div>
               <div id="cal-day-badge"></div>
-              <form class="cal-form" id="cal-form" novalidate hidden>
-                <h3 id="cal-form-title">Новое дело</h3>
-                <div class="field"><label class="field-label" for="cf-title">Что</label><input class="input" id="cf-title" maxlength="300" autocomplete="off" placeholder="Например: созвон с монтажёром"></div>
-                <div class="cal-form-row">
-                  <div class="field"><label class="field-label" for="cf-date">День</label><input class="input" id="cf-date" type="date"></div>
-                  <div class="field"><label class="field-label" for="cf-from">С</label><input class="input" id="cf-from" type="time"></div>
-                  <div class="field"><label class="field-label" for="cf-to">До</label><input class="input" id="cf-to" type="time"></div>
-                </div>
-                <div class="field"><span class="field-label" id="cf-kind-label">Тип</span>
-                  <div class="cal-kinds" id="cf-kind" role="radiogroup" aria-labelledby="cf-kind-label">
-                    <label class="ev-task"><input type="radio" name="cf-kind" value="task"><span>Задача</span></label>
-                    <label class="ev-meet"><input type="radio" name="cf-kind" value="meet"><span>Встреча</span></label>
-                    <label class="ev-call"><input type="radio" name="cf-kind" value="call"><span>Звонок</span></label>
-                  </div>
-                </div>
-                <div class="field"><label class="field-label" for="cf-remind">Напомнить</label>
-                  <select class="input" id="cf-remind">
-                    <option value="0">Не напоминать</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option><option value="60">За час</option><option value="1440">За день</option>
-                  </select>
-                </div>
-                <div class="field"><label class="field-label" for="cf-note">Заметка</label><textarea class="textarea textarea-note" id="cf-note" rows="2" placeholder="Ссылка на созвон, что обсудить"></textarea></div>
-                <div class="editor-actions">
-                  <button type="submit" class="btn btn-primary" id="cf-save">Сохранить</button>
-                  <button type="button" class="btn btn-ghost" id="cf-cancel">Отмена</button>
-                  <button type="button" class="link-btn danger" id="cf-delete" hidden>Удалить дело</button>
-                  <span class="form-msg" id="cf-msg" role="status"></span>
-                </div>
-              </form>
               <div class="cal-timeline" id="cal-timeline"></div>
             </section>
           </div>
-          <p class="foot cal-foot">Красным отмечены выходные и официальные праздники России. Напоминания приходят уведомлением Windows, пока программа открыта (можно свёрнутой). Ассистент может предложить добавить или удалить дело, но меняет календарь только после вашей кнопки.</p>
+
+          <section class="card cal-week" id="cal-week-view" hidden aria-label="Дела по дням и часам">
+            <div class="cw-head" id="cw-head"></div>
+            <div class="cw-body" id="cw-body"></div>
+          </section>
+          <p class="foot cal-foot">Красным отмечены выходные и официальные праздники России. Напоминания приходят уведомлением Windows, пока программа открыта (можно свёрнутой).</p>
         </section>
 
         <section class="view view-chat" id="view-assistant" aria-labelledby="assistant-title" hidden>
@@ -367,6 +392,7 @@
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                       </button>
                     </div>
+                    <span class="chat-cost" id="chat-cost" title="Примерная цена ответа: зависит от длины разговора и глубины размышлений. Точная цена появится под ответом." hidden></span>
                     <span class="spacer"></span>
                     <button type="submit" class="send-btn" id="chat-send" aria-label="Отправить" title="Отправить">
                       <svg class="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
@@ -445,16 +471,38 @@
               </form>
             </div>
           </section>
-          <section class="card set-card">
-            <p class="set-text">Ключи хранятся только на этом компьютере, зашифрованными средствами Windows, отдельно от папки с промтами. В файл с промтами и в другие программы они не попадают. Пока нет ни одного ключа, в «Ассистенте» отвечает заглушка.</p>
-            <p class="set-text">Модель и глубину размышлений выбирают кнопкой «Модель» в поле ввода «Ассистента».</p>
+          <section class="card set-card" aria-labelledby="set-as-title">
+            <h2 class="card-title" id="set-as-title">Ассистент</h2>
+            <p class="set-text">Ключи хранятся только на этом компьютере, зашифрованными средствами Windows, отдельно от папки с промтами. В файл с промтами и в другие программы они не попадают. Пока нет ни одного ключа, в «Ассистенте» отвечает заглушка. Модель и глубину размышлений выбирают кнопкой «Модель» в поле ввода.</p>
+            <label class="set-check-row">
+              <input type="checkbox" id="set-confirm">
+              <span><b>Спрашивать подтверждение перед изменениями</b><span class="muted">Ассистент покажет карточку «Добавить?» или «Удалить?» и подождёт вашей кнопки. Если выключить, он сразу внесёт изменение, а на карточке останется кнопка «Отменить».</span></span>
+            </label>
             <label class="set-check-row">
               <input type="checkbox" id="set-notify">
               <span><b>Уведомлять об ответах ассистента</b><span class="muted">Когда окно свёрнуто или закрыто другим окном, Windows покажет уведомление, а кнопка программы на панели задач замигает.</span></span>
             </label>
           </section>
-          <section class="card set-card">
-            <p class="set-text">Тема, папка с промтами и проверка обновлений — в меню профиля внизу слева. Позже здесь появятся настройки календаря и других разделов.</p>
+          <section class="card set-card" aria-labelledby="set-dir-title">
+            <h2 class="card-title" id="set-dir-title">Папка с данными</h2>
+            <p class="set-text">Здесь лежат промты и их файлы, разговоры с ассистентом, календарь и статистика.</p>
+            <div class="set-dir-row">
+              <button type="button" class="set-dir-path" id="set-dir" title="Открыть в Проводнике"></button>
+              <button type="button" class="btn btn-ghost" id="set-dir-change">Выбрать другую папку…</button>
+            </div>
+          </section>
+          <section class="card set-card" aria-labelledby="set-keys-title">
+            <h2 class="card-title" id="set-keys-title">Горячие клавиши</h2>
+            <dl class="shortcuts">
+              <dt><kbd>Ctrl</kbd> + <kbd>N</kbd></dt><dd>Новый промт</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>F</kbd></dt><dd>Поиск по промтам</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></dt><dd>Крупнее, мельче, обычный масштаб</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>Enter</kbd></dt><dd>Сохранить промт в редакторе</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>V</kbd></dt><dd>Вставить картинку в открытый промт</dd>
+              <dt><kbd>Enter</kbd> / <kbd>Shift</kbd> + <kbd>Enter</kbd></dt><dd>Отправить сообщение ассистенту / новая строка</dd>
+              <dt><kbd>Esc</kbd></dt><dd>Закрыть редактор или остановить ответ ассистента</dd>
+              <dt>Перетащить файл</dt><dd>На строку промта — прикрепить файл к нему</dd>
+            </dl>
             <p class="muted" id="settings-version"></p>
           </section>
         </section>
@@ -462,6 +510,33 @@
     </main>
   </div>
 </div>
+
+<dialog class="cal-dialog" id="cal-dialog" aria-labelledby="cal-form-title">
+  <form class="cal-form" id="cal-form" novalidate>
+    <h2 id="cal-form-title">Новое дело</h2>
+    <div class="field"><label class="field-label" for="cf-title">Что</label><input class="input" id="cf-title" maxlength="300" autocomplete="off" placeholder="Например: Дима, правки монтажа"></div>
+    <div class="field"><label class="field-label" for="cf-date">День</label><input class="input" id="cf-date" type="date"></div>
+    <div class="cal-form-row">
+      <div class="field"><span class="field-label" id="cf-from-label">С</span><div class="time-pick" id="cf-from" role="group" aria-labelledby="cf-from-label"></div></div>
+      <div class="field"><span class="field-label" id="cf-to-label">До</span><div class="time-pick" id="cf-to" role="group" aria-labelledby="cf-to-label"></div></div>
+    </div>
+    <div class="field"><span class="field-label" id="cf-kind-label">Тип</span>
+      <div class="cal-kinds" id="cf-kind" role="radiogroup" aria-labelledby="cf-kind-label"></div>
+    </div>
+    <div class="field"><label class="field-label" for="cf-remind">Напомнить</label>
+      <select class="input" id="cf-remind">
+        <option value="0">Не напоминать</option><option value="15">За 15 минут</option><option value="30">За 30 минут</option><option value="60">За час</option><option value="1440">За день</option>
+      </select>
+    </div>
+    <div class="field"><label class="field-label" for="cf-note">Заметка</label><textarea class="textarea textarea-note" id="cf-note" rows="2" placeholder="Ссылка на созвон, что обсудить"></textarea></div>
+    <div class="editor-actions">
+      <button type="submit" class="btn btn-primary" id="cf-save">Сохранить</button>
+      <button type="button" class="btn btn-ghost" id="cf-cancel">Отмена</button>
+      <button type="button" class="link-btn danger" id="cf-delete" hidden>Удалить дело</button>
+      <span class="form-msg" id="cf-msg" role="status"></span>
+    </div>
+  </form>
+</dialog>
 
 <dialog class="viewer" id="viewer" aria-labelledby="viewer-title">
   <div class="viewer-head">

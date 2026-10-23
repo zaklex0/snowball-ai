@@ -26,7 +26,8 @@ const ACTIVITY_FILE = 'activity.json';
 const CHATS_FILE = 'chats.json';
 const CALENDAR_FILE = 'calendar.json';
 // What counts as an action on the statistics page. Deleting and importing do not count.
-const ACTIONS = ['created', 'edited', 'files', 'copied'];
+// calendar: a new or changed event; assistant: a message sent to the assistant.
+const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant'];
 const NAME_MAX = 32;
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
@@ -166,7 +167,7 @@ function normalizeActivity(a) {
 
 // One thing in the calendar. date is the local day, from/to are "HH:MM" (to may be empty),
 // remind is minutes before the start (0 = no reminder).
-const EVENT_KINDS = ['task', 'meet', 'call'];
+const EVENT_KINDS = ['task', 'meet', 'call', 'shoot', 'edit'];
 const REMINDS = [0, 15, 30, 60, 1440];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -189,7 +190,7 @@ function normalizeEvent(e, fallbackTime) {
 }
 
 // A suggested change in a chat ("Создать промт …?") and what the user answered.
-const ACTION_STATUSES = ['done', 'canceled', 'stale'];
+const ACTION_STATUSES = ['done', 'canceled', 'stale', 'undone', 'failed'];
 function normalizeAction(a) {
   if (!a || typeof a !== 'object') return null;
   const out = {
@@ -208,6 +209,7 @@ function normalizeChat(c) {
     const out = { role: m.role, text: str(m.text, 200000) };
     if (m.note) out.note = str(m.note, 500);
     if (m.failed) out.failed = true;
+    if (num(m.cost) > 0) out.cost = num(m.cost);   // what the answer cost, in dollars
     const actions = Array.isArray(m.actions) ? m.actions.map(normalizeAction).filter(Boolean) : [];
     if (actions.length) out.actions = actions;
     return out;
@@ -308,6 +310,7 @@ class Store {
   }
 
   recordCopy() { return this.run(() => this.bump('copied', 1)); }
+  recordAssistant() { return this.run(() => this.bump('assistant', 1)); }
 
   activityView() { return { since: this.activity.since, days: this.activity.days }; }
 
@@ -349,9 +352,14 @@ class Store {
       const now = Date.now();
       const ev = normalizeEvent(Object.assign({}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now }));
       if (!ev) throw Object.assign(new Error('bad event'), { userMessage: 'Не получилось сохранить дело: проверьте день и время.' });
+      const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.title, e.kind, e.note, e.remind]);
+      // "Сохранить" without real changes is not an action on the statistics page.
+      const changed = !prev || sig(prev) !== sig(ev);
+      if (prev && !changed) return prev;
       if (prev) this.events[this.events.indexOf(prev)] = ev;
       else { if (this.findEvent(ev.id)) ev.id = newId('e'); this.events.push(ev); }
       await this.writeCalendar();
+      await this.bump('calendar', 1);
       return ev;
     });
   }
