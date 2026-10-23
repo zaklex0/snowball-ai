@@ -6,7 +6,7 @@ const fsp = fs.promises;
 const Anthropic = require('@anthropic-ai/sdk').default;
 const OpenAI = require('openai').default;
 const os = require('os');
-const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, TASK_STATUSES, sanitizeName } = require('./storage');
+const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, sanitizeName } = require('./storage');
 const { writeZip, extractZip } = require('./archive');
 
 const APP_TITLE = 'Snowball.ai';
@@ -14,6 +14,7 @@ const APP_TITLE = 'Snowball.ai';
 const LEGACY_TITLES = ['Промты Snowball.ai', 'Промты VideoSmile'];
 const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 40;
+const SIDEBAR_WIDTH = 236;   // .side in styles.css; a window with one moved tab has no sidebar
 // "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
 const THEMES = ['system', 'light', 'dark', 'white', 'black'];
 // What a tab on top of the window can show. LLM ("assistant") tabs may be open many times, one conversation each.
@@ -248,32 +249,27 @@ function createWindow(opts) {
   return w;
 }
 
-// A tab moved into a window of its own. mode 'beside': the screen is split in half, this window on the left,
-// the new one on the right; mode 'point': the new window opens where the tab was dropped; otherwise a little lower and to the right.
+// A tab moved into a window of its own (it shows only that tab, without the sidebar, so it is narrower).
+// mode 'point': the new window opens where the tab was dropped; otherwise a little lower and to the right.
+// Halves of the screen, full screen and other monitors are Windows' own business (Win + arrows, dragging the window).
 handle('window-open', async function (tabs, mode, point) {
   const list = (Array.isArray(tabs) ? tabs : []).filter((x) => x && TAB_KINDS.includes(x.kind)).slice(0, 10)
     .map((x) => (x.kind === 'assistant' && typeof x.chatId === 'string' ? { kind: x.kind, chatId: x.chatId.slice(0, 64) } : { kind: x.kind }));
   if (!list.length) return { ok: false, error: 'Нечего открыть.' };
   const from = BrowserWindow.fromWebContents(this.sender) || win;
   const fb = from.getNormalBounds ? from.getNormalBounds() : from.getBounds();
+  const size = { width: Math.max(640, fb.width - SIDEBAR_WIDTH), height: fb.height };
   let bounds;
-  if (mode === 'beside') {
-    const wa = screen.getDisplayMatching(from.getBounds()).workArea;
-    const half = Math.floor(wa.width / 2);
-    if (from.isMinimized()) from.restore();
-    if (from.isMaximized()) from.unmaximize();
-    from.setBounds({ x: wa.x, y: wa.y, width: half, height: wa.height });
-    bounds = { x: wa.x + half, y: wa.y, width: wa.width - half, height: wa.height };
-  } else if (mode === 'point' && point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+  if (mode === 'point' && point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
     const wa = screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) }).workArea;
-    const width = Math.min(fb.width, wa.width), height = Math.min(fb.height, wa.height);
+    const width = Math.min(size.width, wa.width), height = Math.min(size.height, wa.height);
     bounds = {
       x: Math.max(wa.x, Math.min(Math.round(point.x) - 300, wa.x + wa.width - width)),
       y: Math.max(wa.y, Math.min(Math.round(point.y) - 20, wa.y + wa.height - height)),
       width, height
     };
   } else {
-    bounds = visibleBounds({ x: fb.x + 36, y: fb.y + 36, width: fb.width, height: fb.height }) || { width: fb.width, height: fb.height };
+    bounds = visibleBounds({ x: fb.x + SIDEBAR_WIDTH + 36, y: fb.y + 36, width: size.width, height: size.height }) || size;
   }
   createWindow({ tabs: list, bounds });
   return { ok: true };
@@ -365,7 +361,7 @@ nativeTheme.on('updated', paintWindows);
 
 /* ---------- IPC ---------- */
 function ok(extra) {
-  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView() }, extra || {});
+  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView() }, extra || {});
 }
 function fail(e) {
   const code = e && e.code;
@@ -390,7 +386,7 @@ function handle(name, fn) {
 }
 function syncOthers(r, except) {
   const data = { info: info() };
-  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, profile: r.profile, activity: r.activity });
+  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, profile: r.profile, activity: r.activity });
   if (r.chats) data.chats = r.chats;
   broadcast('sync', data, except);
 }
@@ -829,7 +825,29 @@ function stubCalendar(text, t) {
 // "открой календарь и генератор" → the tabs to open.
 const TAB_WORDS = [['home', /главн|домашн/], ['prompts', /промт/], ['calendar', /календар/], ['tasks', /задач|туду|to-?do|доск/], ['assistant', /\bllm\b|ллм|чат|разговор/], ['generator', /генератор|генерац|изображ|картинк|видео/], ['stats', /статистик/]];
 const TAB_NAMES = { home: 'Главная', prompts: 'Промты', calendar: 'Календарь', tasks: 'Задачи', assistant: 'LLM', generator: 'Генератор', stats: 'Статистика' };
-const TASK_COLUMNS = { todo: 'Предстоит', doing: 'В процессе', done: 'Готово' };
+// The name of a column: «Предстоит», «В процессе», «Готово» or one of the user's own.
+const columnName = (id) => (store.columnsView().find((c) => c.id === id) || { name: 'Предстоит' }).name;
+const PRIORITY_NAMES = ['обычная', 'важная', 'срочная'];
+// "сегодня", "завтра в 15:00", "вторник, 3 ноября" for answers about tasks.
+function taskDue(t) {
+  if (!t.due) return '';
+  const n = Math.round((dateOfKey(t.due) - dateOfKey(dayKeyOf(new Date()))) / 864e5);
+  return (n === 0 ? 'сегодня' : n === 1 ? 'завтра' : n === -1 ? 'вчера' : humanDay(t.due)) + (t.time ? ' в ' + t.time : '');
+}
+function taskLine(t) {
+  const more = [columnName(t.status)];
+  if (t.due) more.push('срок ' + taskDue(t));
+  if (t.priority) more.push(PRIORITY_NAMES[t.priority]);
+  if (t.tags && t.tags.length) more.push(t.tags.join(', '));
+  return '«' + t.title + '» (' + more.join(', ') + ')';
+}
+// All columns and tasks for a model: what tasks_list returns.
+function tasksForModel() {
+  const list = store.tasksView().map((t) => ({ id: t.id, title: t.title, status: t.status, due: t.due, time: t.time, priority: t.priority, tags: t.tags, note: t.note,
+    subtasks: t.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done })) }));
+  const columns = store.columnsView().map((c) => ({ id: c.id, name: c.name }));
+  return JSON.stringify({ columns, tasks: list }) + (list.length ? '' : ' На доске задач пока ничего нет.');
+}
 function stubTasks(text, t) {
   if (/(добав|созда|запиш|постав|закин)\S*\s.*задач/.test(t)) {
     const title = (afterColon(text) || text.replace(/^.*?задач\S*\s*/i, '')).trim();
@@ -840,9 +858,9 @@ function stubTasks(text, t) {
   }
   const list = store.tasksView();
   if (!list.length) return { text: 'На доске «Задачи» пока пусто. Напишите, например, **«добавь задачу смонтировать рилс»**.' };
-  return { text: 'Сейчас на доске:\n' + TASK_STATUSES.map((st) => {
-    const col = list.filter((x) => x.status === st);
-    return '**' + TASK_COLUMNS[st] + '** — ' + (col.length ? col.map((x) => x.title).join(', ') : 'пусто');
+  return { text: 'Сейчас на доске:\n' + store.columnsView().map((c) => {
+    const col = list.filter((x) => x.status === c.id);
+    return '**' + c.name + '** — ' + (col.length ? col.map((x) => x.title).join(', ') : 'пусто');
   }).join('\n') };
 }
 
@@ -948,10 +966,20 @@ const SYSTEM_PROMPT = [
   'У пользователя в программе есть календарь, и ты можешь с ним работать: calendar_list показывает дела за период, calendar_add добавляет дело, calendar_update меняет или переносит существующее, calendar_delete удаляет. Результат вызова говорит, сделано ли изменение сразу или пользователь должен подтвердить его кнопкой на карточке: пиши в ответе именно так, как там сказано. Чтобы перенести или изменить дело, найди его через calendar_list и вызови calendar_update с его id (не удаляй и не создавай заново). Перед удалением тоже найди id через calendar_list.',
   'Название дела — только суть, 2–5 слов, без слова, обозначающего тип (созвон, звонок, встреча, съёмка, монтаж — тип и так виден по цвету), и без служебных слов. Например, «на завтра забей созвон на 14:00 с Димой по поводу правок по монтажу видео на ютуб» → название «Дима, правки монтажа YouTube», тип call. Важные подробности можно положить в note. Тип: task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж. Если время окончания не названо, оставь to пустым.',
   'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
-  'Ещё у пользователя есть доска «Задачи» с тремя столбцами: todo — «Предстоит», doing — «В процессе», done — «Готово». tasks_list показывает все задачи, task_add добавляет, task_update меняет название, заметку или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
+  'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
   'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
+
+// Task fields both assistants fill in the same way.
+const TASK_FIELDS = {
+  note: { type: 'string', description: 'Подробности или пустая строка' },
+  due: { type: 'string', description: 'Срок, YYYY-MM-DD, или пустая строка, если срок не назван' },
+  time: { type: 'string', description: 'Время, HH:MM, или пустая строка' },
+  priority: { type: 'integer', enum: [0, 1, 2], description: '2 — срочно, 1 — важно, 0 — обычно (если не сказано)' },
+  tags: { type: 'array', items: { type: 'string' }, description: '1–2 коротких тега по смыслу (Монтаж, Съёмка, Сайт…) или пустой список' }
+};
+const taskFields = (a) => ({ note: a.note, due: a.due, time: a.time, priority: a.priority, tags: a.tags });
 
 // What the assistant may do with the calendar. Looking is free; adding and deleting only show a card.
 const TOOLS = [
@@ -1001,32 +1029,30 @@ const TOOLS = [
   },
   {
     name: 'tasks_list',
-    description: 'Показывает все задачи с доски «Задачи»: id, название, столбец (todo, doing, done) и заметку.',
+    description: 'Показывает все задачи с доски «Задачи»: id, название, столбец (todo, doing, done), срок, важность, теги, подзадачи и заметку.',
     parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
   },
   {
     name: 'task_add',
     description: 'Добавляет задачу на доску «Задачи» (или показывает карточку для подтверждения — это скажет результат).',
     parameters: {
-      type: 'object', additionalProperties: false, required: ['title', 'status', 'note'],
-      properties: {
+      type: 'object', additionalProperties: false, required: ['title', 'status', 'note', 'due', 'time', 'priority', 'tags', 'subtasks'],
+      properties: Object.assign({
         title: { type: 'string', description: 'Коротко, что нужно сделать' },
-        status: { type: 'string', enum: TASK_STATUSES, description: 'Столбец: todo — «Предстоит» (обычно), doing — «В процессе», done — «Готово»' },
-        note: { type: 'string', description: 'Подробности или пустая строка' }
-      }
+        status: { type: 'string', description: 'id столбца: todo — «Предстоит» (обычно), doing — «В процессе», done — «Готово» или id своего столбца пользователя из tasks_list' }
+      }, TASK_FIELDS, { subtasks: { type: 'array', items: { type: 'string' }, description: 'Шаги внутри задачи, если о них просили; иначе пустой список' } })
     }
   },
   {
     name: 'task_update',
-    description: 'Меняет задачу: название, заметку или столбец (например, перенести в «Готово»). Передай все поля; то, что не меняется, — как было в tasks_list.',
+    description: 'Меняет задачу: название, столбец (например, перенести в «Готово»), срок, важность, теги, заметку. Передай все поля; то, что не меняется, — как было в tasks_list.',
     parameters: {
-      type: 'object', additionalProperties: false, required: ['id', 'title', 'status', 'note'],
-      properties: {
+      type: 'object', additionalProperties: false, required: ['id', 'title', 'status', 'note', 'due', 'time', 'priority', 'tags'],
+      properties: Object.assign({
         id: { type: 'string', description: 'id задачи из tasks_list' },
         title: { type: 'string' },
-        status: { type: 'string', enum: TASK_STATUSES },
-        note: { type: 'string', description: 'Подробности или пустая строка' }
-      }
+        status: { type: 'string', description: 'id столбца из tasks_list' }
+      }, TASK_FIELDS)
     }
   },
   {
@@ -1083,20 +1109,16 @@ function runTool(name, input) {
     if (!event) return { output: 'Дела с таким id нет. Найди его через calendar_list.', error: true };
     return { output: after('Удалить из календаря: ' + eventLine(event)), action: { kind: 'calendar-delete', title: event.title, event } };
   }
-  if (name === 'tasks_list') {
-    const list = store.tasksView().map((t) => ({ id: t.id, title: t.title, status: t.status, note: t.note }));
-    return { output: list.length ? JSON.stringify(list) : 'На доске задач пока ничего нет.' };
-  }
-  const taskLine = (t) => '«' + t.title + '» (' + TASK_COLUMNS[t.status] + ')';
+  if (name === 'tasks_list') return { output: tasksForModel() };
   if (name === 'task_add') {
-    const task = normalizeTask({ title: a.title, status: a.status, note: a.note });
+    const task = normalizeTask(Object.assign({ title: a.title, status: a.status, subtasks: (Array.isArray(a.subtasks) ? a.subtasks : []).map((s) => ({ title: s })) }, taskFields(a)));
     if (!task) return { output: 'Ошибка: нужно название задачи.', error: true };
     return { output: after('Добавить задачу ' + taskLine(task)), action: { kind: 'task-add', title: task.title, task } };
   }
   if (name === 'task_update') {
     const prev = store.findTask(String(a.id || ''));
     if (!prev) return { output: 'Задачи с таким id нет. Найди её через tasks_list.', error: true };
-    const task = normalizeTask(Object.assign({}, prev, { title: a.title || prev.title, status: a.status, note: a.note }));
+    const task = normalizeTask(Object.assign({}, prev, { title: a.title || prev.title, status: a.status }, taskFields(a)));
     return { output: after('Изменить задачу: ' + taskLine(prev) + ' → ' + taskLine(task)), action: { kind: 'task-update', title: task.title, task, prevTask: prev } };
   }
   if (name === 'task_delete') {
@@ -1448,6 +1470,321 @@ handle('assistant-stop', async (id) => {
 // Tasks board, stored in tasks.json beside the prompts.
 handle('task-save', async (t) => { const saved = await store.saveTask(t); return ok({ taskId: saved.id }); });
 handle('task-delete', async (id) => { await store.deleteTask(id); return ok(); });
+// «Отменить» after deleting: the task comes back exactly as it was.
+handle('task-restore', async (t) => { await store.putTask(t); return ok(); });
+// The user's own columns between «В процессе» and «Готово».
+handle('column-add', async (name) => { const col = await store.addColumn(name); return ok({ columnId: col.id }); });
+handle('column-rename', async (id, name) => { await store.renameColumn(id, name); return ok(); });
+handle('column-move', async (id, dir) => { await store.moveColumn(id, dir); return ok(); });
+// Returns what «Отменить» needs: the column, its place and the tasks that moved to «Предстоит».
+handle('column-delete', async (id) => { const removed = await store.deleteColumn(id); return ok({ removed }); });
+handle('column-restore', async (r) => { await store.restoreColumn(r); return ok(); });
+
+/* ---------- the tasks assistant ---------- */
+// The bar above the board. Its own assistant that only knows tasks: always the cheapest model with quick thinking,
+// every message is a separate request (no conversation), changes apply at once without cards,
+// and «Отменить» under the answer puts back everything this one message changed. Without keys simple word rules answer.
+const TASKS_PROMPT = [
+  'Ты — ассистент раздела «Задачи» в программе Snowball.ai. Ты работаешь только с задачами пользователя: добавляешь, меняешь, переносишь, отмечаешь сделанными, разбиваешь на подзадачи, удаляешь и отвечаешь, что запланировано.',
+  'Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). Новая задача — в todo, если не сказано иное.',
+  'Каждое сообщение — отдельная просьба. Делай сразу и не переспрашивай, если смысл понятен: изменения применяются сразу, а у пользователя есть кнопка «Отменить».',
+  'Из одного сообщения может получиться несколько задач: «смонтировать рилс завтра и позвонить Диме в пятницу» — это две задачи.',
+  'Название — суть в 2–6 словах, с большой буквы, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали; даты считай от строки «Сейчас». Важность priority: 2 — срочно (срочно, горит, asap), 1 — важно, 0 — обычно, если ничего такого не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач в tasks_list: «смонтировать рилс» → «Монтаж», «начать вёрстку сайта» → «Сайт».',
+  'Чтобы изменить, перенести, отметить или удалить задачу, сначала найди её id через tasks_list. «Сделал …», «готово …» — перенеси задачу в done. subtasks_add добавляет шаги внутри задачи («разбей … на шаги» — 3–6 конкретных шагов), subtask_done отмечает шаг.',
+  'Если просят не про задачи (календарь, промты, вкладки), коротко скажи, что это умеет маленькое окно ассистента (звёздочка внизу слева) или раздел LLM.',
+  'Ответ — одна-две короткие фразы по-русски без разметки: что сделано. Например: «Добавил 2 задачи: «Смонтировать рилс» на завтра, срочная; «Позвонить Диме» на пятницу.»'
+].join('\n\n');
+const sameTool = (name, description) => Object.assign({}, TOOLS.find((t) => t.name === name), description ? { description } : {});
+const TASK_TOOLS = [
+  sameTool('tasks_list'),
+  sameTool('task_add', 'Добавляет задачу на доску (сразу, без подтверждения).'),
+  sameTool('task_update', 'Меняет задачу: название, столбец (done — сделано), срок, важность, теги, заметку. Передай все поля; то, что не меняется, — как было в tasks_list.'),
+  { name: 'task_delete', description: 'Удаляет задачу.', parameters: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', description: 'id задачи из tasks_list' } } } },
+  {
+    name: 'subtasks_add',
+    description: 'Добавляет шаги (подзадачи) в конец задачи.',
+    parameters: { type: 'object', additionalProperties: false, required: ['id', 'titles'], properties: { id: { type: 'string', description: 'id задачи' }, titles: { type: 'array', items: { type: 'string' } } } }
+  },
+  {
+    name: 'subtask_done',
+    description: 'Отмечает шаг задачи сделанным или снимает отметку.',
+    parameters: { type: 'object', additionalProperties: false, required: ['id', 'subtask_id', 'done'], properties: { id: { type: 'string', description: 'id задачи' }, subtask_id: { type: 'string' }, done: { type: 'boolean' } } }
+  }
+];
+
+// Every change goes through here and is remembered in log, so «Отменить» can put the tasks back.
+async function loggedTask(log, id, fn) {
+  const before = id ? store.findTask(id) : null;
+  const r = await fn();
+  log.push({ before: before ? JSON.parse(JSON.stringify(before)) : null, id: r ? r.id : id });
+  return r;
+}
+async function runTaskTool(name, input, log) {
+  const a = input && typeof input === 'object' ? input : {};
+  if (name === 'tasks_list') return tasksForModel();
+  if (name === 'task_add') {
+    const t = normalizeTask(Object.assign({ title: a.title, status: a.status, subtasks: (Array.isArray(a.subtasks) ? a.subtasks : []).map((s) => ({ title: s })) }, taskFields(a)));
+    if (!t) return 'Ошибка: нужно название задачи.';
+    const saved = await loggedTask(log, null, () => store.saveTask(Object.assign({}, t, { id: undefined, order: undefined, createdAt: undefined })));
+    return 'Добавлено: ' + taskLine(saved) + ', id ' + saved.id;
+  }
+  const prev = store.findTask(String(a.id || ''));
+  if (!prev) return 'Задачи с таким id нет. Найди её через tasks_list.';
+  if (name === 'task_update') {
+    const saved = await loggedTask(log, prev.id, () => store.saveTask(Object.assign({ id: prev.id, title: a.title || prev.title, status: store.hasColumn(a.status) ? a.status : prev.status }, taskFields(a))));
+    return 'Изменено: ' + taskLine(saved);
+  }
+  if (name === 'task_delete') {
+    await loggedTask(log, prev.id, () => store.deleteTask(prev.id));
+    return 'Удалено.';
+  }
+  if (name === 'subtasks_add') {
+    const titles = (Array.isArray(a.titles) ? a.titles : []).map((s) => ({ title: s }));
+    const saved = await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.concat(titles) }));
+    return 'Шаги добавлены, теперь их ' + saved.subtasks.length + '.';
+  }
+  if (name === 'subtask_done') {
+    if (!prev.subtasks.some((s) => s.id === a.subtask_id)) return 'Такого шага нет: возьми subtask_id из tasks_list.';
+    await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.map((s) => (s.id === a.subtask_id ? Object.assign({}, s, { done: !!a.done }) : s)) }));
+    return 'Отмечено.';
+  }
+  return 'Такого инструмента нет.';
+}
+
+async function tasksOpenai(model, text, log, signal) {
+  const client = new OpenAI({ apiKey: keys.openai });
+  const tools = TASK_TOOLS.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: true }));
+  let input = [{ role: 'user', content: text }];
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const r = await client.responses.create({
+      model: model.id, instructions: TASKS_PROMPT + '\n\n' + nowLine(), input, tools,
+      reasoning: { effort: 'low' }, max_output_tokens: 8000, store: false
+    }, { signal });
+    recordSpend(model, openaiUsage(r), signal);
+    if (r.status === 'incomplete') throw userError('Ответ оборвался. Попробуйте написать короче.');
+    const calls = (r.output || []).filter((item) => item.type === 'function_call');
+    if (!calls.length) {
+      return r.output_text || (r.output || []).filter((item) => item.type === 'message')
+        .map((item) => (item.content || []).filter((c) => c.type === 'output_text').map((c) => c.text).join('')).join('\n').trim();
+    }
+    input = input.concat(r.output);
+    for (const c of calls) {
+      let args = null;
+      try { args = JSON.parse(c.arguments || '{}'); } catch (e) { args = null; }
+      input.push({ type: 'function_call_output', call_id: c.call_id, output: args ? await runTaskTool(c.name, args, log) : 'Ошибка: аргументы не прочитались, повтори вызов.' });
+    }
+  }
+  return 'Сделал, что успел.';
+}
+async function tasksClaude(model, text, log, signal) {
+  const client = new Anthropic({ apiKey: keys.anthropic });
+  const tools = TASK_TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters, strict: true }));
+  let msgs = [{ role: 'user', content: text }];
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const final = await client.beta.messages.create({
+      model: model.id, max_tokens: 8000, tools, messages: msgs, output_config: { effort: 'low' },
+      system: [{ type: 'text', text: TASKS_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: nowLine() }]
+    }, { signal });
+    const u = final.usage || {};
+    recordSpend(model, { input: u.input_tokens || 0, cached: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0, output: u.output_tokens || 0 }, signal);
+    if (final.stop_reason === 'refusal') throw userError('Claude отказался выполнять эту просьбу. Попробуйте сформулировать иначе.');
+    if (final.stop_reason !== 'tool_use') return final.content.filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
+    msgs = msgs.concat([{ role: 'assistant', content: final.content }]);
+    const results = [];
+    for (const b of final.content) {
+      if (b.type === 'tool_use') results.push({ type: 'tool_result', tool_use_id: b.id, content: await runTaskTool(b.name, b.input, log) });
+    }
+    msgs.push({ role: 'user', content: results });
+  }
+  return 'Сделал, что успел.';
+}
+
+/* Without keys: simple word rules, the same ones the mockup shows (mockups/tasks.html). */
+const TASK_TAG_RULES = [
+  [/смонтир|монтаж|монтир/, 'Монтаж'], [/сн[яи]ть|съ[её]мк|отснять|снимать/, 'Съёмка'], [/сценари/, 'Сценарий'],
+  [/пром[пт]?т/, 'Промты'], [/опублик|выложить|залить|публикац|запостить/, 'Публикация'], [/верст|сайт|лендинг/, 'Сайт'],
+  [/созвон|позвонить|звонок/, 'Звонок'], [/сгенерир|генерац/, 'Генерация'], [/урок|курс/, 'Обучение']
+];
+const WEEK_WORDS = [['понедельник', 1], ['вторник', 2], ['сред', 3], ['четверг', 4], ['пятниц', 5], ['суббот', 6], ['воскресень', 0]];
+const TASK_STEPS = {
+  'Монтаж': ['Нарезать исходники', 'Собрать черновой монтаж', 'Цветокоррекция', 'Музыка и звук', 'Субтитры', 'Экспорт'],
+  'Сайт': ['Структура страниц', 'Дизайн', 'Вёрстка', 'Проверить на телефоне', 'Опубликовать'],
+  'Съёмка': ['Сценарий и раскадровка', 'Подготовить свет и звук', 'Снять', 'Скинуть исходники'],
+  'Сценарий': ['Собрать идеи', 'Структура', 'Написать текст', 'Перечитать и сократить'],
+  '': ['Подготовить всё нужное', 'Сделать', 'Проверить результат']
+};
+function plusDayKey(n) { const d = new Date(); d.setDate(d.getDate() + n); return dayKeyOf(d); }
+// "смонтировать рилс завтра срочно" → { title: "Смонтировать рилс", due: tomorrow, priority: 2, tags: ["Монтаж"] }
+function stubTaskParse(text) {
+  let s = ' ' + text.trim() + ' ';
+  const r = { title: '', due: '', time: '', priority: 0, tags: [] };
+  const cut = (re) => { s = s.replace(re, ' '); };
+  let low = s.toLowerCase(), m;
+  if (/срочн|горит|asap|как можно скорее/.test(low)) { r.priority = 2; cut(/\s!*(очень\s+)?срочн[а-яё]*/gi); cut(/\s(горит|asap|как можно скорее)/gi); }
+  else if (/\s!*важн/.test(low)) { r.priority = 1; cut(/\s!*(очень\s+)?важн[а-яё]*/gi); }
+  low = s.toLowerCase();
+  if (/\sпослезавтра\s/.test(low)) { r.due = plusDayKey(2); cut(/\s(на\s+)?послезавтра(?=\s)/gi); }
+  else if (/\sзавтра\s/.test(low)) { r.due = plusDayKey(1); cut(/\s(на\s+)?завтра(?=\s)/gi); }
+  else if (/\sсегодня\s/.test(low)) { r.due = plusDayKey(0); cut(/\s(на\s+)?сегодня(?=\s)/gi); }
+  else if (/\sвчера\s/.test(low)) { r.due = plusDayKey(-1); cut(/\s(на\s+)?вчера(?=\s)/gi); }
+  else if ((m = /\sчерез\s+(\d+)\s+(дн|день|дня)\S*/.exec(low))) { r.due = plusDayKey(+m[1]); cut(/\sчерез\s+\d+\s+(дн|день|дня)\S*/gi); }
+  else if (/\sчерез неделю/.test(low)) { r.due = plusDayKey(7); cut(/\sчерез неделю/gi); }
+  else {
+    WEEK_WORDS.some((w) => {
+      const re = new RegExp('\\s(в|во|до|к|на)?\\s*' + w[0] + '\\S*', 'i');
+      if (!re.test(s)) return false;
+      r.due = plusDayKey((w[1] - new Date().getDay() + 7) % 7 || 7);
+      cut(re);
+      return true;
+    });
+  }
+  if ((m = /\s(в|к)?\s*(\d{1,2})[:.](\d{2})(?=\s)/.exec(s)) && +m[2] < 24) {
+    r.time = pad2(+m[2]) + ':' + m[3];
+    if (!r.due) r.due = plusDayKey(0);
+    cut(/\s(в|к)?\s*\d{1,2}[:.]\d{2}(?=\s)/);
+  }
+  low = s.toLowerCase();
+  TASK_TAG_RULES.forEach((tr) => { if (r.tags.length < 2 && tr[0].test(low) && !r.tags.includes(tr[1])) r.tags.push(tr[1]); });
+  s = s.replace(/^\s*(надо|нужно|не забыть|напомни)\s+/i, ' ').replace(/\s+/g, ' ').replace(/[\s,.]+$/, '').trim();
+  r.title = s.charAt(0).toUpperCase() + s.slice(1);
+  return r;
+}
+const TASK_STOP = ['перенеси', 'перенести', 'сдвинь', 'передвинь', 'отметь', 'отметить', 'удали', 'удалить', 'убери', 'сделал', 'сделала', 'сделано', 'готово', 'готова',
+  'выполнил', 'выполнила', 'закрой', 'разбей', 'разбить', 'задачу', 'задача', 'задачи', 'подзадачи', 'шаги', 'шагов', 'этапы', 'сделанной', 'выполненной', 'сделай',
+  'поставь', 'срочной', 'срочно', 'важной', 'важно', 'обычной', 'про', 'для', 'мне', 'меня', 'что', 'какие', 'работу', 'процесс', 'предстоит'];
+function taskStems(s) {
+  return (String(s).toLowerCase().replace(/ё/g, 'е').match(/[а-яa-z0-9]+/g) || []).filter((w) => w.length >= 3 && !TASK_STOP.includes(w)).map((w) => w.slice(0, 4));
+}
+// The task whose title shares the most word beginnings with the phrase.
+function stubFindTask(text, openOnly) {
+  const q = taskStems(text);
+  let best = null, score = 0;
+  store.tasks.forEach((t) => {
+    if (openOnly && t.status === 'done') return;
+    const ts = taskStems(t.title);
+    const sc = q.filter((x) => ts.includes(x)).length;
+    if (sc > score) { score = sc; best = t; }
+  });
+  return best;
+}
+function stubTaskWords(t) {
+  const more = [];
+  if (t.due) more.push(taskDue(t));
+  if (t.priority) more.push(PRIORITY_NAMES[t.priority]);
+  t.tags.forEach((g) => more.push('#' + g));
+  return '«' + t.title + '»' + (more.length ? ' (' + more.join(', ') + ')' : '');
+}
+const STUB_NOT_FOUND = 'Не нашёл такую задачу. Напишите точнее, как она называется.';
+async function stubTasksAssistant(text, log) {
+  const low = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
+  let t;
+  if (/^\s*(что|какие|покажи|сколько)/.test(low) || /\?\s*$/.test(text)) {
+    const today = dayKeyOf(new Date()), open = store.tasks.filter((x) => x.status !== 'done');
+    const late = open.filter((x) => x.due && x.due < today);
+    let name, list;
+    if (/послезавтра/.test(low)) { name = 'На послезавтра'; list = open.filter((x) => x.due === plusDayKey(2)); }
+    else if (/завтра/.test(low)) { name = 'На завтра'; list = open.filter((x) => x.due === plusDayKey(1)); }
+    else if (/недел/.test(low)) { name = 'На неделю'; list = open.filter((x) => x.due && x.due >= today && x.due <= plusDayKey(7)); }
+    else if (/горит|просроч|срочн/.test(low)) { name = 'Горит'; list = open.filter((x) => x.priority === 2 || (x.due && x.due < today)); }
+    else { name = 'На сегодня'; list = open.filter((x) => x.due === today); }
+    let s = list.length ? name + ' ' + list.length + ' ' + (list.length === 1 ? 'задача' : list.length < 5 ? 'задачи' : 'задач') + ': ' + list.map((x) => '«' + x.title + '»' + (x.time ? ' в ' + x.time : '')).join(', ') + '.' : name + ' задач нет.';
+    if (name !== 'Горит' && late.length) s += ' И ещё срок прошёл у ' + late.map((x) => '«' + x.title + '»').join(', ') + '.';
+    return s;
+  }
+  if (/разб(ей|ить)|на шаги|на подзадачи|на этапы/.test(low)) {
+    if (!(t = stubFindTask(text))) return STUB_NOT_FOUND;
+    const have = t.subtasks.map((s) => s.title.toLowerCase());
+    const steps = (TASK_STEPS[t.tags[0]] || TASK_STEPS['']).filter((s) => !have.includes(s.toLowerCase()));
+    if (!steps.length) return 'У «' + t.title + '» эти шаги уже есть.';
+    await loggedTask(log, t.id, () => store.saveTask({ id: t.id, subtasks: t.subtasks.concat(steps.map((s) => ({ title: s }))) }));
+    return 'Разбил «' + t.title + '» на шаги: добавил ' + steps.length + '. Лишнее можно убрать в задаче.';
+  }
+  if (/^\s*(удали|убери|удалить)/.test(low)) {
+    if (!(t = stubFindTask(text))) return STUB_NOT_FOUND;
+    await loggedTask(log, t.id, () => store.deleteTask(t.id));
+    return 'Удалил «' + t.title + '».';
+  }
+  if (/\s(сделал[аи]?|готово|готова|выполнил[аи]?|отметь|закрой)\s/.test(low)) {
+    if (!(t = stubFindTask(text, true))) return STUB_NOT_FOUND;
+    await loggedTask(log, t.id, () => store.saveTask({ id: t.id, status: 'done' }));
+    return 'Отметил «' + t.title + '» сделанной — она в «Готово».';
+  }
+  if (/^\s*(перенеси|сдвинь|передвинь|перенести)/.test(low)) {
+    let target = /в работу|в процесс/.test(low) ? 'doing' : /в предсто|обратно/.test(low) ? 'todo' : null;
+    let rest = text.replace(/в работу|в процесс\S*|в предсто\S*/gi, ' ');
+    // "перенеси рилс в на проверке": one of the user's own columns, by its name
+    store.columns.forEach((c) => {
+      const at = low.indexOf(' в ' + c.name.toLowerCase().replace(/ё/g, 'е'));
+      if (!target && at !== -1) { target = c.id; rest = text.slice(0, at); }
+    });
+    if (target) {
+      if (!(t = stubFindTask(rest))) return STUB_NOT_FOUND;
+      await loggedTask(log, t.id, () => store.saveTask({ id: t.id, status: target }));
+      return 'Перенёс «' + t.title + '» в «' + columnName(target) + '».';
+    }
+    const p = stubTaskParse(text);
+    if (!p.due) return 'Не понял, на когда перенести. Например: «перенеси вёрстку сайта на понедельник».';
+    if (!(t = stubFindTask(p.title))) return STUB_NOT_FOUND;
+    const saved = await loggedTask(log, t.id, () => store.saveTask({ id: t.id, due: p.due, time: p.time || t.time }));
+    return 'Перенёс «' + t.title + '» на ' + taskDue(saved) + '.';
+  }
+  if (/^\s*(сделай|поставь)\s.*(срочн|важн|обычн)/.test(low)) {
+    const level = /срочн/.test(low) ? 2 : /важн/.test(low) ? 1 : 0;
+    if (!(t = stubFindTask(text))) return STUB_NOT_FOUND;
+    await loggedTask(log, t.id, () => store.saveTask({ id: t.id, priority: level }));
+    return 'Теперь «' + t.title + '» — ' + PRIORITY_NAMES[level] + '.';
+  }
+  const body = text.replace(/^\s*(добавь|добавить|запиши|создай|новая задача|напомни)\s*(задачу|задачи)?[:\s,]*/i, '');
+  const parts = body.split(/\s*;\s*|\n+|\s+и\s+(?=[а-яё]+(?:ть|ться|ти)(?:\s|$))/i).filter((x) => x.trim());
+  const made = [];
+  for (const part of parts) {
+    const p = stubTaskParse(part);
+    if (p.title) made.push(await loggedTask(log, null, () => store.saveTask(p)));
+  }
+  if (!made.length) return 'Не понял, что добавить. Напишите, что нужно сделать.';
+  return made.length === 1 ? 'Добавил ' + stubTaskWords(made[0]) + ' в «Предстоит».'
+    : 'Добавил ' + made.length + ' ' + (made.length < 5 ? 'задачи' : 'задач') + ' в «Предстоит»: ' + made.map(stubTaskWords).join(', ') + '.';
+}
+
+const taskUndos = new Map();   // undo id -> what one message to the tasks assistant changed
+let taskUndoSeq = 0;
+handle('tasks-assistant', async function (text) {
+  const msg = String(text || '').trim().slice(0, 2000);
+  if (!msg) return { ok: false, error: 'Напишите, что сделать с задачами.' };
+  store.recordAssistant();
+  const model = quickModel();
+  const log = [];
+  const controller = new AbortController();
+  let reply = '', failed = false;
+  try {
+    if (!model) reply = await stubTasksAssistant(msg, log);
+    else reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal);
+  } catch (e) {
+    if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('tasks assistant', e.status, e.code || e.type);
+    else if (!e.userMessage) console.error('tasks assistant', e);
+    reply = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
+    failed = true;
+  }
+  let undoId = null;
+  if (log.length) {
+    undoId = 'u' + (++taskUndoSeq);
+    taskUndos.set(undoId, log);
+    if (taskUndos.size > 20) taskUndos.delete(taskUndos.keys().next().value);
+  }
+  const changed = Array.from(new Set(log.map((x) => x.id).filter((id) => id && store.findTask(id))));
+  return ok({ reply: reply || 'Готово.', failed, undoId, changed, cost: runCost.get(controller.signal) || 0, info: info() });
+});
+// «Отменить» under the answer: everything that message changed goes back, newest change first.
+handle('tasks-assistant-undo', async (undoId) => {
+  const log = taskUndos.get(undoId);
+  if (!log) return { ok: false, error: 'Отменить уже нельзя.' };
+  taskUndos.delete(undoId);
+  for (const x of log.slice().reverse()) {
+    if (x.before) await store.putTask(x.before);
+    else if (x.id) await store.deleteTask(x.id);
+  }
+  return ok();
+});
 
 // Calendar, stored in calendar.json beside the prompts.
 handle('cal-save', async (ev) => { const saved = await store.saveEvent(ev); return ok({ id: saved.id, date: saved.date }); });
@@ -1531,7 +1868,7 @@ async function applyAction(action) {
   }
   if (action.kind === 'task-update') {
     if (!store.findTask(action.prevTask.id)) throw userError('Этой задачи уже нет на доске.');
-    const t = await store.saveTask({ id: action.prevTask.id, title: action.task.title, status: action.task.status, note: action.task.note });
+    const t = await store.saveTask(Object.assign({ id: action.prevTask.id, title: action.task.title, status: action.task.status }, taskFields(action.task)));
     return { undo: { restoreTask: action.prevTask }, extra: { taskId: t.id } };
   }
   if (action.kind === 'task-delete') {
@@ -1562,7 +1899,7 @@ handle('assistant-undo', async (actionId) => {
   if (u.eventId) await store.deleteEvent(u.eventId);
   if (u.restore) await store.saveEvent(u.restore);   // puts the old version back under the same id
   if (u.taskId) await store.deleteTask(u.taskId);
-  if (u.restoreTask) await store.saveTask(u.restoreTask);
+  if (u.restoreTask) await store.putTask(u.restoreTask);   // exactly as it was, not counted again
   return ok({ date: u.restore ? u.restore.date : undefined });
 });
 

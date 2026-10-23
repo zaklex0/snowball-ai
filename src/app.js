@@ -35,7 +35,8 @@
     profile: null,        // { name, welcomed, avatar }
     activity: null,       // { since, days: { "2026-10-22": { created, edited, files, copied } } }
     events: [],           // calendar: { id, date "2026-11-03", from "15:00", to, title, kind, note, remind }
-    tasks: [],            // tasks board: { id, title, status "todo" | "doing" | "done", note, order }
+    tasks: [],            // tasks board: { id, title, status (a column id), note, due, time, priority, tags, subtasks, doneFrom, order }
+    taskColumns: [],      // all task columns in order: { id, name, base? , color? }
     query: "",
     type: "all",
     expanded: new Set(),
@@ -84,7 +85,10 @@
     calTimeline: $("cal-timeline"),
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
-    tabs: $("tabs"), tabPlus: $("tab-plus"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
+    tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
+    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tbarReply: $("tbar-reply"), tbarIdeas: $("tbar-ideas"),
+    tpanel: $("tpanel"), utoast: $("utoast"), utoastText: $("utoast-text"), utoastUndo: $("utoast-undo"),
+    tview: $("tview"), tsearch: $("tsearch"), tfTag: $("tf-tag"), tfPrio: $("tf-prio"), tfDone: $("tf-done"), tfReset: $("tf-reset"), tlist: $("tlist"), boardHint: $("board-hint"),
     qa: $("qa"), qaBtn: $("qa-btn"), qaModel: $("qa-model"), qaNew: $("qa-new"), qaFull: $("qa-full"), qaClose: $("qa-close"),
     qaList: $("qa-list"), qaEmpty: $("qa-empty"), qaIdeas: $("qa-ideas"), qaForm: $("qa-form"), qaInput: $("qa-input"), qaSend: $("qa-send"),
     chatHistory: $("chat-history"), chatHistoryBtn: $("chat-history-btn"), chatList: $("chat-list"),
@@ -112,7 +116,6 @@
     bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>',
     window: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6.5" width="13" height="13" rx="2"/><path d="M8 3.5h10.5A2 2 0 0 1 20.5 5.5V16"/></svg>',
-    split: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15"/></svg>',
     share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>',
@@ -120,6 +123,8 @@
     tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg>',
     prompts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
     stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>'
   };
 
@@ -271,6 +276,7 @@
     if (r.activity) state.activity = r.activity;
     if (r.events) state.events = r.events;
     if (r.tasks) state.tasks = r.tasks;
+    if (r.taskColumns) state.taskColumns = r.taskColumns;
   }
   // Every call returns { ok, prompts?, error? }. Fresh prompts replace the list.
   function call(promise) {
@@ -865,6 +871,7 @@
     if (state.page === "stats") renderStats();
     if (state.page === "calendar") renderCalendar();
     if (state.page === "tasks") renderTasks();
+    renderTaskPanel();
   }
 
   /* ---------- tabs ---------- */
@@ -887,7 +894,10 @@
   var startTabs = null;
   try { startTabs = JSON.parse(new URLSearchParams(location.search).get("tabs") || "null"); } catch (e) { startTabs = null; }
   var isMainWindow = !startTabs;
-  api.onWindowMain(function () { isMainWindow = true; saveTabs(); });
+  // Such a window shows only its tab: no sidebar and no tab strip ("solo"). Becoming the main window brings them back.
+  if (startTabs) document.documentElement.classList.add("solo");
+  function isSolo() { return document.documentElement.classList.contains("solo"); }
+  api.onWindowMain(function () { isMainWindow = true; document.documentElement.classList.remove("solo"); saveTabs(); render(); });
   function activeTab() { return tabs.list[tabs.active] || null; }
   function chatTitle(id) { var c = hist.list.find(function (x) { return x.id === id; }); return c ? c.title : ""; }
   function tabTitle(t) {
@@ -972,6 +982,10 @@
   function renderTabs() {
     var cur = activeTab();
     document.title = cur ? tabTitle(cur) + " — Snowball.ai" : "Snowball.ai";
+    if (isSolo()) {
+      els.soloTitle.replaceChildren(h("img", { src: "../assets/icon.png", alt: "" }),
+        cur ? h("span", { class: "tab-ico", html: ICONS[TABS[cur.kind].icon], "aria-hidden": "true" }) : null, h("span", { text: cur ? tabTitle(cur) : "Snowball.ai" }));
+    }
     els.tabs.replaceChildren.apply(els.tabs, tabs.list.map(function (t, i) {
       var title = tabTitle(t), on = i === tabs.active;
       return h("div", { class: "tab" + (on ? " on" : ""), role: "tab", "aria-selected": String(on), tabindex: on ? "0" : "-1", title: title,
@@ -1042,7 +1056,6 @@
     };
     ctxMenu.replaceChildren.apply(ctxMenu, [
       item("Открыть в новом окне", ICONS.window, function () { tabToWindow(i, null); }),
-      item("Рядом: экран пополам", ICONS.split, function () { tabToWindow(i, "beside"); }),
       h("hr"),
       item("Закрыть вкладку", ICONS.x, function () { closeTab(i); }),
       tabs.list.length > 1 ? item("Закрыть другие вкладки", ICONS.x, function () {
@@ -2270,16 +2283,24 @@
       h("button", { type: "button", class: "btn " + (danger ? "btn-danger" : "btn-primary"), disabled: busy, onclick: function () { decide(msg, a, true); } }, busy ? "Секунду…" : label),
       h("button", { type: "button", class: "btn btn-ghost", disabled: busy, onclick: function () { decide(msg, a, false); } }, "Отмена"));
   }
-  var TASK_COLUMNS = { todo: "Предстоит", doing: "В процессе", done: "Готово" };
+  // "В процессе · срок Завтра 15:00 · Срочная · Монтаж"; without the column when noColumn.
+  function taskSummary(t, noColumn) {
+    var parts = noColumn ? [] : [colName(t.status)];
+    if (t.due) parts.push("срок " + dueInfo(t).text);
+    if (t.priority) parts.push(PRIORITIES[t.priority]);
+    if (t.tags && t.tags.length) parts.push(t.tags.join(", "));
+    return parts.join(" · ");
+  }
   function taskCard(msg, a) {
     var t = a.task || {};
     var kind = a.kind === "task-add" ? "add" : a.kind === "task-update" ? "update" : "delete";
     var head = { add: "Добавить задачу «", update: "Изменить задачу «", delete: "Удалить задачу «" }[kind] + (t.title || a.title) + "»?";
     var kids = [h("div", { class: "act-head" }, h("span", { class: "ico", html: kind === "delete" ? ICONS.trash : ICONS.tasks, "aria-hidden": "true" }), h("span", { text: head }))];
     if (kind === "update" && a.prevTask) {
-      kids.push(h("div", { class: "act-when was", text: "Было: «" + a.prevTask.title + "», " + (TASK_COLUMNS[a.prevTask.status] || "") }),
-        h("div", { class: "act-when", text: "Станет: «" + t.title + "», " + (TASK_COLUMNS[t.status] || "") }));
-    } else kids.push(h("div", { class: "act-when", text: "Столбец «" + (TASK_COLUMNS[t.status] || "Предстоит") + "»" + (t.note ? " · " + t.note : "") }));
+      kids.push(h("div", { class: "act-when was", text: "Было: «" + a.prevTask.title + "», " + taskSummary(a.prevTask) }),
+        h("div", { class: "act-when", text: "Станет: «" + t.title + "», " + taskSummary(t) }));
+    } else kids.push(h("div", { class: "act-when", text: "Столбец «" + colName(t.status) + "»" + (taskSummary(t, true) ? " · " + taskSummary(t, true) : "") + (t.note ? " · " + t.note : "") }));
+    if (kind === "add" && t.subtasks && t.subtasks.length) kids.push(h("div", { class: "act-when", text: "Шаги: " + t.subtasks.map(function (s) { return s.title; }).join(", ") }));
     var done = { add: "Задача добавлена", update: "Задача изменена", delete: "Задача удалена" }[kind];
     var foot = cardFooter(msg, a, done, "Отменено, задачи не изменились", kind === "delete" ? null : function () { setPage("tasks"); });
     kids.push(foot || cardButtons(msg, a, { add: "Добавить", update: "Изменить", delete: "Удалить" }[kind], kind === "delete"));
@@ -2388,8 +2409,8 @@
     var what = a.kind === "calendar-add" ? "Добавить в календарь «" + e.title + "» " + e.date + " " + timeRange(e)
       : a.kind === "calendar-update" ? "Изменить дело «" + e.title + "»: теперь " + e.date + " " + timeRange(e)
       : a.kind === "calendar-delete" ? "Удалить из календаря «" + e.title + "» " + e.date + " " + timeRange(e)
-      : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + (TASK_COLUMNS[t.status] || "") + "»"
-      : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + (TASK_COLUMNS[t.status] || "") + "»"
+      : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + colName(t.status) + "»"
+      : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + colName(t.status) + "»"
       : a.kind === "task-delete" ? "Удалить задачу «" + t.title + "»"
       : "Создать промт «" + a.title + "»";
     var how = a.status === "done" ? "сделано" : a.status === "canceled" ? "пользователь отменил" : a.status === "undone" ? "сделано, но пользователь отменил"
@@ -2968,25 +2989,101 @@
   els.chatConnect.addEventListener("click", function () { goToKey("openai"); });
 
   /* ---------- tasks board (alpha) ---------- */
-  // Three columns: «Предстоит», «В процессе», «Готово». Cards are added at the bottom of a column,
-  // dragged between columns (or up and down), renamed by a double click. Stored in tasks.json.
-  var TASK_COLS = [{ id: "todo", name: "Предстоит" }, { id: "doing", name: "В процессе" }, { id: "done", name: "Готово" }];
-  var tb = { adding: null, editing: null, confirmDel: null, dragId: null, focus: false };
+  // Three columns: «Предстоит», «В процессе», «Готово». A card shows the title and marks (importance, tags, due day,
+  // subtasks, note); the circle on the left ticks it off into «Готово» and back to where it was. A click opens the whole
+  // task in the panel on the right (renderTaskPanel). Cards are dragged between columns (or up and down).
+  // Above the board is the tasks assistant bar (renderTbar). Stored in tasks.json.
+  var BASE_COLS = [{ id: "todo", name: "Предстоит", base: true }, { id: "doing", name: "В процессе", base: true }, { id: "done", name: "Готово", base: true }];
+  var PRIORITIES = ["Обычная", "Важная", "Срочная"];
+  var TASK_TAGS = ["Монтаж", "Съёмка", "Сценарий", "Промты", "Публикация", "Сайт", "Обучение", "Звонок", "Генерация"];
+  var WEEKDAYS_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  // open: the task in the panel; fresh: tasks the assistant just changed (they flash once); focusSub: back to the subtask field;
+  // colMenu: the column whose «⋯» menu is open; renaming: the column being renamed; newCol: the «+ Столбец» field is open.
+  var tb = { adding: null, dragId: null, focus: false, open: null, fresh: [], focusSub: false, colMenu: null, renaming: null, newCol: false };
+  // What is shown: board or list, search, tag, importance (1 — important and urgent, 2 — urgent only), done tasks hidden.
+  var tf = { view: "board", q: "", tag: "", prio: 0, hideDone: false, doneOpen: false };
+  try {
+    if (localStorage.getItem("tasksView") === "list") tf.view = "list";
+    tf.hideDone = localStorage.getItem("tasksHideDone") === "1";
+  } catch (e) {}
   function findTask(id) { return state.tasks.find(function (t) { return t.id === id; }) || null; }
+  // All columns in their order: «Предстоит», «В процессе», the user's own, «Готово».
+  function taskCols() { return state.taskColumns && state.taskColumns.length ? state.taskColumns : BASE_COLS; }
   function sortTasks() {
-    var col = { todo: 0, doing: 1, done: 2 };
-    state.tasks.sort(function (a, b) { return col[a.status] - col[b.status] || a.order - b.order; });
+    var ids = taskCols().map(function (c) { return c.id; });
+    state.tasks.sort(function (a, b) { return ids.indexOf(a.status) - ids.indexOf(b.status) || a.order - b.order; });
   }
   function saveTaskNow(t) { return call(api.taskSave(t)).then(function (r) { render(); return r; }); }
+  function colOf(id) { return taskCols().find(function (x) { return x.id === id; }) || BASE_COLS[0]; }
+  function colName(id) { return colOf(id).name; }
+  // The colour of a column: its own for the three base ones, one of six for the user's.
+  function colClass(id) { var c = colOf(id); return c.base ? "tc-" + c.id : "tcc-" + (c.color || 0); }
+  // The same tag always gets the same of six colours.
+  function tagClass(tag) {
+    var n = 0, s = String(tag).toLowerCase();
+    for (var i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) % 997;
+    return "tg-" + (n % 6);
+  }
+  // "Сегодня", "Завтра 15:00", "Пн, 26 октября", "3 ноября"; late — the day has passed and the task is not done.
+  function dueInfo(t) {
+    var d = new Date(t.due + "T00:00"), today = new Date(), n = Math.round((d - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 864e5);
+    var text = n === 0 ? "Сегодня" : n === 1 ? "Завтра" : n === -1 ? "Вчера" : n > 1 && n < 7 ? WEEKDAYS_SHORT[d.getDay()] + ", " + fmtDay(d) : fmtDay(d, d.getFullYear() !== today.getFullYear());
+    var open = t.status !== "done";
+    return { text: text + (t.time ? " " + t.time : ""), late: open && n < 0, today: open && n === 0 };
+  }
+  function taskBar(done, all) {
+    var fill = h("span");
+    fill.style.width = (all ? done / all * 100 : 0) + "%";
+    return h("span", { class: "tmini", "aria-hidden": "true" }, fill);
+  }
+  function taskMarks(t, noDue) {
+    var marks = [];
+    if (t.priority) marks.push(h("span", { class: "tmark p" + t.priority }, PRIORITIES[t.priority]));
+    (t.tags || []).forEach(function (g) { marks.push(h("span", { class: "tmark tag " + tagClass(g) }, g)); });
+    if (t.due && !noDue) {
+      var d = dueInfo(t);
+      marks.push(h("span", { class: "tmark due" + (d.late ? " late" : d.today ? " today" : ""), title: d.late ? "Срок прошёл" : "Срок" }, icon("calendar"), d.text));
+    }
+    var subs = t.subtasks || [];
+    if (subs.length) {
+      var done = subs.filter(function (s) { return s.done; }).length;
+      marks.push(h("span", { class: "tmark", title: "Подзадачи: сделано " + done + " из " + subs.length }, taskBar(done, subs.length), done + "/" + subs.length));
+    }
+    if (t.note) marks.push(h("span", { class: "tmark", title: t.note.slice(0, 300) }, icon("note")));
+    return marks.length ? h("div", { class: "task-marks" }, marks) : null;
+  }
+  // The circle: ticks the task off into «Готово»; taking the tick off puts it back where it was.
+  function taskCheck(t, big) {
+    var done = t.status === "done";
+    return h("button", {
+      type: "button", class: "tchk" + (done ? " on" : "") + (big ? " big" : ""), html: ICONS.check,
+      title: done ? "Снять галочку" : "Отметить сделанной", "aria-pressed": done ? "true" : "false",
+      "aria-label": (done ? "Снять галочку с задачи «" : "Отметить сделанной задачу «") + t.title + "»",
+      onclick: function (e) { e.stopPropagation(); saveTaskNow({ id: t.id, status: done ? t.doneFrom || "todo" : "done" }); }
+    });
+  }
   function renderTasks() {
     var all = state.tasks || [];
     var done = all.filter(function (t) { return t.status === "done"; }).length;
-    els.tasksMeta.textContent = all.length ? all.length + " " + plural(all.length, "задача", "задачи", "задач") + (done ? ", готово " + done : "") : "Пока задач нет: добавьте первую в столбец «Предстоит»";
-    els.board.replaceChildren.apply(els.board, TASK_COLS.map(function (c) {
-      var list = all.filter(function (t) { return t.status === c.id; });
-      var col = h("section", { class: "tcol tc-" + c.id, "aria-label": c.name },
-        h("div", { class: "tcol-h" }, h("span", { class: "tcol-name" }, h("i", { "aria-hidden": "true" }), c.name), h("span", { class: "tcol-n", text: String(list.length) })),
-        list.map(taskItem), addRow(c.id));
+    var today = dayKey(new Date());
+    var late = all.filter(function (t) { return t.status !== "done" && t.due && t.due < today; }).length;
+    els.tasksMeta.textContent = all.length ? all.length + " " + plural(all.length, "задача", "задачи", "задач") + (done ? ", готово " + done : "") + (late ? ", срок прошёл у " + late : "")
+      : "Пока задач нет: напишите ассистенту или добавьте первую в столбец «Предстоит»";
+    renderTbar();
+    renderTaskFilters();
+    var filtered = tf.q || tf.tag || tf.prio;
+    var shown = all.filter(taskVisible);
+    els.board.hidden = tf.view !== "board";
+    els.tlist.hidden = tf.view !== "list";
+    els.boardHint.hidden = tf.view !== "board";
+    if (tf.view === "list") { renderTaskList(shown); return; }
+    var cols = taskCols().map(function (c, ci) {
+      var list = shown.filter(function (t) { return t.status === c.id; });
+      var col = h("section", { class: "tcol " + colClass(c.id), "aria-label": c.name },
+        columnHead(c, ci, list.length),
+        list.map(taskItem),
+        !list.length && filtered ? h("p", { class: "tcol-empty", text: "Под фильтр ничего не подходит" }) : null,
+        addRow(c.id));
       col.addEventListener("dragover", function (e) { if (!tb.dragId) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; col.classList.add("drop"); });
       col.addEventListener("dragleave", function (e) { if (!col.contains(e.relatedTarget)) col.classList.remove("drop"); });
       col.addEventListener("drop", function (e) {
@@ -2996,7 +3093,10 @@
         dropTask(c.id, e.target.closest(".task[data-id]"), list);
       });
       return col;
-    }));
+    });
+    els.board.replaceChildren.apply(els.board, cols.concat([newColumnBox()]));
+    var ren = els.board.querySelector(".tcol-in");
+    if (ren && document.activeElement !== ren) { ren.focus(); ren.select(); }
     if (tb.focus) {
       tb.focus = false;
       var inp = els.board.querySelector(".task-input");
@@ -3026,40 +3126,11 @@
     saveTaskNow({ id: id, status: status, order: order });
   }
   function taskItem(t) {
-    if (tb.editing === t.id) {
-      var area = h("textarea", { class: "task-input", rows: "2", maxlength: "300", "aria-label": "Название задачи" });
-      area.value = t.title;
-      var finishEdit = function (save) {
-        if (tb.editing !== t.id) return;
-        tb.editing = null;
-        var v = area.value.trim();
-        if (save && v && v !== t.title) { t.title = v; saveTaskNow({ id: t.id, title: v }); } else renderTasks();
-      };
-      area.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); finishEdit(true); }
-        else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finishEdit(false); }
-      });
-      area.addEventListener("blur", function () { finishEdit(true); });
-      return h("div", { class: "task editing" }, area);
-    }
-    if (tb.confirmDel === t.id) {
-      return h("div", { class: "task confirm" }, h("span", { text: "Удалить «" + t.title + "»?" }),
-        h("button", { type: "button", class: "link-btn danger", onclick: function () {
-          tb.confirmDel = null;
-          state.tasks = state.tasks.filter(function (x) { return x.id !== t.id; });
-          renderTasks();
-          call(api.taskDelete(t.id)).then(function () { render(); });
-        } }, "Удалить"),
-        h("button", { type: "button", class: "link-btn", onclick: function () { tb.confirmDel = null; renderTasks(); } }, "Отмена"));
-    }
-    var edit = function () { tb.editing = t.id; tb.focus = true; renderTasks(); };
-    var el = h("div", { class: "task", draggable: "true", "data-id": t.id, title: "Перетащите в другой столбец. Двойной клик — изменить", ondblclick: edit },
-      h("span", { class: "task-t", text: t.title }),
-      t.note ? h("span", { class: "task-note", text: t.note }) : null,
-      h("span", { class: "task-acts" },
-        h("button", { type: "button", class: "task-btn", title: "Изменить", "aria-label": "Изменить задачу «" + t.title + "»", html: ICONS.pencil, onclick: edit }),
-        h("button", { type: "button", class: "task-btn", title: "Удалить", "aria-label": "Удалить задачу «" + t.title + "»", html: ICONS.trash,
-          onclick: function () { tb.confirmDel = t.id; renderTasks(); } })));
+    var cls = "task" + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
+    var el = h("div", { class: cls, draggable: "true", "data-id": t.id, tabindex: "0", title: "Нажмите, чтобы открыть задачу. Перетащите в другой столбец",
+      onclick: function () { openTask(t.id); },
+      onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); } },
+      taskCheck(t), h("span", { class: "task-t", text: t.title }), taskMarks(t));
     el.addEventListener("dragstart", function (e) {
       tb.dragId = t.id;
       e.dataTransfer.effectAllowed = "move";
@@ -3099,6 +3170,374 @@
     });
     return inp;
   }
+
+  /* ---------- search and filters ---------- */
+  function taskVisible(t) {
+    if (tf.hideDone && t.status === "done") return false;
+    if (tf.tag && (t.tags || []).indexOf(tf.tag) === -1) return false;
+    if (tf.prio && t.priority < tf.prio) return false;
+    if (!tf.q) return true;
+    var q = norm(tf.q);
+    return norm(t.title).indexOf(q) !== -1 || norm(t.note).indexOf(q) !== -1 ||
+      (t.tags || []).some(function (g) { return norm(g).indexOf(q) !== -1; }) ||
+      (t.subtasks || []).some(function (s) { return norm(s.title).indexOf(q) !== -1; });
+  }
+  function renderTaskFilters() {
+    els.tview.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.v === tf.view)); });
+    var tags = [];
+    state.tasks.forEach(function (t) { (t.tags || []).forEach(function (g) { if (tags.indexOf(g) === -1) tags.push(g); }); });
+    tags.sort(function (a, b) { return a.localeCompare(b, "ru"); });
+    if (tf.tag && tags.indexOf(tf.tag) === -1) tags.unshift(tf.tag);
+    var key = tags.join("\n");
+    if (els.tfTag.dataset.key !== key) {
+      els.tfTag.dataset.key = key;
+      els.tfTag.replaceChildren.apply(els.tfTag, [h("option", { value: "" }, "Все теги")].concat(tags.map(function (g) { return h("option", { value: g }, g); })));
+    }
+    els.tfTag.value = tf.tag;
+    els.tfTag.disabled = !tags.length;
+    els.tfPrio.value = String(tf.prio);
+    els.tfDone.setAttribute("aria-pressed", String(tf.hideDone));
+    els.tfReset.hidden = !(tf.q || tf.tag || tf.prio);
+  }
+  els.tview.addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-v]");
+    if (!b || b.dataset.v === tf.view) return;
+    tf.view = b.dataset.v;
+    try { localStorage.setItem("tasksView", tf.view); } catch (err) {}
+    renderTasks();
+  });
+  els.tsearch.addEventListener("input", function () { tf.q = els.tsearch.value.trim(); renderTasks(); });
+  els.tsearch.addEventListener("keydown", function (e) { if (e.key === "Escape" && els.tsearch.value) { e.stopPropagation(); els.tsearch.value = ""; tf.q = ""; renderTasks(); } });
+  els.tfTag.addEventListener("change", function () { tf.tag = els.tfTag.value; renderTasks(); });
+  els.tfPrio.addEventListener("change", function () { tf.prio = Number(els.tfPrio.value) || 0; renderTasks(); });
+  els.tfDone.addEventListener("click", function () {
+    tf.hideDone = !tf.hideDone;
+    try { localStorage.setItem("tasksHideDone", tf.hideDone ? "1" : "0"); } catch (err) {}
+    renderTasks();
+  });
+  els.tfReset.addEventListener("click", function () { tf.q = ""; tf.tag = ""; tf.prio = 0; els.tsearch.value = ""; renderTasks(); });
+
+  /* ---------- the user's own columns ---------- */
+  // The three base columns always stay (a lock in the header). The user's own sit before «Готово»; their «⋯» menu
+  // renames, moves and deletes them. When a column is deleted its tasks go to «Предстоит», and «Отменить» brings it all back.
+  function columnHead(c, ci, count) {
+    if (tb.renaming === c.id) {
+      var inp = h("input", { type: "text", class: "tcol-in", value: c.name, maxlength: "40", "aria-label": "Название столбца" });
+      var done = false;
+      var finish = function (save) {
+        if (done) return;
+        done = true;
+        tb.renaming = null;
+        var v = inp.value.trim();
+        if (save && v && v !== c.name) call(api.columnRename(c.id, v)).then(function () { render(); }); else renderTasks();
+      };
+      inp.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") { e.preventDefault(); finish(true); }
+        else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+      });
+      inp.addEventListener("blur", function () { finish(true); });
+      return h("div", { class: "tcol-h" }, inp);
+    }
+    var cols = taskCols(), custom = cols.filter(function (x) { return !x.base; }), at = custom.indexOf(c);
+    var side;
+    if (c.base) side = h("span", { class: "tcol-lock", html: ICONS.lock, title: "Основной столбец: его нельзя удалить или переименовать" });
+    else {
+      var item = function (iconName, label, fn, cls) {
+        return h("button", { type: "button", role: "menuitem", class: cls || "", onclick: function (e) { e.stopPropagation(); tb.colMenu = null; fn(); } }, icon(iconName), label);
+      };
+      side = h("div", { class: "tcol-menu" },
+        h("button", { type: "button", class: "tcol-more", html: ICONS.dots, title: "Действия со столбцом", "aria-label": "Действия со столбцом «" + c.name + "»",
+          "aria-haspopup": "true", "aria-expanded": String(tb.colMenu === c.id),
+          onclick: function (e) { e.stopPropagation(); tb.colMenu = tb.colMenu === c.id ? null : c.id; renderTasks(); } }),
+        tb.colMenu === c.id ? h("div", { class: "tcol-pop", role: "menu" },
+          item("pencil", "Переименовать", function () { tb.renaming = c.id; renderTasks(); }),
+          at > 0 ? item("left", "Сдвинуть левее", function () { call(api.columnMove(c.id, -1)).then(function () { render(); }); }) : null,
+          at < custom.length - 1 ? item("right", "Сдвинуть правее", function () { call(api.columnMove(c.id, 1)).then(function () { render(); }); }) : null,
+          item("trash", "Удалить столбец", function () { removeColumn(c); }, "danger")) : null);
+    }
+    return h("div", { class: "tcol-h" }, h("span", { class: "tcol-name" }, h("i", { "aria-hidden": "true" }), c.name), h("span", { class: "tcol-n", text: String(count) }), side);
+  }
+  function removeColumn(c) {
+    call(api.columnDelete(c.id)).then(function (r) {
+      if (!r) return;
+      render();
+      var gone = r.removed;
+      if (!gone) return;
+      undoToast("Столбец «" + c.name + "» удалён" + (gone.moved.length ? ", задачи переехали в «Предстоит»" : ""), function () {
+        call(api.columnRestore(gone)).then(function (x) { if (x) render(); });
+      });
+    });
+  }
+  // «+ Столбец» after the last column; while open, a field for the name (Enter — add, Esc — close).
+  function newColumnBox() {
+    if (!tb.newCol) {
+      return h("button", { type: "button", class: "tcol-add", title: "Свой столбец встанет перед «Готово»", onclick: function () { tb.newCol = true; renderTasks(); var x = els.board.querySelector(".tcol-new input"); if (x) x.focus(); } },
+        icon("plus"), "Столбец");
+    }
+    var inp = h("input", { type: "text", class: "tcol-in", maxlength: "40", placeholder: "Название столбца", "aria-label": "Название нового столбца" });
+    var done = false;
+    var finish = function (save) {
+      if (done) return;
+      done = true;
+      tb.newCol = false;
+      var v = inp.value.trim();
+      if (save && v) call(api.columnAdd(v)).then(function () { render(); }); else renderTasks();
+    };
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(false); }
+    });
+    inp.addEventListener("blur", function () { finish(true); });
+    return h("section", { class: "tcol tcol-new tcc-" + ((state.taskColumns || []).filter(function (x) { return !x.base; }).length % 6) }, inp,
+      h("p", { class: "tcol-empty", text: "Enter — добавить, Esc — передумать" }));
+  }
+  document.addEventListener("mousedown", function (e) {
+    if (tb.colMenu && !e.target.closest(".tcol-menu")) { tb.colMenu = null; renderTasks(); }
+  });
+
+  /* ---------- the «Список» view ---------- */
+  // Open tasks by due day: overdue, today, tomorrow, the next 7 days, later, no due day; done ones folded at the bottom.
+  var LIST_GROUPS = [
+    { name: "Срок прошёл", late: true, test: function (n) { return n !== null && n < 0; } },
+    { name: "Сегодня", test: function (n) { return n === 0; } },
+    { name: "Завтра", test: function (n) { return n === 1; } },
+    { name: "В ближайшие 7 дней", test: function (n) { return n !== null && n > 1 && n <= 7; } },
+    { name: "Позже", test: function (n) { return n !== null && n > 7; } },
+    { name: "Без срока", test: function (n) { return n === null; } }
+  ];
+  function daysUntil(t) {
+    if (!t.due) return null;
+    var now = new Date();
+    return Math.round((new Date(t.due + "T00:00") - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+  }
+  function taskRow(t) {
+    var d = t.due ? dueInfo(t) : null;
+    var cls = "trow " + colClass(t.status) + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
+    var el = h("div", { class: cls, tabindex: "0", "data-id": t.id, onclick: function () { openTask(t.id); },
+      onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); } },
+      taskCheck(t),
+      h("div", { class: "trow-main" }, h("span", { class: "task-t", text: t.title }), taskMarks(t, true)),
+      h("div", { class: "trow-side" },
+        d ? h("span", { class: "tmark due" + (d.late ? " late" : d.today ? " today" : "") }, icon("calendar"), d.text) : null,
+        h("span", { class: "trow-col" }, h("i", { "aria-hidden": "true" }), colName(t.status))));
+    return el;
+  }
+  function renderTaskList(shown) {
+    var open = shown.filter(function (t) { return t.status !== "done"; });
+    var done = shown.filter(function (t) { return t.status === "done"; });
+    var kids = [];
+    LIST_GROUPS.forEach(function (g) {
+      var items = open.filter(function (t) { return g.test(daysUntil(t)); }).sort(function (a, b) {
+        return (a.due || "").localeCompare(b.due || "") || (a.time || "99").localeCompare(b.time || "99") || b.priority - a.priority || a.order - b.order;
+      });
+      if (!items.length) return;
+      kids.push(h("section", { class: "tgroup" }, h("h3", { class: "tgroup-h" + (g.late ? " late" : "") }, g.name, h("span", { text: String(items.length) })), items.map(taskRow)));
+    });
+    if (!open.length) {
+      kids.push(h("p", { class: "tlist-empty", text: tf.q || tf.tag || tf.prio ? "Под фильтр ничего не подходит." :
+        state.tasks.length ? "Все задачи сделаны." : "Пока задач нет. Напишите ассистенту сверху или добавьте задачу в виде «Доска»." }));
+    }
+    if (done.length) {
+      kids.push(h("section", { class: "tgroup" },
+        h("h3", { class: "tgroup-h" }, h("button", { type: "button", class: "tgroup-fold", "aria-expanded": String(tf.doneOpen), onclick: function () { tf.doneOpen = !tf.doneOpen; renderTasks(); } },
+          h("span", { class: "ico" + (tf.doneOpen ? " open" : ""), html: ICONS.right, "aria-hidden": "true" }), "Готово", h("span", { text: String(done.length) }))),
+        tf.doneOpen ? done.map(taskRow) : null));
+    }
+    els.tlist.replaceChildren.apply(els.tlist, kids);
+  }
+
+  /* The whole task: a panel on the right over the board, like in Notion. Every change is saved at once.
+     A re-render while the user types in a field of the panel is skipped (force: our own save asked for it). */
+  function openTask(id) { tb.open = id; renderTasks(); renderTaskPanel(true); }
+  function closeTask() {
+    var a = document.activeElement;
+    if (a && els.tpanel.contains(a)) a.blur();   // the field being typed in saves itself on blur
+    tb.open = null;
+    renderTaskPanel(true);
+    if (state.page === "tasks") renderTasks();
+  }
+  function savePanel(id, fields) {
+    return call(api.taskSave(Object.assign({ id: id }, fields))).then(function (r) { render(); renderTaskPanel(true); return r; });
+  }
+  function renderTaskPanel(force) {
+    var p = els.tpanel, t = tb.open && state.page === "tasks" ? findTask(tb.open) : null;
+    if (!t) {
+      if (tb.open && !findTask(tb.open)) tb.open = null;
+      p.hidden = true;
+      p.replaceChildren();
+      return;
+    }
+    var a = document.activeElement;
+    if (!force && !p.hidden && p.dataset.id === t.id && a && p.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && a.type === "text"))) return;
+    p.dataset.id = t.id;
+    p.hidden = false;
+
+    var title = h("textarea", { class: "tp-title", rows: "1", maxlength: "300", "aria-label": "Название задачи" });
+    title.value = t.title;
+    var fit = function () { title.style.height = "auto"; title.style.height = title.scrollHeight + "px"; };
+    title.addEventListener("input", fit);
+    title.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); title.blur(); } });
+    title.addEventListener("change", function () {
+      var v = title.value.trim();
+      if (v && v !== t.title) savePanel(t.id, { title: v }); else title.value = t.title;
+    });
+
+    var status = h("select", { class: "tp-select", "aria-label": "Столбец", onchange: function () { savePanel(t.id, { status: this.value }); } },
+      taskCols().map(function (c) { return h("option", { value: c.id, selected: c.id === t.status }, c.name); }));
+
+    var today = new Date(), dayOf = function (n) { return dayKey(addDays(today, n)); };
+    var quick = function (label, due) {
+      return h("button", { type: "button", class: "tp-opt" + (t.due === due ? " on" : ""), onclick: function () { savePanel(t.id, due ? { due: due } : { due: "", time: "" }); } }, label);
+    };
+    var date = h("input", { type: "date", class: "tp-date", value: t.due, "aria-label": "Срок", onchange: function () { savePanel(t.id, { due: this.value }); } });
+    var time = h("input", { type: "time", class: "tp-date", value: t.time, disabled: !t.due, title: t.due ? "Время — по желанию" : "Сначала выберите день", "aria-label": "Время",
+      onchange: function () { savePanel(t.id, { time: this.value }); } });
+
+    var tagIn = h("input", { type: "text", class: "tp-tag-in", placeholder: "+ тег", maxlength: "30", list: "tp-tag-list", "aria-label": "Новый тег" });
+    tagIn.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      var v = tagIn.value.trim();
+      if (!v) return;
+      v = v.charAt(0).toUpperCase() + v.slice(1);
+      savePanel(t.id, { tags: t.tags.concat([v]) });
+    });
+    var known = TASK_TAGS.slice();
+    state.tasks.forEach(function (x) { x.tags.forEach(function (g) { if (known.indexOf(g) === -1) known.push(g); }); });
+
+    var subs = t.subtasks || [], subsDone = subs.filter(function (s) { return s.done; }).length;
+    var subIn = h("input", { type: "text", class: "tp-sub-in", placeholder: "+ Подзадача (Enter — добавить)", maxlength: "300", "aria-label": "Новая подзадача" });
+    subIn.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      var v = subIn.value.trim();
+      if (!v) return;
+      tb.focusSub = true;
+      savePanel(t.id, { subtasks: subs.concat([{ title: v }]) });
+    });
+
+    var note = h("textarea", { class: "textarea tp-note", rows: "4", maxlength: "5000", placeholder: "Подробности, ссылки, мысли…", "aria-label": "Заметка" });
+    note.value = t.note;
+    note.addEventListener("change", function () { if (note.value.trim() !== t.note) savePanel(t.id, { note: note.value }); });
+
+    var edited = t.updatedAt - t.createdAt > 60 * 1000;
+    p.replaceChildren(
+      h("div", { class: "tp-head" },
+        h("span", { class: "tp-col " + colClass(t.status) }, h("i", { "aria-hidden": "true" }), colName(t.status)),
+        h("button", { type: "button", class: "tp-close", html: ICONS.x, title: "Закрыть (Esc)", "aria-label": "Закрыть задачу", onclick: closeTask })),
+      h("div", { class: "tp-body" },
+        h("div", { class: "tp-title-row" }, taskCheck(t, true), title),
+        h("div", { class: "tp-field" }, h("span", { class: "tp-label", text: "Столбец" }), status),
+        h("div", { class: "tp-field" }, h("span", { class: "tp-label", text: "Срок" }),
+          h("div", { class: "tp-opts" }, quick("Сегодня", dayOf(0)), quick("Завтра", dayOf(1)), quick("Без срока", ""), date, time)),
+        h("div", { class: "tp-field" }, h("span", { class: "tp-label", text: "Важность" }),
+          h("div", { class: "tp-opts" }, PRIORITIES.map(function (name, i) {
+            return h("button", { type: "button", class: "tp-opt p" + i + (t.priority === i ? " on" : ""), "aria-pressed": t.priority === i ? "true" : "false",
+              onclick: function () { savePanel(t.id, { priority: i }); } }, name);
+          }))),
+        h("div", { class: "tp-field" }, h("span", { class: "tp-label", text: "Теги" }),
+          h("div", { class: "tp-opts" }, t.tags.map(function (g, i) {
+            return h("span", { class: "tp-tag " + tagClass(g) }, g,
+              h("button", { type: "button", html: ICONS.x, title: "Убрать тег", "aria-label": "Убрать тег «" + g + "»",
+                onclick: function () { savePanel(t.id, { tags: t.tags.filter(function (x, j) { return j !== i; }) }); } }));
+          }), tagIn, h("datalist", { id: "tp-tag-list" }, known.filter(function (g) { return t.tags.indexOf(g) === -1; }).map(function (g) { return h("option", { value: g }); })))),
+        h("div", { class: "tp-block" },
+          h("div", { class: "tp-block-h" }, "Подзадачи", subs.length ? h("span", { class: "tmark" }, taskBar(subsDone, subs.length), subsDone + " из " + subs.length) : null),
+          h("div", { class: "tp-subs" }, subs.map(function (s) {
+            return h("div", { class: "tp-sub" + (s.done ? " done" : "") },
+              h("button", { type: "button", class: "tchk sq" + (s.done ? " on" : ""), html: ICONS.check, "aria-pressed": s.done ? "true" : "false",
+                "aria-label": (s.done ? "Снять отметку: " : "Отметить: ") + s.title,
+                onclick: function () { savePanel(t.id, { subtasks: subs.map(function (x) { return x.id === s.id ? Object.assign({}, x, { done: !x.done }) : x; }) }); } }),
+              h("span", { text: s.title }),
+              h("button", { type: "button", class: "tp-sub-del", html: ICONS.x, title: "Удалить подзадачу", "aria-label": "Удалить подзадачу «" + s.title + "»",
+                onclick: function () { savePanel(t.id, { subtasks: subs.filter(function (x) { return x.id !== s.id; }) }); } }));
+          })), subIn),
+        h("div", { class: "tp-block" }, h("div", { class: "tp-block-h" }, "Заметка"), note)),
+      h("div", { class: "tp-foot" },
+        h("span", { class: "tp-when", title: new Date(edited ? t.updatedAt : t.createdAt).toLocaleString("ru-RU") }, (edited ? "Изменена " : "Создана ") + fmtWhen(edited ? t.updatedAt : t.createdAt)),
+        h("button", { type: "button", class: "btn-mini tp-del", onclick: function () { removeTask(t); } }, icon("trash"), h("span", { class: "lbl", text: "Удалить" }))));
+    fit();
+    if (tb.focusSub) { tb.focusSub = false; var si = p.querySelector(".tp-sub-in"); if (si) si.focus(); }
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !els.tpanel.hidden && !document.querySelector("dialog[open]") && els.qa.hidden) { e.preventDefault(); closeTask(); }
+  });
+
+  // Deleting happens at once; for 7 seconds «Отменить» at the bottom brings the task back exactly as it was.
+  var undoTimer = null;
+  function undoToast(text, undo) {
+    els.utoastText.textContent = text;
+    els.utoastUndo.onclick = function () { els.utoast.hidden = true; clearTimeout(undoTimer); undo(); };
+    els.utoast.hidden = false;
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(function () { els.utoast.hidden = true; }, 7000);
+  }
+  function removeTask(t) {
+    var copy = JSON.parse(JSON.stringify(t));
+    if (tb.open === t.id) tb.open = null;
+    state.tasks = state.tasks.filter(function (x) { return x.id !== t.id; });
+    render();
+    call(api.taskDelete(t.id)).then(function () { render(); });
+    undoToast("Задача «" + t.title + "» удалена", function () { call(api.taskRestore(copy)).then(function (r) { if (r) render(); }); });
+  }
+
+  /* The tasks assistant bar: its own assistant that only knows tasks (the cheapest model, quick thinking).
+     Every message is a separate request; changes apply at once and «Отменить» under the answer takes back what it changed. */
+  var TBAR_IDEAS = ["Смонтировать рилс завтра срочно и позвонить Диме в пятницу", "Что у меня на сегодня?", "Что горит?"];
+  var tbar = { busy: false, reply: null };   // reply: { text, failed?, undoId?, cost? }
+  function renderTbar() {
+    els.tbarModel.textContent = quickModelName();
+    els.tbarInput.disabled = tbar.busy;
+    els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim();
+    var r = tbar.reply;
+    els.tbarReply.hidden = !tbar.busy && !r;
+    if (tbar.busy) {
+      els.tbarReply.className = "tbar-reply busy";
+      els.tbarReply.replaceChildren(icon("spark"), h("p", null, "Разбираю: «" + r.text + "»", h("span", { class: "typing", "aria-label": "Ассистент думает" }, h("i"), h("i"), h("i"))));
+    } else if (r) {
+      els.tbarReply.className = "tbar-reply" + (r.failed ? " bad" : "");
+      els.tbarReply.replaceChildren(icon("spark"), h("p", { text: r.text }),
+        h("div", { class: "tbar-acts" },
+          r.cost > 0 ? h("span", { class: "msg-cost", title: "Столько стоил этот ответ (примерно)", text: fmtCost(r.cost) }) : null,
+          r.undoId ? h("button", { type: "button", class: "btn-mini", onclick: function () { undoTbar(r.undoId); } }, "Отменить") : null,
+          h("button", { type: "button", class: "tbar-x", html: ICONS.x, title: "Скрыть ответ", "aria-label": "Скрыть ответ", onclick: function () { tbar.reply = null; renderTbar(); } })));
+    }
+    els.tbarIdeas.hidden = tbar.busy || !!r;
+    if (!els.tbarIdeas.firstChild) {
+      els.tbarIdeas.replaceChildren.apply(els.tbarIdeas, [h("span", { text: "Попробуйте:" })].concat(TBAR_IDEAS.map(function (idea) {
+        return h("button", { type: "button", class: "fchip", onclick: function () { sendTbar(idea); } }, idea);
+      })));
+    }
+  }
+  function sendTbar(text) {
+    var v = String(text || "").trim();
+    if (!v || tbar.busy) return;
+    tbar.busy = true;
+    tbar.reply = { text: v };
+    els.tbarInput.value = "";
+    renderTbar();
+    var fail = function (msg) { tbar.busy = false; tbar.reply = { text: msg || "Ассистент не ответил. Попробуйте ещё раз.", failed: true }; renderTbar(); };
+    api.tasksAssistant(v).then(function (r) {
+      if (!r || !r.ok) { fail(r && r.error); return; }
+      applyData(r);
+      tbar.busy = false;
+      tbar.reply = { text: r.reply, failed: r.failed, undoId: r.undoId, cost: r.cost };
+      tb.fresh = r.changed || [];
+      render();
+      tb.fresh = [];
+      if (state.page === "tasks") els.tbarInput.focus();
+    }, function () { fail(); });
+  }
+  function undoTbar(undoId) {
+    call(api.tasksAssistantUndo(undoId)).then(function (r) {
+      if (!r) return;
+      tbar.reply = { text: "Отменил: задачи вернулись как были до этого сообщения." };
+      render();
+    });
+  }
+  els.tbar.addEventListener("submit", function (e) { e.preventDefault(); sendTbar(els.tbarInput.value); });
+  els.tbarInput.addEventListener("input", function () { els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim(); });
+  els.tbarInput.addEventListener("keydown", function (e) { if (e.key === "Escape" && els.tbarInput.value) { e.stopPropagation(); els.tbarInput.value = ""; els.tbarSend.disabled = true; } });
 
   // The generator is not there yet: the two buttons show what is coming.
   document.querySelectorAll(".gen-card").forEach(function (b) {
@@ -3192,6 +3631,8 @@
     if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open) return;
     var mod = e.ctrlKey || e.metaKey;
     // Tabs like in a browser, and the small assistant window.
+    if (isSolo() && mod && !e.shiftKey && !e.altKey && e.code === "KeyW") { e.preventDefault(); window.close(); return; }
+    if (isSolo() && mod && (e.code === "Tab" || e.code === "KeyT")) { e.preventDefault(); return; }
     if (mod && !e.altKey && e.code === "Tab") {
       e.preventDefault();
       if (tabs.list.length > 1) activateTab((tabs.active + (e.shiftKey ? -1 : 1) + tabs.list.length) % tabs.list.length);

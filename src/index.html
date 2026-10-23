@@ -113,6 +113,7 @@
 
     <div class="main-col">
     <div class="titlebar" id="titlebar">
+      <div class="solo-title" id="solo-title"></div>
       <div class="tabs" id="tabs" role="tablist" aria-label="Вкладки"></div>
       <button type="button" class="tab-plus" id="tab-plus" aria-haspopup="true" aria-expanded="false" aria-controls="tab-menu" title="Новая вкладка (Ctrl + T)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
@@ -280,9 +281,38 @@
               <h1 id="tasks-title">Задачи <span class="alpha alpha-big">Альфа</span></h1>
               <p class="meta" id="tasks-meta"></p>
             </div>
+            <div class="top-actions">
+              <div class="tview" id="tview" role="group" aria-label="Как показывать задачи">
+                <button type="button" data-v="board" aria-pressed="true" title="Столбцы по стадиям работы">Доска</button>
+                <button type="button" data-v="list" aria-pressed="false" title="Задачи по срокам: что горит, что сегодня, что завтра">Список</button>
+              </div>
+            </div>
           </header>
+          <div class="tbar-wrap">
+            <form class="tbar" id="tbar">
+              <span class="tbar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg></span>
+              <input class="tbar-input" id="tbar-input" maxlength="2000" autocomplete="off" aria-label="Ассистент задач"
+                placeholder="Ассистент задач: «смонтировать рилс завтра срочно и позвонить Диме в пятницу»">
+              <span class="tbar-model" id="tbar-model" title="Ассистент задач — всегда самая дешёвая модель с быстрыми размышлениями"></span>
+              <button type="submit" class="tbar-send" id="tbar-send" title="Отправить (Enter)" aria-label="Отправить" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+            </form>
+            <div class="tbar-reply" id="tbar-reply" role="status" aria-live="polite" hidden></div>
+            <div class="tbar-ideas" id="tbar-ideas"></div>
+          </div>
+          <div class="tfilters" id="tfilters">
+            <label class="tsearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="tsearch" type="text" maxlength="100" placeholder="Поиск по задачам" aria-label="Поиск по задачам" autocomplete="off"></label>
+            <select class="tsel" id="tf-tag" aria-label="Фильтр по тегу"></select>
+            <select class="tsel" id="tf-prio" aria-label="Фильтр по важности">
+              <option value="0">Любая важность</option>
+              <option value="2">Только срочные</option>
+              <option value="1">Важные и срочные</option>
+            </select>
+            <button type="button" class="fchip" id="tf-done" aria-pressed="false">Скрыть выполненные</button>
+            <button type="button" class="link-btn" id="tf-reset" hidden>Сбросить фильтры</button>
+          </div>
           <div class="board" id="board"></div>
-          <p class="board-hint">Перетаскивайте задачи между столбцами. Двойной клик — изменить. Ассистент тоже умеет: «добавь задачу …», «перенеси … в готово».</p>
+          <div class="tlist" id="tlist" hidden></div>
+          <p class="board-hint" id="board-hint">Нажмите на задачу, чтобы открыть её целиком: срок, важность, теги, подзадачи, заметка. Кружок слева отмечает задачу сделанной. Задачи можно перетаскивать между столбцами.</p>
         </section>
 
         <section class="view" id="view-calendar" aria-labelledby="calendar-title" hidden>
@@ -662,6 +692,8 @@
   </form>
 </div>
 
+<aside class="tpanel" id="tpanel" aria-label="Задача" hidden></aside>
+<div class="utoast" id="utoast" role="status" aria-live="polite" hidden><span id="utoast-text"></span><button type="button" class="utoast-btn" id="utoast-undo">Отменить</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="app.js"></script>

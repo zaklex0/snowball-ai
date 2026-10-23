@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет задач — Snowball.ai</title>
+<!-- A mockup only: the next version of the «Задачи» section inside the 1.9.0 window (tabs on top, icon sidebar,
+     upcoming events, the star button). Board and list views, the tasks assistant bar (cheapest model, tasks only),
+     custom columns, the task panel on the right, subtasks, delete with undo, what counts in statistics.
+     Numbered marks on the page match the explanations on the right. Not loaded by the app. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<style>
+  /* The program's colours (copied from src/styles.css, so the mockup also opens on its own) */
+  :root {
+    --bg: #FCEEE4; --titlebar: #F9E3D4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7;
+    --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --accent-hover: #EF9B72; --accent-ink: #3F251C; --accent-strong: #BF603D;
+    --danger: #B5463B; --ok-bg: #DCEBD1; --ok-ink: #3B5934; --toast-bg: #4B3128; --toast-ink: #FFF4EC;
+    --shadow: 0 1px 0 rgba(120, 72, 52, .05), 0 22px 44px -28px rgba(150, 85, 55, .38);
+    --pop-shadow: 0 12px 32px -10px rgba(110, 60, 40, .35);
+    --cat-static-dot: #4F9A40; --cat-video-dot: #3C78C8; --cat-video-ink: #22487A; --cat-system-dot: #D0493E; --cat-system-ink: #7A2620;
+    --font-display: "Unbounded", "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Golos Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #251B17; --titlebar: #2C201B; --surface: #30241E; --surface-2: #3A2C25; --line: #4A372E;
+      --ink: #F5E6DC; --ink-soft: #C3A596; --accent: #F2A982; --accent-hover: #F6B994; --accent-ink: #2B1C16; --accent-strong: #E08A62;
+      --danger: #F0907F; --ok-bg: #2F4430; --ok-ink: #CFE6C4; --toast-bg: #F5E6DC; --toast-ink: #2B1C16;
+      --shadow: 0 1px 0 rgba(0, 0, 0, .25), 0 22px 44px -28px rgba(0, 0, 0, .7); --pop-shadow: 0 14px 34px -10px rgba(0, 0, 0, .7);
+      --cat-static-dot: #8CCB7C; --cat-video-dot: #86B4F0; --cat-video-ink: #CFE0F6; --cat-system-dot: #F08A80; --cat-system-ink: #F7CBC6;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  svg { width: 16px; height: 16px; flex: none; }
+  @keyframes ev-now { 50% { background: color-mix(in srgb, var(--c) 30%, transparent); } }
+  @keyframes rec { 50% { opacity: .5; } }
+
+  .pg { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; padding: 18px; min-height: 100vh; align-items: start; }
+  @media (max-width: 1250px) { .pg { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---- the program window, as in 1.9.0 ---- */
+  .win { position: relative; display: flex; height: calc(100vh - 36px); min-height: 680px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow); }
+
+  .side { flex: none; width: 236px; display: flex; flex-direction: column; gap: 16px; padding: 0 10px 12px; background: var(--titlebar); border-right: 1px solid var(--line); }
+  .side-head { flex: none; height: 40px; margin: 0 -10px; padding: 0 16px; display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; }
+  .side-head i { width: 18px; height: 18px; border-radius: 6px; background: var(--accent); }
+  .side-top { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+  .side-icons { display: flex; gap: 2px; justify-content: space-between; margin: 4px 0 16px; }
+  .nav-icon { position: relative; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
+  .nav-icon:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--ink); }
+  .nav-icon.on { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+  .nav-icon svg { width: 19px; height: 19px; }
+  .nav-badge { position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent-strong); color: #fff;
+    font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--titlebar); }
+  .side-h { margin: 4px 11px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+  .up-day { margin: 8px 11px 2px; font-size: 12px; color: var(--ink-soft); }
+  .up-ev { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; padding: 6px 9px; border: 0; border-radius: 9px; background: none; text-align: left; font-size: 13.5px; }
+  .up-ev:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+  .up-ev i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+  .up-ev .tt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .up-ev .tm { font-size: 12px; color: var(--ink-soft); }
+  .up-ev.now { background: color-mix(in srgb, var(--c) 16%, transparent); animation: ev-now 2.4s ease-in-out infinite; }
+  .up-ev.now .tm { color: var(--ink); font-weight: 600; }
+  .side-bottom { display: grid; gap: 8px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: 0; border-radius: 11px; background: none; color: var(--ink-soft); font-size: 14px; font-weight: 500; text-align: left; }
+  .nav-item:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--ink); }
+  .nav-item svg { width: 19px; height: 19px; }
+  .profile-row { display: flex; gap: 8px; }
+  .profile-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 7px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); text-align: left; }
+  .avatar { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; }
+  .profile-name { flex: 1; font-size: 14px; font-weight: 600; }
+  .qa-btn { flex: none; width: 46px; display: grid; place-items: center; border: 0; border-radius: 13px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
+  .qa-btn svg { width: 21px; height: 21px; }
+
+  .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .titlebar { flex: none; height: 40px; display: flex; align-items: flex-end; gap: 2px; padding: 0 0 0 8px; background: var(--titlebar); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+  .tabs { display: flex; align-items: flex-end; gap: 2px; min-width: 0; overflow: hidden; }
+  .tab { position: relative; display: flex; align-items: center; gap: 8px; height: 34px; width: 190px; flex: 0 1 190px; min-width: 0; padding: 0 6px 0 12px; margin-bottom: -1px;
+    border: 1px solid transparent; border-bottom: 0; border-radius: 10px 10px 0 0; background: none; color: var(--ink-soft); text-align: left; font-weight: 500; }
+  .tab:hover { background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--ink); }
+  .tab.on { background: var(--bg); color: var(--ink); border-color: var(--line); z-index: 1; }
+  .tab .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab .x { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; opacity: 0; }
+  .tab:hover .x, .tab.on .x { opacity: 1; }
+  .tab .x svg { width: 11px; height: 11px; }
+  .tab-plus { align-self: center; display: grid; place-items: center; width: 30px; height: 30px; margin-left: 4px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); }
+  .tab-plus svg { width: 17px; height: 17px; }
+  .wbtn { margin-left: auto; align-self: stretch; display: flex; }
+  .wbtn span { width: 46px; display: grid; place-items: center; font-size: 12px; color: var(--ink-soft); }
+
+  .mn { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .scroller { flex: 1; min-height: 0; overflow: auto; }
+  .page { max-width: 1160px; margin: 0 auto; padding: 30px 28px 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+
+  /* header */
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 24px; }
+  .top-text { display: grid; gap: 8px; min-width: 0; }
+  .eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
+  h1 { margin: 0; display: flex; align-items: center; gap: 12px; font-family: var(--font-display); font-weight: 500; font-size: 40px; line-height: 1.05; letter-spacing: -0.02em; }
+  .meta { margin: 0; color: var(--ink-soft); font-size: 14px; }
+  .alpha { display: inline-flex; align-items: center; font-family: var(--font-body); font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; line-height: 1.5; padding: 2px 9px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+  .top-actions { display: flex; align-items: center; gap: 10px; }
+  .seg { position: relative; display: inline-flex; padding: 3px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+  .seg button { padding: 6px 13px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); font-size: 13.5px; font-weight: 500; }
+  .seg button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .stat-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 13.5px; color: var(--ink-soft); }
+  .stat-btn b { color: var(--ink); }
+  .stat-btn.bump b { animation: bump .5s; }
+  @keyframes bump { 40% { color: var(--accent-strong); transform: scale(1.35); } }
+  .stat-pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; width: 340px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--pop-shadow); font-size: 13px; text-align: left; color: var(--ink); cursor: default; }
+  .stat-pop h4 { margin: 0 0 6px; font-size: 13px; }
+  .stat-pop ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; max-height: 240px; overflow: auto; }
+  .stat-pop li { display: flex; gap: 8px; }
+  .stat-pop li em { font-style: normal; font-weight: 600; color: var(--ok-ink); min-width: 22px; }
+  .stat-pop li.no { color: var(--ink-soft); }
+  .stat-pop li.no em { color: var(--ink-soft); }
+  .stat-pop p { margin: 8px 0 0; color: var(--ink-soft); font-size: 12.5px; }
+
+  /* the tasks assistant bar */
+  .ab-wrap { display: grid; gap: 8px; }
+  .ab { position: relative; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+  .ab:focus-within { border-color: var(--accent); }
+  .ab-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
+  .ab input { flex: 1; min-width: 0; padding: 8px 0; border: 0; outline: none; background: none; font-size: 15px; }
+  .ab input::placeholder { color: var(--ink-soft); opacity: .85; }
+  .ab-model { flex: none; font-size: 12px; color: var(--ink-soft); padding: 3px 9px; border-radius: 999px; background: var(--surface-2); white-space: nowrap; }
+  .ab-send { display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
+  .ab-send:disabled { opacity: .45; cursor: default; }
+  .ab-send svg { width: 18px; height: 18px; }
+  .ab-reply { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 10px 12px; border-radius: 14px; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); font-size: 14px; }
+  .ab-reply.thinking p { animation: rec 1s infinite; color: var(--ink-soft); }
+  .ab-reply > span { display: grid; place-items: center; width: 22px; height: 22px; color: var(--accent-strong); }
+  .ab-reply p { margin: 0; line-height: 1.45; }
+  .ab-reply .acts { display: flex; gap: 6px; }
+  .ab-reply .acts button { position: relative; padding: 3px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13px; }
+  .ab-reply .acts button.x { padding: 3px 6px; border-color: transparent; background: none; color: var(--ink-soft); }
+  .ab-reply .acts button.x svg { width: 12px; height: 12px; }
+  .ab-hints { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-soft); }
+  .ab-hints button { padding: 3px 10px; border: 1px dashed var(--line); border-radius: 999px; background: none; color: var(--ink-soft); font-size: 12.5px; }
+  .ab-hints button:hover { border-style: solid; border-color: var(--accent); color: var(--ink); }
+
+  /* filters */
+  .flt { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .srch { display: flex; align-items: center; gap: 7px; padding: 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink-soft); }
+  .srch input { width: 170px; border: 0; outline: none; background: none; font-size: 13.5px; color: var(--ink); }
+  .fchip { height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink-soft); font-size: 13.5px; }
+  .fchip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--ink); }
+  .fsel { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink); font-size: 13.5px; }
+
+  /* chips on tasks */
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; background: var(--surface-2); color: var(--ink-soft); white-space: nowrap; }
+  .chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--ink-soft)); }
+  .chip svg { width: 12px; height: 12px; }
+  .p2 { background: color-mix(in srgb, var(--cat-system-dot) 20%, var(--surface)); color: var(--cat-system-ink); }
+  .p1 { background: color-mix(in srgb, #D9982A 22%, var(--surface)); color: var(--ink); }
+  .due-late { background: color-mix(in srgb, var(--danger) 16%, var(--surface)); color: var(--danger); font-weight: 600; }
+  .due-today { background: color-mix(in srgb, var(--accent) 26%, var(--surface)); color: var(--ink); }
+  .bar { width: 34px; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
+  .bar b { display: block; height: 100%; background: var(--cat-static-dot); }
+
+  /* board */
+  .bd { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding: 10px 2px 6px; }
+  .col { position: relative; flex: 0 0 280px; display: grid; gap: 8px; align-content: start; min-height: 200px; padding: 10px; border-radius: 18px;
+    background: color-mix(in srgb, var(--c) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 20%, var(--line)); }
+  .col.drop { outline: 2px dashed var(--c); outline-offset: -5px; }
+  .col-h { display: flex; align-items: center; gap: 8px; padding: 2px 2px 4px 4px; }
+  .col-name { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; font-weight: 600; padding: 3px 11px; border-radius: 999px; background: color-mix(in srgb, var(--c) 22%, var(--surface)); }
+  .col-name i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .col-n { font-size: 13px; color: var(--ink-soft); }
+  .col-lock { margin-left: auto; color: var(--ink-soft); opacity: .6; display: grid; }
+  .col-lock svg { width: 14px; height: 14px; }
+  .col-menu { margin-left: auto; position: relative; }
+  .col-menu > button { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--ink-soft); }
+  .col-menu > button:hover { background: var(--surface); color: var(--ink); }
+  .menu-pop { position: absolute; right: 0; top: 32px; z-index: 15; width: 200px; padding: 5px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--pop-shadow); }
+  .menu-pop button { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: none; font-size: 13.5px; text-align: left; }
+  .menu-pop button:hover { background: var(--surface-2); }
+  .menu-pop button.danger { color: var(--danger); }
+  .col-in { width: 100%; padding: 6px 10px; border: 1px solid var(--c); border-radius: 10px; background: var(--surface); font-size: 13.5px; font-weight: 600; outline: none; }
+  .add-col { flex: 0 0 200px; position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 64px; border: 1.5px dashed var(--line); border-radius: 18px; background: none; color: var(--ink-soft); font-size: 14px; font-weight: 500; }
+  .add-col:hover { border-color: var(--accent); color: var(--ink); }
+  .card { position: relative; display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 4px 10px; padding: 11px 12px; border-radius: 13px; background: var(--surface); border: 1px solid var(--line);
+    box-shadow: 0 1px 2px rgba(120, 72, 52, .06); cursor: pointer; font-size: 14px; }
+  .card:hover { border-color: color-mix(in srgb, var(--c) 55%, var(--line)); }
+  .card.sel { border-color: var(--c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 30%, transparent); }
+  .card.dragging { opacity: .4; }
+  .card.fresh { animation: fresh 1.4s ease-out; }
+  @keyframes fresh { 0%, 40% { background: color-mix(in srgb, var(--accent) 28%, var(--surface)); } }
+  .card .ttl { overflow-wrap: anywhere; line-height: 1.4; }
+  .card .row { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+  .is-done .ttl { color: var(--ink-soft); text-decoration: line-through; }
+  .chk { position: relative; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; padding: 0; border: 1.8px solid color-mix(in srgb, var(--c, var(--ink-soft)) 70%, var(--ink-soft)); border-radius: 50%; background: var(--surface); color: transparent; }
+  .chk:hover { background: color-mix(in srgb, var(--c, var(--accent)) 16%, var(--surface)); color: var(--ink-soft); }
+  .chk svg { width: 12px; height: 12px; }
+  .chk.on { background: var(--cat-static-dot); border-color: var(--cat-static-dot); color: #fff; }
+  .add-t { position: relative; display: flex; align-items: center; gap: 6px; padding: 8px 10px; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); font-size: 13.5px; text-align: left; }
+  .add-t:hover { background: color-mix(in srgb, var(--c) 14%, transparent); color: var(--ink); }
+  .add-in { width: 100%; padding: 10px 12px; border: 1px solid var(--c); border-radius: 12px; background: var(--surface); font-size: 14px; outline: none; }
+  .empty { padding: 10px; font-size: 13px; color: var(--ink-soft); text-align: center; }
+
+  /* list view */
+  .ls { position: relative; display: grid; gap: 16px; padding-top: 6px; }
+  .grp { display: grid; gap: 4px; }
+  .grp-h { display: flex; align-items: center; gap: 8px; margin: 0 0 2px; padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+  .grp-h.late { color: var(--danger); }
+  .grp-h button { border: 0; background: none; color: inherit; font: inherit; padding: 0; display: inline-flex; align-items: center; gap: 6px; }
+  .grp-h span { font-weight: 500; }
+  .li { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); cursor: pointer; font-size: 14px; }
+  .li:hover { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+  .li.sel { border-color: var(--accent); }
+  .li .mid { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+  .li .ttl { overflow-wrap: anywhere; }
+  .li .rt { display: flex; align-items: center; gap: 8px; }
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+  .st i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+
+  /* task panel on the right */
+  .pn { position: absolute; top: 0; right: 0; bottom: 0; z-index: 12; width: 400px; max-width: 100%; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--line);
+    box-shadow: -18px 0 40px -24px rgba(90, 50, 30, .45); transform: translateX(105%); transition: transform .22s ease; }
+  .pn.open { transform: none; }
+  .pn-h { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px 18px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+  .ic-btn { display: grid; place-items: center; width: 34px; height: 34px; margin-left: auto; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
+  .ic-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .pn-b { flex: 1; min-height: 0; overflow: auto; padding: 16px 18px 20px; display: grid; align-content: start; gap: 16px; }
+  .pn-t { display: flex; gap: 10px; align-items: flex-start; }
+  .pn-t .chk { width: 24px; height: 24px; margin-top: 5px; }
+  .pn-t textarea { flex: 1; min-width: 0; padding: 2px 4px; border: 1px solid transparent; border-radius: 8px; background: none; font-size: 20px; font-weight: 600; line-height: 1.35; resize: none; outline: none; overflow: hidden; }
+  .pn-t textarea:hover { border-color: var(--line); }
+  .pn-t textarea:focus { border-color: var(--accent); background: var(--bg); }
+  .fld { display: grid; grid-template-columns: 90px minmax(0, 1fr); align-items: center; gap: 10px; font-size: 13.5px; }
+  .fld > span:first-child { color: var(--ink-soft); }
+  .fld select, .fld input[type=date], .fld input[type=time] { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink); font-size: 13.5px; }
+  .opts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opt { padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--ink-soft); font-size: 13px; }
+  .opt.on { border-color: transparent; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .opt.on.p2 { background: var(--cat-system-dot); color: #fff; }
+  .opt.on.p1 { background: #D9982A; color: #fff; }
+  .tag-x { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px 3px 10px; border-radius: 999px; background: var(--surface-2); font-size: 13px; }
+  .tag-x button { display: grid; place-items: center; width: 18px; height: 18px; border: 0; border-radius: 50%; background: none; color: var(--ink-soft); padding: 0; }
+  .tag-x button svg { width: 10px; height: 10px; }
+  .tag-in { width: 110px; height: 28px; padding: 0 10px; border: 1px dashed var(--line); border-radius: 999px; background: none; font-size: 13px; outline: none; }
+  .tag-in:focus { border-style: solid; border-color: var(--accent); }
+  .blk { position: relative; display: grid; gap: 8px; }
+  .blk h5 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+  .subs { display: grid; gap: 2px; }
+  .sub { display: grid; grid-template-columns: 18px minmax(0, 1fr) 24px; align-items: center; gap: 10px; padding: 5px 6px; border-radius: 8px; font-size: 14px; }
+  .sub:hover { background: var(--bg); }
+  .sub .chk { width: 18px; height: 18px; margin: 0; border-radius: 5px; }
+  .sub .chk svg { width: 11px; height: 11px; }
+  .sub.done span { color: var(--ink-soft); text-decoration: line-through; }
+  .sub .del { opacity: 0; display: grid; place-items: center; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: var(--ink-soft); padding: 0; }
+  .sub:hover .del { opacity: 1; }
+  .sub .del svg { width: 12px; height: 12px; }
+  .sub-in { width: 100%; padding: 7px 10px; border: 1px dashed var(--line); border-radius: 9px; background: none; font-size: 13.5px; outline: none; }
+  .sub-in:focus { border-style: solid; border-color: var(--accent); }
+  .note-in { width: 100%; min-height: 90px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); font-size: 14px; line-height: 1.5; resize: vertical; outline: none; }
+  .note-in:focus { border-color: var(--accent); }
+  .pn-f { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-soft); }
+  .pn-f .when { margin-right: auto; }
+  .btn2 { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 13px; }
+  .btn2:hover { background: var(--surface-2); }
+  .btn2.danger { color: var(--danger); }
+
+  .tst { position: absolute; left: 50%; bottom: 18px; z-index: 30; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--toast-bg); color: var(--toast-ink); font-size: 14px; box-shadow: var(--pop-shadow); }
+  .tst button { position: relative; border: 0; background: color-mix(in srgb, var(--toast-ink) 16%, transparent); color: var(--toast-ink); padding: 5px 11px; border-radius: 8px; font-weight: 600; font-size: 13.5px; }
+
+  /* ---- numbered marks and the explanations ---- */
+  [data-mark] { position: relative; }
+  .nb { position: absolute; top: -9px; right: -9px; z-index: 9; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 999px;
+    background: var(--accent-strong); color: #fff; font: 700 12px/1 var(--font-body); box-shadow: 0 0 0 2px var(--bg); cursor: help; }
+  .nb.l { right: auto; left: -9px; }
+  .pn-h > .nb { top: 15px; right: 56px; }
+  .nav-icon > .nb { top: auto; bottom: -12px; right: -6px; }
+  .no-marks .nb { display: none; }
+  .hl { animation: hl 1.6s ease-out; }
+  @keyframes hl { 0%, 60% { box-shadow: 0 0 0 4px var(--accent-strong); border-radius: 12px; } 100% { box-shadow: 0 0 0 4px transparent; } }
+
+  .lg { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; display: grid; gap: 10px; align-content: start; }
+  .lg-top { padding: 16px 18px; border-radius: 16px; border: 1px dashed var(--ink-soft); background: var(--surface); font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+  .lg-top h2 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 500; font-size: 19px; color: var(--ink); }
+  .lg-top p { margin: 0 0 8px; }
+  .lg-top label { display: flex; align-items: center; gap: 8px; color: var(--ink); cursor: pointer; }
+  .lg-it { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-size: 13.5px; line-height: 1.5; cursor: pointer; }
+  .lg-it:hover, .lg-it.hl2 { border-color: var(--accent-strong); }
+  .lg-it > b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent-strong); color: #fff; font-size: 12px; }
+  .lg-it h3 { margin: 0 0 3px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lg-it p { margin: 0; color: var(--ink-soft); }
+  .lg-it p + p { margin-top: 5px; }
+  .lg-it .how { color: var(--ink); }
+  .lg-it p.v19 { margin-top: 7px; padding: 6px 9px; border-radius: 9px; background: var(--surface-2); color: var(--ink); font-size: 12.5px; }
+  .tg { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; }
+  .tg-new { background: var(--ok-bg); color: var(--ok-ink); }
+  .tg-has { background: var(--surface-2); color: var(--ink-soft); }
+  .tg-part { background: color-mix(in srgb, #D9982A 24%, var(--surface)); color: var(--ink); }
+  .lg-it .show { margin-top: 6px; font-size: 12.5px; color: var(--accent-strong); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="pg">
+  <div class="win">
+    <nav class="side" aria-label="Разделы">
+      <div class="side-head"><i></i>Snowball.ai</div>
+      <div class="side-top">
+        <div class="side-icons" id="icons"></div>
+        <p class="side-h">Ближайшие дела</p>
+        <div id="up"></div>
+      </div>
+      <div class="side-bottom">
+        <button type="button" class="nav-item" data-go="Статистика"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>Статистика</button>
+        <div class="profile-row">
+          <button type="button" class="profile-btn" data-go="Профиль"><span class="avatar">А</span><span class="profile-name">Алексей</span></button>
+          <button type="button" class="qa-btn" data-go="Маленькое окно ассистента" title="Ассистент: календарь, задачи, вкладки (Ctrl + K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg></button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-col">
+      <div class="titlebar">
+        <div class="tabs" id="tabs"></div>
+        <button type="button" class="tab-plus" data-go="Новая вкладка" title="Новая вкладка (Ctrl + T)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <div class="wbtn"><span>─</span><span>☐</span><span>✕</span></div>
+      </div>
+
+      <div class="mn">
+        <main class="scroller">
+          <div class="page">
+            <header class="top">
+              <div class="top-text">
+                <p class="eyebrow">Альфа-версия: будет дорабатываться</p>
+                <h1>Задачи <span class="alpha">Альфа</span></h1>
+                <p class="meta" id="meta"></p>
+              </div>
+              <div class="top-actions">
+                <div class="seg" id="view" data-mark="1">
+                  <button type="button" data-v="board">Доска</button>
+                  <button type="button" data-v="list">Список</button>
+                </div>
+                <button type="button" class="stat-btn" id="stat" data-mark="13">В статистике сегодня: <b id="stat-n">0</b></button>
+              </div>
+            </header>
+
+            <div class="ab-wrap">
+              <div class="ab" data-mark="2">
+                <span class="ab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg></span>
+                <input id="ab-in" placeholder="Ассистент задач: «смонтировать рилс завтра срочно и позвонить Диме в пятницу»" autocomplete="off">
+                <span class="ab-model" title="Самая дешёвая модель с быстрыми размышлениями: для задач этого хватает">GPT-6 Luna · Быстро</span>
+                <button type="button" class="ab-send" id="ab-go" title="Отправить (Enter)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+              </div>
+              <div id="ab-out"></div>
+              <div class="ab-hints" id="ab-hints"></div>
+            </div>
+
+            <div class="flt" id="flt" data-mark="3">
+              <label class="srch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="f-q" placeholder="Поиск по задачам"></label>
+              <select class="fsel" id="f-tag" aria-label="Тег"></select>
+              <select class="fsel" id="f-prio" aria-label="Важность">
+                <option value="">Любая важность</option><option value="2">Только срочные</option><option value="1">Важные и срочные</option>
+              </select>
+              <button type="button" class="fchip" id="f-done">Скрыть выполненные</button>
+            </div>
+
+            <div id="area"></div>
+          </div>
+        </main>
+        <aside class="pn" id="pn" aria-label="Задача"></aside>
+        <div class="tst" id="tst" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="lg" id="lg"></aside>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    for (var k in attrs || {}) {
+      var v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === "text") el.textContent = v;
+      else if (k === "html") el.innerHTML = v;
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v);
+    }
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) c.forEach(function (x) { add(el, x); });
+    else el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  var I = {
+    home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg>',
+    prompts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
+    calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg>',
+    llm: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>',
+    gen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>',
+    tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    flag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4h11l-2 4 2 4H5"/></svg>',
+    note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 6h14M5 12h14M5 18h9"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>',
+    pen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>',
+    left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>'
+  };
+
+  /* ---------- dates ---------- */
+  var MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+  var WD = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  function iso(d) { return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
+  function fromIso(s) { var p = s.split("-"); return new Date(+p[0], p[1] - 1, +p[2]); }
+  var TODAY = new Date(); TODAY.setHours(0, 0, 0, 0);
+  function plusDays(n) { var d = new Date(TODAY); d.setDate(d.getDate() + n); return iso(d); }
+  function daysFrom(s) { return Math.round((fromIso(s) - TODAY) / 864e5); }
+  function dueText(t) {
+    if (!t.due) return "";
+    var n = daysFrom(t.due), d = fromIso(t.due), s;
+    if (n === 0) s = "Сегодня"; else if (n === 1) s = "Завтра"; else if (n === -1) s = "Вчера";
+    else if (n > 1 && n < 7) s = WD[d.getDay()] + ", " + d.getDate() + " " + MONTHS[d.getMonth()];
+    else s = d.getDate() + " " + MONTHS[d.getMonth()];
+    return s + (t.time ? " " + t.time : "");
+  }
+  function whenText(t) { var s = dueText(t); return /^(Сегодня|Завтра|Вчера)/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
+  function plural(n, a, b, c) { var m = n % 10, mm = n % 100; return m === 1 && mm !== 11 ? a : m >= 2 && m <= 4 && (mm < 12 || mm > 14) ? b : c; }
+
+  /* ---------- data ---------- */
+  var PRIO = ["Обычная", "Важная", "Срочная"];
+  var TAGS = ["Монтаж", "Съёмка", "Сценарий", "Промты", "Публикация", "Сайт", "Обучение", "Звонок", "Генерация"];
+  var TAG_C = { "Монтаж": "#2E9A92", "Съёмка": "#D9982A", "Сценарий": "#9466CC", "Промты": "#4F9A40", "Публикация": "#3C78C8", "Сайт": "#C25E38", "Обучение": "#B5463B", "Звонок": "#9466CC", "Генерация": "#4F9A40" };
+  var COL_C = ["#3C78C8", "#2E9A92", "#C25E38", "#9466CC", "#B5463B"];
+  var cols = [
+    { id: "todo", name: "Предстоит", c: "#8F6BC4", base: true },
+    { id: "doing", name: "В процессе", c: "#D9982A", base: true },
+    { id: "done", name: "Готово", c: "#4F9A40", base: true }
+  ];
+  var seq = 1;
+  function mk(o) {
+    return Object.assign({ id: "t" + seq++, status: "todo", due: "", time: "", prio: 0, tags: [], subs: [], note: "", created: plusDays(-3), updated: "", order: seq }, o);
+  }
+  var tasks = [
+    mk({ title: "Смонтировать рилс про колоризацию", due: plusDays(1), prio: 2, tags: ["Монтаж"],
+      subs: [{ t: "Нарезать исходники", done: true }, { t: "Цветокоррекция", done: false }, { t: "Подобрать музыку", done: false }, { t: "Субтитры", done: false }] }),
+    mk({ title: "Ответить подписчикам в комментариях", due: plusDays(0) }),
+    mk({ title: "Начать вёрстку сайта", due: plusDays(3), tags: ["Сайт"], note: "Лендинг для курса: шапка, тарифы, отзывы, кнопка оплаты." }),
+    mk({ title: "Обновить промты для карточек персонажей", tags: ["Промты"] }),
+    mk({ title: "Сценарий урока по Seedance", status: "doing", due: plusDays(-1), prio: 1, tags: ["Сценарий", "Обучение"],
+      subs: [{ t: "Структура урока", done: true }, { t: "Примеры промтов", done: true }, { t: "Текст для озвучки", done: false }, { t: "Обложка", done: false }, { t: "Описание", done: false }] }),
+    mk({ title: "Подобрать музыку для заставки", status: "doing", due: plusDays(0), time: "18:00" }),
+    mk({ title: "Записать урок по Nano Banana", status: "done", tags: ["Обучение"], due: plusDays(-2) }),
+    mk({ title: "Резервная копия всех данных", status: "done" }),
+    mk({ title: "Созвон с Димой", status: "done", tags: ["Звонок"], due: plusDays(-1) })
+  ];
+  function find(id) { return tasks.find(function (t) { return t.id === id; }); }
+  function colOf(id) { return cols.find(function (c) { return c.id === id; }) || cols[0]; }
+
+  var ui = { view: "board", open: null, q: "", tag: "", prio: "", hideDone: false, adding: null, renaming: null, colMenu: null, newCol: false, statOpen: false, doneOpen: false, drag: null, fresh: [] };
+
+  /* ---------- the 1.9.0 window around the section ---------- */
+  var SECTIONS = [["home", "Главная"], ["prompts", "Промты"], ["calendar", "Календарь"], ["tasks", "Задачи"], ["llm", "LLM"], ["gen", "Генератор"]];
+  function renderShell() {
+    var left = tasks.filter(function (t) { return t.status !== "done"; }).length;
+    $("icons").replaceChildren();
+    SECTIONS.forEach(function (s) {
+      var b = h("button", { type: "button", class: "nav-icon" + (s[0] === "tasks" ? " on" : ""), title: s[0] === "tasks" ? "Задачи (альфа): ещё не готово " + left : s[1], html: I[s[0]],
+        "data-mark": s[0] === "tasks" ? "14" : null, onclick: s[0] === "tasks" ? null : function () { soon(s[1]); } });
+      var n = s[0] === "calendar" ? 3 : s[0] === "tasks" ? left : s[0] === "llm" ? 1 : 0;
+      if (n) b.append(h("span", { class: "nav-badge", text: String(n) }));
+      $("icons").append(b);
+    });
+    marks($("icons"));
+  }
+  var TABS = [["home", "Главная"], ["calendar", "Календарь"], ["tasks", "Задачи"], ["llm", "LLM · Идеи для рилс"]];
+  TABS.forEach(function (t) {
+    $("tabs").append(h("button", { type: "button", class: "tab" + (t[0] === "tasks" ? " on" : ""), onclick: t[0] === "tasks" ? null : function () { soon(t[1]); } },
+      h("span", { html: I[t[0]] }), h("span", { class: "t", text: t[1] }), h("span", { class: "x", html: I.x })));
+  });
+  var UP = [["Сегодня"], ["Дима, правки монтажа", "сейчас", "#9466CC", true], ["Монтаж ролика", "16:00", "#2E9A92"], ["Записать урок", "18:30", "#F4AA84"],
+    ["Завтра"], ["Съёмка рилс", "11:30", "#D9982A"], ["Встреча с клиентом", "15:00", "#3C78C8"]];
+  UP.forEach(function (u) {
+    if (u.length === 1) { $("up").append(h("p", { class: "up-day", text: u[0] })); return; }
+    $("up").append(h("button", { type: "button", class: "up-ev" + (u[3] ? " now" : ""), style: "--c:" + u[2], onclick: function () { soon("Календарь"); } }, h("i"), h("span", { class: "tt", text: u[0] }), h("span", { class: "tm", text: u[1] })));
+  });
+  document.querySelectorAll("[data-go]").forEach(function (b) { b.addEventListener("click", function () { soon(b.dataset.go); }); });
+  function soon(what) { toast("В макете работает только раздел «Задачи». «" + what + "» — как в программе 1.9.0."); }
+
+  /* ---------- statistics ---------- */
+  var log = [];
+  function count(text, counted) {
+    log.unshift({ text: text, counted: counted });
+    $("stat-n").textContent = log.filter(function (l) { return l.counted; }).length;
+    if (counted) { var b = $("stat"); b.classList.remove("bump"); void b.offsetWidth; b.classList.add("bump"); }
+    if (ui.statOpen) renderStat();
+  }
+  function renderStat() {
+    var old = $("stat").querySelector(".stat-pop");
+    if (old) old.remove();
+    if (!ui.statOpen) return;
+    var pop = h("div", { class: "stat-pop", onclick: function (e) { e.stopPropagation(); } },
+      h("h4", { text: "Что попало в статистику" }),
+      log.length ? h("ul", null, log.map(function (l) { return h("li", { class: l.counted ? "" : "no" }, h("em", { text: l.counted ? "+1" : "—" }), h("span", { text: l.text })); }))
+        : h("p", { text: "Пока ничего. Добавьте задачу или подзадачу, перетащите задачу в другой столбец или отметьте галочкой — здесь появится строчка." }),
+      h("p", { text: "+1 — считается действием. «—» — не считается: правки, удаление, перестановка внутри столбца, снятая галочка." }));
+    $("stat").append(pop);
+  }
+
+  /* ---------- reading dates, importance and tags from words ---------- */
+  // In the program this is the assistant (the cheapest model) reading the meaning. In the mockup: simple word rules.
+  var WEEK = [["понедельник", 1], ["вторник", 2], ["сред", 3], ["четверг", 4], ["пятниц", 5], ["суббот", 6], ["воскресень", 0]];
+  var TAG_RULES = [
+    [/смонтир|монтаж|монтир/, "Монтаж"], [/сн[яи]ть|съ[её]мк|отснять|снимать/, "Съёмка"], [/сценари/, "Сценарий"],
+    [/пром[пт]?т/, "Промты"], [/опублик|выложить|залить|публикац|запостить/, "Публикация"], [/верст|сайт|лендинг/, "Сайт"],
+    [/созвон|позвонить|звонок/, "Звонок"], [/сгенерир|генерац/, "Генерация"], [/урок|курс/, "Обучение"]
+  ];
+  function parse(text) {
+    var s = " " + text.trim() + " ", low, r = { title: "", due: "", time: "", prio: 0, tags: [] }, m;
+    function cut(re) { s = s.replace(re, " "); }
+    low = s.toLowerCase();
+    if (/срочн|горит|asap|как можно скорее/.test(low)) { r.prio = 2; cut(/\s!*(очень\s+)?срочн[а-яё]*/gi); cut(/\s(горит|asap|как можно скорее)/gi); }
+    else if (/\s!*важн/.test(low)) { r.prio = 1; cut(/\s!*(очень\s+)?важн[а-яё]*/gi); }
+    low = s.toLowerCase();
+    if (/\sпослезавтра\s/.test(low)) { r.due = plusDays(2); cut(/\s(на\s+)?послезавтра(?=\s)/gi); }
+    else if (/\sзавтра\s/.test(low)) { r.due = plusDays(1); cut(/\s(на\s+)?завтра(?=\s)/gi); }
+    else if (/\sсегодня\s/.test(low)) { r.due = plusDays(0); cut(/\s(на\s+)?сегодня(?=\s)/gi); }
+    else if ((m = low.match(/\sчерез\s+(\d+)\s+(дн|день|дня)\S*/))) { r.due = plusDays(+m[1]); cut(/\sчерез\s+\d+\s+(дн|день|дня)\S*/gi); }
+    else if (/\sчерез неделю/.test(low)) { r.due = plusDays(7); cut(/\sчерез неделю/gi); }
+    else {
+      WEEK.some(function (w) {
+        var re = new RegExp("\\s(в|во|до|к|на)?\\s*" + w[0] + "\\S*", "i");
+        if (!re.test(s)) return false;
+        var n = (w[1] - TODAY.getDay() + 7) % 7 || 7;
+        r.due = plusDays(n); cut(re); return true;
+      });
+    }
+    if ((m = s.match(/\s(в|к)?\s*(\d{1,2})[:.](\d{2})(?=\s)/))) { r.time = m[2].padStart(2, "0") + ":" + m[3]; if (!r.due) r.due = plusDays(0); cut(/\s(в|к)?\s*\d{1,2}[:.]\d{2}(?=\s)/); }
+    low = s.toLowerCase();
+    TAG_RULES.forEach(function (tr) { if (r.tags.length < 2 && tr[0].test(low) && r.tags.indexOf(tr[1]) === -1) r.tags.push(tr[1]); });
+    s = s.replace(/^\s*(надо|нужно|не забыть|напомни)\s+/i, " ").replace(/\s+/g, " ").replace(/[\s,.]+$/, "").trim();
+    r.title = s.charAt(0).toUpperCase() + s.slice(1);
+    return r;
+  }
+
+  /* ---------- the tasks assistant ---------- */
+  // Each message is a separate request: the bar keeps no conversation. Changes apply at once, «Отменить» brings back the state before it.
+  var STOPW = ["перенеси", "перенести", "сдвинь", "передвинь", "отметь", "отметить", "удали", "удалить", "убери", "сделал", "сделала", "сделано", "готово", "готова",
+    "выполнил", "выполнила", "закрой", "разбей", "разбить", "задачу", "задача", "задачи", "подзадачи", "шаги", "шагов", "этапы", "сделанной", "выполненной", "сделай",
+    "поставь", "срочной", "срочно", "важной", "важно", "обычной", "про", "для", "мне", "меня", "что", "какие", "работу", "процесс", "готово", "предстоит"];
+  function stems(s) {
+    return (s.toLowerCase().replace(/ё/g, "е").match(/[а-яa-z0-9]+/g) || []).filter(function (w) { return w.length >= 3 && STOPW.indexOf(w) === -1; }).map(function (w) { return w.slice(0, 4); });
+  }
+  function findTask(s, onlyOpen) {
+    var q = stems(s), best = null, bs = 0;
+    tasks.forEach(function (t) {
+      if (onlyOpen && t.status === "done") return;
+      var ts = stems(t.title), sc = q.filter(function (x) { return ts.indexOf(x) !== -1; }).length;
+      if (sc > bs) { bs = sc; best = t; }
+    });
+    return best;
+  }
+  var STEPS = {
+    "Монтаж": ["Нарезать исходники", "Собрать черновой монтаж", "Цветокоррекция", "Музыка и звук", "Субтитры", "Экспорт"],
+    "Сайт": ["Структура страниц", "Дизайн", "Вёрстка", "Проверить на телефоне", "Опубликовать"],
+    "Съёмка": ["Сценарий и раскадровка", "Подготовить свет и звук", "Снять", "Скинуть исходники"],
+    "Сценарий": ["Собрать идеи", "Структура", "Написать текст", "Перечитать и сократить"],
+    _: ["Подготовить всё нужное", "Сделать", "Проверить результат"]
+  };
+  function describe(t) {
+    var d = [];
+    if (t.due) d.push(whenText(t));
+    if (t.prio) d.push(PRIO[t.prio].toLowerCase());
+    t.tags.forEach(function (g) { d.push("#" + g); });
+    return "«" + t.title + "»" + (d.length ? " (" + d.join(", ") + ")" : "");
+  }
+  var NOT_FOUND = { text: "Не нашёл такую задачу. Напишите точнее, как она называется.", changed: false };
+  function runAssistant(text) {
+    var low = " " + text.toLowerCase().replace(/ё/g, "е") + " ", t;
+    if (/^\s*(что|какие|покажи|сколько)/.test(low) || /\?\s*$/.test(text)) {
+      var open = tasks.filter(function (x) { return x.status !== "done"; });
+      var late = open.filter(function (x) { return x.due && daysFrom(x.due) < 0; });
+      var name, list;
+      if (/завтра/.test(low)) { name = "На завтра"; list = open.filter(function (x) { return x.due && daysFrom(x.due) === 1; }); }
+      else if (/недел/.test(low)) { name = "На неделю"; list = open.filter(function (x) { return x.due && daysFrom(x.due) >= 0 && daysFrom(x.due) <= 7; }); }
+      else if (/горит|просроч|срочн/.test(low)) { name = "Горит"; list = open.filter(function (x) { return x.prio === 2 || (x.due && daysFrom(x.due) < 0); }); }
+      else { name = "На сегодня"; list = open.filter(function (x) { return x.due && daysFrom(x.due) === 0; }); }
+      var s = list.length ? name + " " + list.length + " " + plural(list.length, "задача", "задачи", "задач") + ": " + list.map(function (x) { return "«" + x.title + "»" + (x.time ? " в " + x.time : ""); }).join(", ") + "." : name + " задач нет.";
+      if (name !== "Горит" && late.length) s += " И ещё срок прошёл у " + late.map(function (x) { return "«" + x.title + "»"; }).join(", ") + ".";
+      return { text: s, changed: false };
+    }
+    if (/разб(ей|ить)|на шаги|на подзадачи|на этапы/.test(low)) {
+      t = findTask(text);
+      if (!t) return NOT_FOUND;
+      var steps = STEPS[t.tags[0]] || STEPS._, added = 0;
+      steps.forEach(function (st) {
+        if (t.subs.some(function (x) { return x.t.toLowerCase() === st.toLowerCase(); })) return;
+        t.subs.push({ t: st, done: false }); added++;
+        count("«" + t.title + "»: новая подзадача «" + st + "» (ассистент)", true);
+      });
+      ui.open = t.id;
+      return { text: "Разбил «" + t.title + "» на шаги: добавил " + added + " " + plural(added, "подзадачу", "подзадачи", "подзадач") + ". Открыл задачу справа — лишнее можно убрать.", changed: true };
+    }
+    if (/^\s*(удали|убери|удалить)/.test(low)) {
+      t = findTask(text);
+      if (!t) return NOT_FOUND;
+      tasks.splice(tasks.indexOf(t), 1);
+      if (ui.open === t.id) ui.open = null;
+      count("Удалена «" + t.title + "» (ассистент)", false);
+      return { text: "Удалил «" + t.title + "».", changed: true };
+    }
+    if (/\s(сделал[аи]?|готово|готова|выполнил[аи]?|отметь|закрой)\s/.test(low)) {
+      t = findTask(text, true);
+      if (!t) return NOT_FOUND;
+      moveTo(t, "done", "Выполнена «" + t.title + "» (ассистент)");
+      return { text: "Отметил «" + t.title + "» сделанной — она в «Готово».", changed: true };
+    }
+    if (/^\s*(перенеси|сдвинь|передвинь|перенести)/.test(low)) {
+      var target = /в работу|в процесс/.test(low) ? "doing" : /в готово/.test(low) ? "done" : /в предсто|обратно/.test(low) ? "todo" : null;
+      cols.forEach(function (c) { if (!c.base && low.indexOf(" в " + c.name.toLowerCase()) !== -1) target = c.id; });
+      if (target) {
+        t = findTask(text.replace(new RegExp("в (" + cols.map(function (c) { return c.name; }).join("|") + ")", "gi"), " "));
+        if (!t) return NOT_FOUND;
+        moveTo(t, target, "«" + t.title + "»: " + colOf(t.status).name + " → " + colOf(target).name + " (ассистент)");
+        return { text: "Перенёс «" + t.title + "» в «" + colOf(target).name + "».", changed: true };
+      }
+      var p = parse(text);
+      if (!p.due) return { text: "Не понял, на когда перенести. Например: «перенеси вёрстку сайта на понедельник».", changed: false };
+      t = findTask(p.title);
+      if (!t) return NOT_FOUND;
+      t.due = p.due; if (p.time) t.time = p.time;
+      edited(t, "срок (ассистент)");
+      return { text: "Перенёс «" + t.title + "» на " + whenText(t) + ".", changed: true };
+    }
+    if (/^\s*(сделай|поставь)\s.*(срочн|важн|обычн)/.test(low)) {
+      var lvl = /срочн/.test(low) ? 2 : /важн/.test(low) ? 1 : 0;
+      t = findTask(text);
+      if (!t) return NOT_FOUND;
+      t.prio = lvl; edited(t, "важность (ассистент)");
+      return { text: "Теперь «" + t.title + "» — " + PRIO[lvl].toLowerCase() + ".", changed: true };
+    }
+    var body = text.replace(/^\s*(добавь|добавить|запиши|создай|новая задача|напомни)\s*(задачу|задачи)?[:\s,]*/i, "");
+    var parts = body.split(/\s*;\s*|\n+|\s+и\s+(?=[а-яё]+(?:ть|ться|ти)(?:\s|$))/i).filter(function (x) { return x.trim(); });
+    var made = parts.map(function (x) { return addFromText(x, "todo", "ассистент"); }).filter(Boolean);
+    if (!made.length) return { text: "Не понял, что добавить. Напишите, что нужно сделать.", changed: false };
+    ui.fresh = made.map(function (x) { return x.id; });
+    return { text: made.length === 1 ? "Добавил " + describe(made[0]) + " в «Предстоит»." : "Добавил " + made.length + " " + plural(made.length, "задачу", "задачи", "задач") + " в «Предстоит»: " + made.map(describe).join(", ") + ".", changed: true };
+  }
+  function addFromText(text, status, who) {
+    var r = parse(text);
+    if (!r.title) return null;
+    var t = mk({ title: r.title, due: r.due, time: r.time, prio: r.prio, tags: r.tags, status: status || "todo", created: plusDays(0), order: Date.now() + seq });
+    tasks.push(t);
+    count("Новая задача «" + t.title + "»" + (who ? " (" + who + ")" : ""), true);
+    return t;
+  }
+  function plainAdd(title, status) {
+    var t = mk({ title: title.charAt(0).toUpperCase() + title.slice(1), status: status, created: plusDays(0), order: Date.now() });
+    tasks.push(t);
+    count("Новая задача «" + t.title + "»", true);
+  }
+
+  var abIn = $("ab-in"), abGo = $("ab-go"), reply = null, busy = false;
+  var HINTS = ["смонтировать рилс завтра срочно и позвонить Диме в пятницу", "перенеси вёрстку сайта на понедельник", "что у меня на сегодня?", "разбей вёрстку сайта на шаги", "музыку для заставки сделал", "удали резервную копию"];
+  function renderAb() {
+    var out = $("ab-out");
+    out.replaceChildren();
+    if (reply) {
+      out.append(h("div", { class: "ab-reply" + (reply.thinking ? " thinking" : "") },
+        h("span", { html: I.star }), h("p", { text: reply.text }),
+        reply.thinking ? null : h("div", { class: "acts" },
+          reply.snap ? h("button", { type: "button", onclick: function () { restore(reply.snap); reply = { text: "Отменил: всё как было до этого сообщения." }; render(); } }, "Отменить") : null,
+          h("button", { type: "button", class: "x", html: I.x, title: "Скрыть ответ", onclick: function () { reply = null; renderAb(); } }))));
+    }
+    var hints = $("ab-hints");
+    hints.replaceChildren(h("span", { text: "Попробуйте:" }));
+    HINTS.forEach(function (x) { hints.append(h("button", { type: "button", text: x, onclick: function () { abIn.value = x; abGo.disabled = false; abIn.focus(); } })); });
+  }
+  function snap() { return JSON.stringify({ tasks: tasks, cols: cols }); }
+  function restore(s) { var o = JSON.parse(s); tasks = o.tasks; cols = o.cols; if (ui.open && !find(ui.open)) ui.open = null; }
+  function sendAb() {
+    var v = abIn.value.trim();
+    if (!v || busy) return;
+    busy = true; abIn.value = ""; abGo.disabled = true;
+    count("Сообщение ассистенту задач: «" + v + "»", true);
+    reply = { text: "Ассистент разбирает: «" + v + "»…", thinking: true };
+    renderAb();
+    setTimeout(function () {
+      var before = snap(), r = runAssistant(v);
+      reply = { text: r.text, snap: r.changed ? before : null };
+      busy = false;
+      render();
+      ui.fresh = [];
+    }, 650);
+  }
+  abIn.addEventListener("input", function () { abGo.disabled = !abIn.value.trim(); });
+  abIn.addEventListener("keydown", function (e) { if (e.key === "Enter") sendAb(); if (e.key === "Escape") { abIn.value = ""; abGo.disabled = true; } });
+  abGo.addEventListener("click", sendAb);
+
+  /* ---------- filters ---------- */
+  $("f-tag").append(h("option", { value: "", text: "Все теги" }));
+  TAGS.forEach(function (t) { $("f-tag").append(h("option", { value: t, text: t })); });
+  $("f-q").addEventListener("input", function () { ui.q = this.value.trim().toLowerCase(); renderArea(); });
+  $("f-tag").addEventListener("change", function () { ui.tag = this.value; renderArea(); });
+  $("f-prio").addEventListener("change", function () { ui.prio = this.value; renderArea(); });
+  $("f-done").addEventListener("click", function () { ui.hideDone = !ui.hideDone; this.classList.toggle("on", ui.hideDone); renderArea(); });
+  function visible(t) {
+    if (ui.hideDone && t.status === "done") return false;
+    if (ui.tag && t.tags.indexOf(ui.tag) === -1) return false;
+    if (ui.prio && t.prio < +ui.prio) return false;
+    if (ui.q && (t.title + " " + t.note + " " + t.tags.join(" ")).toLowerCase().indexOf(ui.q) === -1) return false;
+    return true;
+  }
+
+  /* ---------- actions ---------- */
+  function moveTo(t, status, why) {
+    if (t.status === status) return;
+    var from = colOf(t.status).name;
+    if (status === "done") t.backTo = t.status;
+    t.status = status;
+    t.updated = plusDays(0);
+    count(why || ("«" + t.title + "»: " + from + " → " + colOf(status).name), true);
+  }
+  function toggleDone(t) {
+    if (t.status === "done") {
+      t.status = t.backTo && cols.some(function (c) { return c.id === t.backTo; }) ? t.backTo : "todo";
+      t.updated = plusDays(0);
+      count("Снята галочка «" + t.title + "» — вернулась в «" + colOf(t.status).name + "»", false);
+    } else moveTo(t, "done", "Выполнена «" + t.title + "»");
+    render();
+  }
+  var toastTimer = null;
+  function toast(text, undo) {
+    var el = $("tst");
+    clearTimeout(toastTimer);
+    el.replaceChildren();
+    add(el, [h("span", { text: text }), undo ? h("button", { type: "button", "data-mark": "11", onclick: function () { undo(); el.hidden = true; render(); } }, "Отменить") : null]);
+    el.hidden = false;
+    marks(el);
+    toastTimer = setTimeout(function () { el.hidden = true; }, 7000);
+  }
+  function removeTask(t) {
+    var at = tasks.indexOf(t);
+    tasks.splice(at, 1);
+    if (ui.open === t.id) ui.open = null;
+    count("Удалена «" + t.title + "»", false);
+    render();
+    toast("Задача «" + t.title + "» удалена", function () { tasks.splice(at, 0, t); });
+  }
+  function duplicate(t) {
+    var c = mk(JSON.parse(JSON.stringify(t)));
+    c.id = "t" + seq++; c.title = t.title + " (копия)"; c.created = plusDays(0); c.updated = "";
+    tasks.splice(tasks.indexOf(t) + 1, 0, c);
+    count("Новая задача «" + c.title + "»", true);
+    ui.open = c.id; render();
+  }
+  function edited(t, what) { t.updated = plusDays(0); count("«" + t.title + "»: " + what, false); }
+
+  /* ---------- rendering ---------- */
+  function chipsFor(t, noDue) {
+    var done = t.subs.filter(function (s) { return s.done; }).length, n = t.due ? daysFrom(t.due) : null;
+    return [
+      t.prio ? h("span", { class: "chip p" + t.prio, html: I.flag }, " " + PRIO[t.prio]) : null,
+      t.tags.map(function (g) { return h("span", { class: "chip", style: "--c:" + (TAG_C[g] || "#A48474") }, h("i"), g); }),
+      t.due && !noDue ? dueChip(t, n) : null,
+      t.subs.length ? h("span", { class: "chip", title: "Подзадачи: сделано " + done + " из " + t.subs.length },
+        h("span", { class: "bar" }, barFill(done / t.subs.length)), done + "/" + t.subs.length) : null,
+      t.note ? h("span", { class: "chip", html: I.note, title: "Есть заметка" }) : null
+    ];
+  }
+  function dueChip(t, n) {
+    if (n == null) n = daysFrom(t.due);
+    var late = t.status !== "done" && n < 0, today = t.status !== "done" && n === 0;
+    return h("span", { class: "chip" + (late ? " due-late" : today ? " due-today" : ""), html: I.cal, title: late ? "Срок прошёл" : "Срок" }, " " + dueText(t));
+  }
+  function barFill(part) { var b = h("b"); b.style.width = (part * 100) + "%"; return b; }
+  function checkBtn(t, c) {
+    return h("button", { type: "button", class: "chk" + (t.status === "done" ? " on" : ""), style: c ? "--c:" + c : null, html: I.tick,
+      title: t.status === "done" ? "Снять галочку" : "Отметить сделанной", "aria-label": "Сделано",
+      onclick: function (e) { e.stopPropagation(); toggleDone(t); } });
+  }
+
+  function renderBoard() {
+    var bd = h("div", { class: "bd" });
+    cols.forEach(function (c, ci) {
+      var list = tasks.filter(function (t) { return t.status === c.id && visible(t); }).sort(function (a, b) { return a.order - b.order; });
+      var head = h("div", { class: "col-h" });
+      if (ui.renaming === c.id) {
+        var inp = h("input", { class: "col-in", value: c.name, maxlength: "30" });
+        var fin = function (save) { if (ui.renaming !== c.id) return; ui.renaming = null; if (save && inp.value.trim()) c.name = inp.value.trim(); render(); };
+        inp.addEventListener("keydown", function (e) { if (e.key === "Enter") fin(true); if (e.key === "Escape") fin(false); });
+        inp.addEventListener("blur", function () { fin(true); });
+        head.append(inp);
+        setTimeout(function () { inp.focus(); inp.select(); });
+      } else {
+        head.append(h("span", { class: "col-name" }, h("i"), c.name), h("span", { class: "col-n", text: String(list.length) }));
+        if (c.base) head.append(h("span", { class: "col-lock", html: I.lock, title: "Основной столбец: его нельзя удалить" }));
+        else {
+          var menu = h("div", { class: "col-menu", "data-mark": "4" },
+            h("button", { type: "button", html: I.dots, title: "Действия со столбцом", onclick: function (e) { e.stopPropagation(); ui.colMenu = ui.colMenu === c.id ? null : c.id; render(); } }));
+          if (ui.colMenu === c.id) menu.append(h("div", { class: "menu-pop" },
+            h("button", { type: "button", html: I.pen, onclick: function () { ui.colMenu = null; ui.renaming = c.id; render(); } }, "Переименовать"),
+            !cols[ci - 1].base ? h("button", { type: "button", html: I.left, onclick: function () { cols.splice(ci, 1); cols.splice(ci - 1, 0, c); ui.colMenu = null; render(); } }, "Сдвинуть левее") : null,
+            h("button", { type: "button", class: "danger", html: I.trash, onclick: function () {
+              var moved = tasks.filter(function (t) { return t.status === c.id; });
+              moved.forEach(function (t) { t.status = "todo"; });
+              cols.splice(ci, 1); ui.colMenu = null; render();
+              toast("Столбец «" + c.name + "» удалён" + (moved.length ? ", задачи переехали в «Предстоит»" : ""), function () { cols.splice(ci, 0, c); moved.forEach(function (t) { t.status = c.id; }); });
+            } }, "Удалить столбец")));
+          head.append(menu);
+        }
+      }
+      var col = h("section", { class: "col", style: "--c:" + c.c, "aria-label": c.name }, head);
+      list.forEach(function (t, ti) {
+        var card = h("div", { class: "card" + (t.status === "done" ? " is-done" : "") + (ui.open === t.id ? " sel" : "") + (ui.fresh.indexOf(t.id) !== -1 ? " fresh" : ""), draggable: "true",
+          "data-mark": ci === 0 && ti === 0 ? "5" : ci === 1 && ti === 0 ? "7" : null,
+          onclick: function () { ui.open = t.id; render(); } },
+          checkBtn(t, c.c), h("span", { class: "ttl", text: t.title }), h("div", { class: "row" }, chipsFor(t)));
+        if (ci === 0 && ti === 0) card.querySelector(".chk").setAttribute("data-mark", "6");
+        card.addEventListener("dragstart", function (e) { ui.drag = t.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", t.title); card.classList.add("dragging"); });
+        card.addEventListener("dragend", function () { ui.drag = null; card.classList.remove("dragging"); });
+        card.addEventListener("dragover", function (e) { if (ui.drag) e.preventDefault(); });
+        card.addEventListener("drop", function (e) {
+          if (!ui.drag || ui.drag === t.id) return;
+          e.preventDefault(); e.stopPropagation();
+          var d = find(ui.drag); ui.drag = null;
+          var prev = list[list.indexOf(t) - 1];
+          d.order = prev && prev.id !== d.id ? (prev.order + t.order) / 2 : t.order - 1;
+          if (d.status !== c.id) moveTo(d, c.id); else count("Порядок внутри «" + c.name + "» изменён", false);
+          render();
+        });
+        col.append(card);
+      });
+      if (!list.length) col.append(h("p", { class: "empty", text: ui.q || ui.tag || ui.prio ? "Под фильтр ничего не подходит" : "Перетащите сюда задачу" }));
+      if (ui.adding === c.id) {
+        var ai = h("input", { class: "add-in", placeholder: "Что сделать? Enter — добавить, Esc — закрыть" });
+        ai.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && ai.value.trim()) { plainAdd(ai.value.trim(), c.id); render(); }
+          if (e.key === "Escape") { ui.adding = null; render(); }
+        });
+        ai.addEventListener("blur", function () { setTimeout(function () { if (ui.adding === c.id && document.activeElement !== ai) { ui.adding = null; render(); } }, 150); });
+        col.append(ai);
+        setTimeout(function () { ai.focus(); });
+      } else {
+        col.append(h("button", { type: "button", class: "add-t", "data-mark": ci === 0 ? "8" : null, html: I.plus, onclick: function () { ui.adding = c.id; render(); } }, "Новая задача"));
+      }
+      col.addEventListener("dragover", function (e) { if (!ui.drag) return; e.preventDefault(); col.classList.add("drop"); });
+      col.addEventListener("dragleave", function (e) { if (!col.contains(e.relatedTarget)) col.classList.remove("drop"); });
+      col.addEventListener("drop", function (e) {
+        col.classList.remove("drop");
+        if (!ui.drag) return;
+        e.preventDefault();
+        var d = find(ui.drag); ui.drag = null;
+        d.order = Date.now();
+        if (d.status !== c.id) moveTo(d, c.id);
+        render();
+      });
+      bd.append(col);
+    });
+    if (ui.newCol) {
+      var ni = h("input", { class: "col-in", placeholder: "Название столбца", maxlength: "30" });
+      var color = COL_C[(cols.length - 3) % COL_C.length];
+      var fin2 = function (save) {
+        if (!ui.newCol) return;
+        ui.newCol = false;
+        var v = ni.value.trim();
+        if (save && v) cols.splice(cols.length - 1, 0, { id: "c" + seq++, name: v, c: color });
+        render();
+      };
+      ni.addEventListener("keydown", function (e) { if (e.key === "Enter") fin2(true); if (e.key === "Escape") fin2(false); });
+      ni.addEventListener("blur", function () { fin2(true); });
+      bd.append(h("div", { class: "col", style: "--c:" + color }, ni));
+      setTimeout(function () { ni.focus(); });
+    } else {
+      bd.append(h("button", { type: "button", class: "add-col", "data-mark": "4", html: I.plus, onclick: function () { ui.newCol = true; render(); } }, "Столбец"));
+    }
+    return bd;
+  }
+
+  function renderList() {
+    var groups = [
+      { id: "late", name: "Срок прошёл", test: function (t) { return t.due && daysFrom(t.due) < 0; } },
+      { id: "today", name: "Сегодня", test: function (t) { return t.due && daysFrom(t.due) === 0; } },
+      { id: "tom", name: "Завтра", test: function (t) { return t.due && daysFrom(t.due) === 1; } },
+      { id: "week", name: "В ближайшие 7 дней", test: function (t) { return t.due && daysFrom(t.due) > 1 && daysFrom(t.due) <= 7; } },
+      { id: "later", name: "Позже", test: function (t) { return t.due && daysFrom(t.due) > 7; } },
+      { id: "none", name: "Без срока", test: function (t) { return !t.due; } }
+    ];
+    var open = tasks.filter(function (t) { return t.status !== "done" && visible(t); });
+    var done = tasks.filter(function (t) { return t.status === "done" && visible(t); });
+    var ls = h("div", { class: "ls", "data-mark": "12" }), any = false;
+    groups.forEach(function (g) {
+      var items = open.filter(g.test).sort(function (a, b) { return (a.due || "").localeCompare(b.due || "") || (a.time || "").localeCompare(b.time || "") || b.prio - a.prio; });
+      if (!items.length) return;
+      any = true;
+      ls.append(h("div", { class: "grp" }, h("p", { class: "grp-h" + (g.id === "late" ? " late" : "") }, g.name, h("span", { text: String(items.length) })), items.map(row)));
+    });
+    if (!any) ls.append(h("p", { class: "empty", text: "Невыполненных задач нет" }));
+    if (done.length) {
+      ls.append(h("div", { class: "grp" },
+        h("p", { class: "grp-h" }, h("button", { type: "button", onclick: function () { ui.doneOpen = !ui.doneOpen; render(); } }, (ui.doneOpen ? "▾ " : "▸ ") + "Готово", h("span", { text: String(done.length) }))),
+        ui.doneOpen ? done.map(row) : null));
+    }
+    return ls;
+  }
+  function row(t) {
+    return h("div", { class: "li" + (t.status === "done" ? " is-done" : "") + (ui.open === t.id ? " sel" : ""), onclick: function () { ui.open = t.id; render(); } },
+      checkBtn(t, colOf(t.status).c),
+      h("div", { class: "mid" }, h("span", { class: "ttl", text: t.title }), chipsFor(t, true)),
+      h("div", { class: "rt" }, t.due ? dueChip(t) : null, h("span", { class: "st", style: "--c:" + colOf(t.status).c }, h("i"), colOf(t.status).name)));
+  }
+
+  function renderPanel() {
+    var pn = $("pn"), t = ui.open && find(ui.open);
+    pn.classList.toggle("open", !!t);
+    if (!t) return;
+    var title = h("textarea", { rows: "1", maxlength: "300", "aria-label": "Название" });
+    title.value = t.title;
+    var fit = function () { title.style.height = "auto"; title.style.height = title.scrollHeight + "px"; };
+    title.addEventListener("input", fit);
+    title.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); title.blur(); } });
+    title.addEventListener("change", function () { var v = title.value.trim(); if (v && v !== t.title) { t.title = v; edited(t, "новое название"); renderArea(); } });
+    setTimeout(fit);
+
+    var status = h("select", { onchange: function () { moveTo(t, this.value); render(); } }, cols.map(function (c) { return h("option", { value: c.id, text: c.name, selected: c.id === t.status ? "selected" : null }); }));
+    var date = h("input", { type: "date", value: t.due, onchange: function () { t.due = this.value; edited(t, "срок"); render(); } });
+    var time = h("input", { type: "time", value: t.time, disabled: t.due ? null : "disabled", title: "Время — по желанию", onchange: function () { t.time = this.value; edited(t, "время"); render(); } });
+    var quick = function (label, val) { return h("button", { type: "button", class: "opt" + (t.due === val ? " on" : ""), onclick: function () { t.due = val; if (!val) t.time = ""; edited(t, "срок"); render(); } }, label); };
+
+    var tagIn = h("input", { class: "tag-in", placeholder: "+ тег", list: "tag-list" });
+    tagIn.addEventListener("keydown", function (e) {
+      var v = tagIn.value.trim();
+      if (e.key === "Enter" && v) {
+        v = v.charAt(0).toUpperCase() + v.slice(1);
+        if (t.tags.indexOf(v) === -1) t.tags.push(v);
+        if (TAGS.indexOf(v) === -1) { TAGS.push(v); $("f-tag").append(h("option", { value: v, text: v })); }
+        edited(t, "тег «" + v + "»"); render();
+      }
+    });
+
+    var subIn = h("input", { class: "sub-in", placeholder: "+ Подзадача (Enter — добавить)" });
+    subIn.addEventListener("keydown", function (e) {
+      var v = subIn.value.trim();
+      if (e.key === "Enter" && v) {
+        t.subs.push({ t: v, done: false }); t.updated = plusDays(0);
+        count("«" + t.title + "»: новая подзадача «" + v + "»", true);
+        render();
+        setTimeout(function () { var x = $("pn").querySelector(".sub-in"); if (x) x.focus(); });
+      }
+    });
+    var doneN = t.subs.filter(function (s) { return s.done; }).length;
+
+    var note = h("textarea", { class: "note-in", placeholder: "Подробности, ссылки, мысли…" });
+    note.value = t.note;
+    note.addEventListener("change", function () { t.note = note.value; edited(t, "заметка"); renderArea(); });
+
+    pn.replaceChildren(
+      h("div", { class: "pn-h", "data-mark": "9" },
+        h("span", { class: "st", style: "--c:" + colOf(t.status).c }, h("i"), colOf(t.status).name),
+        h("button", { type: "button", class: "ic-btn", html: I.x, title: "Закрыть (Esc)", onclick: function () { ui.open = null; render(); } })),
+      h("div", { class: "pn-b" },
+        h("div", { class: "pn-t" }, checkBtn(t, colOf(t.status).c), title),
+        h("div", { class: "fld" }, h("span", { text: "Столбец" }), status),
+        h("div", { class: "fld" }, h("span", { text: "Срок" }), h("div", { class: "opts" }, quick("Сегодня", plusDays(0)), quick("Завтра", plusDays(1)), quick("Без срока", ""), date, time)),
+        h("div", { class: "fld" }, h("span", { text: "Важность" }), h("div", { class: "opts" }, PRIO.map(function (p, i) {
+          return h("button", { type: "button", class: "opt" + (i ? " p" + i : "") + (t.prio === i ? " on" : ""), onclick: function () { t.prio = i; edited(t, "важность"); render(); } }, p);
+        }))),
+        h("div", { class: "fld" }, h("span", { text: "Теги" }), h("div", { class: "opts" }, t.tags.map(function (g, i) {
+          return h("span", { class: "tag-x" }, g, h("button", { type: "button", html: I.x, title: "Убрать тег", onclick: function () { t.tags.splice(i, 1); edited(t, "убран тег"); render(); } }));
+        }), tagIn)),
+        h("datalist", { id: "tag-list" }, TAGS.map(function (g) { return h("option", { value: g }); })),
+        h("div", { class: "blk", "data-mark": "10" },
+          h("h5", null, "Подзадачи", t.subs.length ? h("span", { class: "chip" }, h("span", { class: "bar" }, barFill(doneN / t.subs.length)), doneN + " из " + t.subs.length) : null),
+          h("div", { class: "subs" }, t.subs.map(function (s, i) {
+            return h("div", { class: "sub" + (s.done ? " done" : "") },
+              h("button", { type: "button", class: "chk" + (s.done ? " on" : ""), html: I.tick, onclick: function () {
+                s.done = !s.done;
+                if (s.done) { t.updated = plusDays(0); count("«" + t.title + "»: выполнена подзадача «" + s.t + "»", true); }
+                else edited(t, "снята галочка с подзадачи «" + s.t + "»");
+                render();
+              } }),
+              h("span", { text: s.t }),
+              h("button", { type: "button", class: "del", html: I.x, title: "Удалить подзадачу", onclick: function () { t.subs.splice(i, 1); edited(t, "удалена подзадача"); render(); } }));
+          })), subIn),
+        h("div", { class: "blk" }, h("h5", { text: "Заметка" }), note)),
+      h("div", { class: "pn-f" },
+        h("span", { class: "when", text: t.updated ? "Изменена " + whenText({ due: t.updated }) : "Создана " + whenText({ due: t.created }) }),
+        h("button", { type: "button", class: "btn2", html: I.copy, onclick: function () { duplicate(t); } }, "Дублировать"),
+        h("button", { type: "button", class: "btn2 danger", "data-mark": "11", html: I.trash, onclick: function () { removeTask(t); } }, "Удалить")));
+  }
+
+  function renderArea() {
+    var area = $("area");
+    area.replaceChildren(ui.view === "board" ? renderBoard() : renderList());
+    var all = tasks.length, done = tasks.filter(function (t) { return t.status === "done"; }).length;
+    var late = tasks.filter(function (t) { return t.status !== "done" && t.due && daysFrom(t.due) < 0; }).length;
+    $("meta").textContent = all + " " + plural(all, "задача", "задачи", "задач") + ", готово " + done + (late ? ", срок прошёл у " + late : "");
+    document.querySelectorAll("#view button").forEach(function (b) { b.classList.toggle("on", b.dataset.v === ui.view); });
+    marks(area);
+    renderShell();
+  }
+  function render() { renderArea(); renderPanel(); renderAb(); marks($("pn")); }
+
+  $("view").addEventListener("click", function (e) { var b = e.target.closest("button[data-v]"); if (b) { ui.view = b.dataset.v; render(); } });
+  $("stat").addEventListener("click", function () { ui.statOpen = !ui.statOpen; renderStat(); });
+  document.addEventListener("click", function (e) {
+    if (ui.colMenu && !e.target.closest(".col-menu")) { ui.colMenu = null; render(); }
+    if (ui.statOpen && !e.target.closest("#stat")) { ui.statOpen = false; renderStat(); }
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && ui.open && !e.target.closest("input, textarea")) { ui.open = null; render(); }
+  });
+
+  /* ---------- the explanations on the right ---------- */
+  var NOTES = [
+    { n: 1, tag: "new", h: "Доска или список", p: "Одни и те же задачи можно смотреть двумя способами. «Доска» — столбцы по стадиям работы. «Список» — по срокам: что горит, что сегодня, что завтра.",
+      how: "Нажмите «Список» вверху справа, потом «Доска». Программа запомнит, какой вид вы выбрали.", v: "только доска." },
+    { n: 2, tag: "new", h: "Ассистент задач — полоса сверху", p: "Свой ассистент прямо в «Задачах», который умеет только задачи. Пишете обычными словами — он делает сам: добавляет задачи (можно несколько в одном сообщении), по смыслу ставит срок, важность и тег, переносит, отмечает сделанными, разбивает на подзадачи, удаляет и отвечает, что у вас на сегодня.",
+      how: "Нажмите на пример под полосой (или напишите своё) и Enter. Ответ — одной строкой под полосой. Изменения вносятся сразу, без карточек с вопросом, а рядом с ответом кнопка «Отменить» — она возвращает всё как было до этого сообщения.",
+      more: "Отвечает самая дешёвая модель — GPT-6 Luna (без ключа ChatGPT — Claude Haiku) с быстрыми размышлениями: доли цента за сообщение. Каждое сообщение — отдельная просьба, разговор не копится, поэтому дёшево и быстро. Календарь, промты и вкладки он не трогает — это остаётся маленькому окну (звёздочка) и LLM. Без ключей — простые правила по словам, как в этом макете.",
+      v: "полосы нет. Похожее умеет маленькое окно (звёздочка): там общий ассистент, каждое изменение подтверждается карточкой, а срок, важность и тег ему ставить некуда — у задач их пока нет." },
+    { n: 3, tag: "new", h: "Поиск и фильтры", p: "Поиск по названию, заметке и тегам. Фильтр по тегу и по важности. «Скрыть выполненные» убирает с глаз всё готовое.",
+      how: "Напишите в поиске «сайт» или выберите тег «Монтаж».", v: "поиска и фильтров нет." },
+    { n: 4, tag: "new", h: "Свои столбцы", p: "Три основных столбца («Предстоит», «В процессе», «Готово») есть всегда, их нельзя удалить — у них замочек. Свои столбцы добавляются кнопкой «+ Столбец» и встают перед «Готово».",
+      how: "Нажмите «+ Столбец», напишите, например, «На проверке», Enter. У своего столбца есть меню «⋯»: переименовать, сдвинуть, удалить. При удалении его задачи переезжают в «Предстоит», а внизу появляется «Отменить». Ассистент тоже умеет: «перенеси вёрстку в на проверке».",
+      v: "только три столбца, свой добавить нельзя." },
+    { n: 5, tag: "part", h: "Что видно на карточке", p: "Название и под ним метки: важность (флажок), теги, срок (красный — срок прошёл, оранжевый — сегодня), подзадачи с полоской «1/4» и значок, если есть заметка.",
+      how: "Нажмите на карточку — справа откроется вся задача (пункт 9).", v: "на карточке только название и под ним заметка; меток нет, потому что у задачи пока нет срока, важности и тегов." },
+    { n: 6, tag: "new", h: "Галочка «Сделано»", p: "Кружок слева. Отметили — задача зачёркивается и сама уезжает в «Готово». Сняли галочку — возвращается туда, где была.",
+      how: "Нажмите на кружок у первой задачи.", v: "галочки нет: чтобы закончить задачу, её перетаскивают в «Готово»." },
+    { n: 7, tag: "has", h: "Перетаскивание", p: "Карточки перетаскиваются мышкой между столбцами и вверх-вниз внутри столбца.",
+      how: "Перетащите карточку из «В процессе» в «Готово».", v: "работает точно так же." },
+    { n: 8, tag: "has", h: "«+ Новая задача» в столбце", p: "Быстро добавить задачу сразу в нужный столбец — без ассистента и бесплатно: текст становится названием. Срок и остальное — в панели задачи или через полосу ассистента.",
+      v: "работает так же." },
+    { n: 9, tag: "new", h: "Задача целиком — панель справа", p: "Как в Notion: доска остаётся видна, а справа все подробности. Название правится прямо в заголовке. Ниже — столбец, срок (кнопки «Сегодня», «Завтра», «Без срока» или дата; время по желанию), важность (обычная, важная, срочная), теги (свои тоже можно — напишите и Enter), заметка. Внизу — когда создана или изменена, «Дублировать», «Удалить».",
+      how: "Закрывается крестиком или Esc.", open: true,
+      v: "панели нет. Двойной клик или карандаш меняют только название прямо на карточке. Заметку руками не добавить и не изменить — только через ассистента." },
+    { n: 10, tag: "new", h: "Подзадачи", p: "Маленькие шаги внутри задачи с галочками. На карточке видно, сколько уже сделано: «2/5» и полоска.",
+      how: "Откройте задачу, напишите шаг в поле «+ Подзадача», Enter. Или попросите ассистента: «разбей вёрстку сайта на шаги».", open: true, v: "подзадач нет." },
+    { n: 11, tag: "part", h: "Удаление с «Отменить»", p: "Удаляем сразу, но 7 секунд внизу видна кнопка «Отменить». Быстрее, и случайно ничего не пропадёт.",
+      how: "Откройте задачу → «Удалить» → внизу нажмите «Отменить».", open: true, v: "корзина на карточке и вопрос «Удалить „…“?» с кнопками «Удалить» и «Отмена»." },
+    { n: 12, tag: "new", h: "Вид «Список»", p: "Задачи по срокам: «Срок прошёл» (красным), «Сегодня», «Завтра», «В ближайшие 7 дней», «Позже», «Без срока». Готовые свёрнуты в самом низу. Справа у каждой строки — в каком она столбце.",
+      how: "Это удобно утром: открыл и сразу видно, что делать сегодня.", list: true, v: "только доска." },
+    { n: 13, tag: "part", h: "Статистика", p: "Как вы решили, +1 получают: новая задача, переезд в другой столбец, выполнение, новая подзадача и выполненная подзадача — и руками, и через ассистента. Сообщение ассистенту задач тоже +1, как сообщение в LLM. Не считаются: правки, удаление, перестановка внутри столбца и снятая галочка.",
+      how: "Нажмите на кнопку «В статистике сегодня» — там журнал: что посчиталось (+1), а что нет (—).",
+      more: "Например, «смонтировать рилс завтра и позвонить Диме в пятницу» даст +3: само сообщение и две новые задачи. В блоке «Что вы чаще всего делаете» сообщение пойдёт в «Ассистент», а задачи — в «Задачи».",
+      v: "уже считаются новая задача и перенос в другой столбец (значит, и в «Готово»). Подзадач и полосы ассистента пока нет." },
+    { n: 14, tag: "has", h: "Счётчик на иконке «Задачи»", p: "Слева вверху, на иконке задач, — сколько задач ещё не готово. В макете он меняется сразу: добавьте задачу или отметьте галочкой.",
+      v: "есть, работает так же." }
+  ];
+  var TAG_NAME = { "new": ["Новое", "tg-new"], has: ["Есть в 1.9.0", "tg-has"], part: ["Частично есть", "tg-part"] };
+  function renderLegend() {
+    var lg = $("lg");
+    var cb = h("input", { type: "checkbox", checked: "checked", onchange: function () { document.body.classList.toggle("no-marks", !this.checked); } });
+    lg.append(h("div", { class: "lg-top" },
+      h("h2", { text: "Что на макете" }),
+      h("p", { text: "Окно — как в программе 1.9.0: вкладки вверху, иконки разделов слева, «Ближайшие дела», звёздочка. Работает только раздел «Задачи»: всё нажимается, но после перезагрузки страницы возвращается как было." }),
+      h("p", { text: "Цифры на макете совпадают с пунктами ниже. Нажмите на пункт — макет покажет, где это. Плашка «Сейчас в 1.9.0» — как это устроено в вышедшей версии." }),
+      h("label", null, cb, "Показывать цифры на макете")));
+    NOTES.forEach(function (it) {
+      var tg = TAG_NAME[it.tag];
+      lg.append(h("div", { class: "lg-it", id: "lg-" + it.n, onclick: function () { showNote(it); } },
+        h("b", { text: String(it.n) }),
+        h("div", null,
+          h("h3", null, it.h, h("span", { class: "tg " + tg[1], text: tg[0] })),
+          h("p", { text: it.p }),
+          it.how ? h("p", { class: "how", text: it.how }) : null,
+          it.more ? h("p", { text: it.more }) : null,
+          it.v ? h("p", { class: "v19" }, h("b", { text: "Сейчас в 1.9.0: " }), it.v) : null,
+          h("div", { class: "show", text: "Показать на макете →" }))));
+    });
+  }
+  function showNote(it) {
+    var boardOnly = [4, 5, 6, 7, 8].indexOf(it.n) !== -1;
+    if (it.list && ui.view !== "list") { ui.view = "list"; render(); }
+    if (boardOnly && ui.view !== "board") { ui.view = "board"; render(); }
+    if (it.open && !ui.open) { var first = tasks.find(function (t) { return t.status !== "done"; }); if (first) { ui.open = first.id; render(); } }
+    if (boardOnly && ui.open) { ui.open = null; render(); }
+    setTimeout(function () {
+      document.querySelectorAll('[data-mark="' + it.n + '"]').forEach(function (el, i) {
+        if (i === 0) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl");
+      });
+    }, 260);
+  }
+  // Puts a numbered circle on every element with data-mark; clicking it scrolls the explanations to that point.
+  function marks(root) {
+    var list = Array.prototype.slice.call(root.querySelectorAll("[data-mark]"));
+    if (root.hasAttribute("data-mark")) list.unshift(root);
+    list.forEach(function (el) {
+      if (el.querySelector(":scope > .nb")) return;
+      var n = el.getAttribute("data-mark");
+      el.append(h("span", { class: "nb" + (el.classList.contains("chk") ? " l" : ""), text: n, title: "Пояснение № " + n, onclick: function (e) {
+        e.stopPropagation(); e.preventDefault();
+        var it = $("lg-" + n);
+        if (!it) return;
+        it.scrollIntoView({ block: "center", behavior: "smooth" });
+        it.classList.remove("hl2"); void it.offsetWidth; it.classList.add("hl2");
+        setTimeout(function () { it.classList.remove("hl2"); }, 1600);
+      } }));
+    });
+  }
+
+  renderLegend();
+  render();
+  marks(document.querySelector(".top"));
+  marks(document.querySelector(".ab-wrap"));
+  marks($("flt"));
+})();
+</script>
+</body>
+</html>

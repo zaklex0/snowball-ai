@@ -28,7 +28,8 @@ const CHATS_FILE = 'chats.json';
 const CALENDAR_FILE = 'calendar.json';
 const TASKS_FILE = 'tasks.json';
 // What counts as an action on the statistics page. Deleting and importing do not count.
-// calendar: a new or changed event; assistant: a message sent to the assistant; tasks: a new task or one moved to another column.
+// calendar: a new or changed event; assistant: a message sent to the assistant;
+// tasks: a new task, one moved to another column, a new subtask or a subtask ticked off.
 const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks'];
 const NAME_MAX = 32;
 
@@ -192,18 +193,55 @@ function normalizeEvent(e, fallbackTime) {
 }
 
 // One card on the tasks board. status is its column: todo — «Предстоит», doing — «В процессе», done — «Готово».
-// order keeps the place inside the column (smaller is higher).
+// order keeps the place inside the column (smaller is higher). due is the day (YYYY-MM-DD or empty), time is "HH:MM"
+// (only with a day), priority: 0 — обычная, 1 — важная, 2 — срочная. doneFrom: the column it came from into «Готово»,
+// so taking the tick off puts it back there. Tasks from older versions get the new fields empty.
 const TASK_STATUSES = ['todo', 'doing', 'done'];
+// Columns of the user's own sit between «В процессе» and «Готово». Their ids start with "col"; color is one of six (0–5).
+const BASE_COLUMNS = [{ id: 'todo', name: 'Предстоит' }, { id: 'doing', name: 'В процессе' }, { id: 'done', name: 'Готово' }];
+const COLUMN_ID = /^col[A-Za-z0-9_-]{1,40}$/;
+const COLUMN_MAX = 8;
+const isTaskStatus = (s) => TASK_STATUSES.includes(s) || COLUMN_ID.test(str(s));
+function normalizeColumn(c) {
+  if (!c || typeof c !== 'object' || !COLUMN_ID.test(str(c.id))) return null;
+  const name = str(c.name, 40).trim();
+  if (!name) return null;
+  return { id: c.id, name, color: Math.max(0, Math.min(5, Math.round(num(c.color)))) };
+}
+const TASK_TAG_MAX = 30;
+function normalizeTags(list) {
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach((x) => {
+    const tag = str(x, TASK_TAG_MAX).trim();
+    if (tag && out.length < 10 && !out.some((y) => y.toLowerCase() === tag.toLowerCase())) out.push(tag);
+  });
+  return out;
+}
+function normalizeSubtasks(list) {
+  return (Array.isArray(list) ? list : []).slice(0, 100).map((s) => {
+    if (!s || typeof s !== 'object') return null;
+    const title = str(s.title, 300).trim();
+    return title ? { id: ID_RE.test(str(s.id)) ? s.id : newId('s'), title, done: !!s.done } : null;
+  }).filter(Boolean);
+}
 function normalizeTask(t, fallbackTime) {
   if (!t || typeof t !== 'object') return null;
   const title = str(t.title, 300).trim();
   if (!title) return null;
   const now = fallbackTime || Date.now();
+  const status = isTaskStatus(t.status) ? t.status : 'todo';
+  const due = DATE_RE.test(str(t.due)) ? t.due : '';
   return {
     id: ID_RE.test(str(t.id)) ? t.id : newId('t'),
     title,
-    status: TASK_STATUSES.includes(t.status) ? t.status : 'todo',
+    status,
     note: str(t.note, 5000).trim(),
+    due,
+    time: due && TIME_RE.test(str(t.time)) ? t.time : '',
+    priority: [1, 2].includes(Number(t.priority)) ? Number(t.priority) : 0,
+    tags: normalizeTags(t.tags),
+    subtasks: normalizeSubtasks(t.subtasks),
+    doneFrom: status === 'done' && t.doneFrom !== 'done' && isTaskStatus(t.doneFrom) ? t.doneFrom : '',
     order: Number.isFinite(Number(t.order)) ? Number(t.order) : now,
     createdAt: num(t.createdAt) || now,
     updatedAt: num(t.updatedAt) || num(t.createdAt) || now
@@ -263,6 +301,7 @@ class Store {
     this.chats = [];
     this.events = [];
     this.tasks = [];
+    this.columns = [];       // the user's own task columns, in their order
     this.queue = Promise.resolve();
   }
 
@@ -301,7 +340,8 @@ class Store {
     const cal = await readJson(this.calendarPath);
     this.events = cal && Array.isArray(cal.events) ? cal.events.map((e) => normalizeEvent(e)).filter(Boolean) : [];
     const tasks = await readJson(this.tasksPath);
-    this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => normalizeTask(t)).filter(Boolean) : [];
+    this.columns = tasks && Array.isArray(tasks.columns) ? tasks.columns.map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX) : [];
+    this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean) : [];
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
     this.activity = this.backfillActivity();
@@ -403,17 +443,95 @@ class Store {
   }
 
   /* ---------- tasks board ---------- */
+  // All columns in their order: «Предстоит», «В процессе», the user's own, «Готово».
+  columnsView() {
+    return [BASE_COLUMNS[0], BASE_COLUMNS[1]].map((c) => Object.assign({ base: true }, c))
+      .concat(this.columns.map((c) => Object.assign({}, c)), [Object.assign({ base: true }, BASE_COLUMNS[2])]);
+  }
+  hasColumn(id) { return TASK_STATUSES.includes(id) || this.columns.some((c) => c.id === id); }
+  // A task whose own column is gone goes to «Предстоит».
+  fitColumn(t) {
+    if (!t) return t;
+    if (!this.hasColumn(t.status)) t.status = 'todo';
+    if (t.doneFrom && !this.hasColumn(t.doneFrom)) t.doneFrom = '';
+    return t;
+  }
   // By column, then by place in the column.
   tasksView() {
-    return this.tasks.slice().sort((a, b) => TASK_STATUSES.indexOf(a.status) - TASK_STATUSES.indexOf(b.status) || a.order - b.order);
+    const order = this.columnsView().map((c) => c.id);
+    return this.tasks.slice().sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.order - b.order);
   }
   findTask(id) { return this.tasks.find((t) => t.id === id) || null; }
-  writeTasks() { return writeJson(this.tasksPath, { format: 'snowball-tasks', version: 1, tasks: this.tasks }); }
+  tasksFile() { return { format: 'snowball-tasks', version: 1, columns: this.columns, tasks: this.tasks }; }
+  writeTasks() { return writeJson(this.tasksPath, this.tasksFile()); }
 
-  // A new task (no id or an unknown one) lands at the bottom of its column; a known one changes.
+  // The user's own columns: add, rename, move left (-1) or right (+1) among them, delete and bring back.
+  addColumn(name) {
+    return this.run(async () => {
+      if (this.columns.length >= COLUMN_MAX) throw Object.assign(new Error('too many columns'), { userMessage: 'Своих столбцов может быть не больше ' + COLUMN_MAX + '.' });
+      const used = this.columns.map((c) => c.color);
+      const color = [0, 1, 2, 3, 4, 5].find((n) => !used.includes(n));
+      const col = normalizeColumn({ id: newId('col'), name, color: color === undefined ? this.columns.length % 6 : color });
+      if (!col) throw Object.assign(new Error('bad column'), { userMessage: 'Напишите название столбца.' });
+      this.columns.push(col);
+      await this.writeTasks();
+      return col;
+    });
+  }
+  renameColumn(id, name) {
+    return this.run(async () => {
+      const col = this.columns.find((c) => c.id === id);
+      const v = str(name, 40).trim();
+      if (!col || !v) return null;
+      col.name = v;
+      await this.writeTasks();
+      return col;
+    });
+  }
+  moveColumn(id, dir) {
+    return this.run(async () => {
+      const i = this.columns.findIndex((c) => c.id === id), j = i + (dir < 0 ? -1 : 1);
+      if (i === -1 || j < 0 || j >= this.columns.length) return;
+      const [col] = this.columns.splice(i, 1);
+      this.columns.splice(j, 0, col);
+      await this.writeTasks();
+    });
+  }
+  // Its tasks go to the bottom of «Предстоит». Returns what is needed to bring it all back.
+  deleteColumn(id) {
+    return this.run(async () => {
+      const index = this.columns.findIndex((c) => c.id === id);
+      if (index === -1) return null;
+      const [column] = this.columns.splice(index, 1);
+      const todo = this.tasks.filter((t) => t.status === 'todo');
+      let order = todo.length ? Math.max.apply(null, todo.map((t) => t.order)) + 1 : Date.now();
+      const moved = [];
+      this.tasks.forEach((t) => {
+        if (t.status === id) { t.status = 'todo'; t.order = order++; moved.push(t.id); }
+        if (t.doneFrom === id) t.doneFrom = '';
+      });
+      await this.writeTasks();
+      return { column, index, moved };
+    });
+  }
+  restoreColumn(r) {
+    return this.run(async () => {
+      const column = normalizeColumn(r && r.column);
+      if (!column || this.columns.some((c) => c.id === column.id) || this.columns.length >= COLUMN_MAX) return;
+      this.columns.splice(Math.max(0, Math.min(this.columns.length, num(r.index))), 0, column);
+      const ids = Array.isArray(r.moved) ? r.moved : [];
+      this.tasks.forEach((t) => { if (ids.includes(t.id) && t.status === 'todo') t.status = column.id; });
+      await this.writeTasks();
+    });
+  }
+
+  // A new task (no id or an unknown one) lands at the bottom of its column; a known one changes (only the fields given).
   // Moving to another column without an order puts it at the bottom there.
+  // Statistics: a new task, a move to another column, every new subtask and every subtask ticked off count as actions.
+  // Edits, deleting, a move inside the column and taking a tick back (out of «Готово» too) do not.
   saveTask(input) {
     return this.run(async () => {
+      if (input && input.status && !this.hasColumn(input.status)) input = Object.assign({}, input, { status: 'todo' });
       const prev = input && input.id ? this.findTask(input.id) : null;
       const now = Date.now();
       const merged = Object.assign({}, prev || {}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now });
@@ -422,12 +540,32 @@ class Store {
         const col = this.tasks.filter((t) => t.status === (merged.status || 'todo') && t !== prev);
         merged.order = col.length ? Math.max.apply(null, col.map((t) => t.order)) + 1 : now;
       }
-      const task = normalizeTask(merged);
+      if (moved && merged.status === 'done' && input.doneFrom === undefined) merged.doneFrom = prev.status;
+      const task = this.fitColumn(normalizeTask(merged));
       if (!task) throw Object.assign(new Error('bad task'), { userMessage: 'Напишите, что нужно сделать.' });
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task;
       else { if (this.findTask(task.id)) task.id = newId('t'); this.tasks.push(task); }
       await this.writeTasks();
-      if (!prev || moved) await this.bump('tasks', 1);
+      let n = !prev || (moved && prev.status !== 'done') ? 1 : 0;
+      const before = new Map((prev ? prev.subtasks : []).map((s) => [s.id, s]));
+      task.subtasks.forEach((s) => {
+        const was = before.get(s.id);
+        if (!was) n += s.done ? 2 : 1;
+        else if (s.done && !was.done) n += 1;
+      });
+      await this.bump('tasks', n);
+      return task;
+    });
+  }
+
+  // Puts a task back exactly as it was (undo after deleting or after the assistant's changes). Not an action.
+  putTask(input) {
+    return this.run(async () => {
+      const task = this.fitColumn(normalizeTask(input));
+      if (!task) return null;
+      const prev = this.findTask(task.id);
+      if (prev) this.tasks[this.tasks.indexOf(prev)] = task; else this.tasks.push(task);
+      await this.writeTasks();
       return task;
     });
   }
@@ -708,7 +846,7 @@ class Store {
     if (kind === 'backup') {
       entries.push({ name: CHATS_FILE, data: JSON.stringify({ format: 'snowball-chats', version: 1, chats: this.chats }, null, 2) });
       entries.push({ name: CALENDAR_FILE, data: JSON.stringify({ format: 'snowball-calendar', version: 1, events: this.events }, null, 2) });
-      entries.push({ name: TASKS_FILE, data: JSON.stringify({ format: 'snowball-tasks', version: 1, tasks: this.tasks }, null, 2) });
+      entries.push({ name: TASKS_FILE, data: JSON.stringify(this.tasksFile(), null, 2) });
       entries.push({ name: ACTIVITY_FILE, data: JSON.stringify(this.activity, null, 2) });
       entries.push({ name: PROFILE_FILE, data: JSON.stringify(this.profile, null, 2) });
       if (this.profile.avatarAt && fs.existsSync(this.avatarPath)) entries.push({ name: AVATAR_FILE, file: this.avatarPath });
@@ -771,12 +909,17 @@ class Store {
       });
       if (res.events) await this.writeCalendar();
       const tasks = await readJson(path.join(dir, TASKS_FILE));
-      (tasks && Array.isArray(tasks.tasks) ? tasks.tasks : []).map((t) => normalizeTask(t)).filter(Boolean).forEach((t) => {
+      // The backup's own columns come along when there is room for them.
+      let newColumns = 0;
+      (tasks && Array.isArray(tasks.columns) ? tasks.columns : []).map(normalizeColumn).filter(Boolean).forEach((c) => {
+        if (!this.columns.some((x) => x.id === c.id) && this.columns.length < COLUMN_MAX) { this.columns.push(c); newColumns++; }
+      });
+      (tasks && Array.isArray(tasks.tasks) ? tasks.tasks : []).map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean).forEach((t) => {
         if (this.findTask(t.id)) return;
         this.tasks.push(t);
         res.tasks++;
       });
-      if (res.tasks) await this.writeTasks();
+      if (res.tasks || newColumns) await this.writeTasks();
       // Statistics: for each day and kind the larger number, so restoring the same backup twice does not double it.
       const act = await readJson(path.join(dir, ACTIVITY_FILE));
       if (act) {
