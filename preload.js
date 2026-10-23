@@ -18,6 +18,25 @@ contextBridge.exposeInMainWorld('vsApi', {
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   setTabs: (tabs) => ipcRenderer.invoke('set-tabs', tabs),
   windowOpen: (tabs, mode, point) => ipcRenderer.invoke('window-open', tabs, mode, point),
+  windowReturn: (tab, x) => ipcRenderer.invoke('window-return', tab, x),
+  // A separate window is dragged over this window's tab strip ({ x } or null when it leaves).
+  onTabHover: (fn) => {
+    const listener = (_e, at) => fn(at);
+    ipcRenderer.on('tab-hover', listener);
+    return () => ipcRenderer.removeListener('tab-hover', listener);
+  },
+  // A tab comes back from a separate window: { tab, x }.
+  onTabInsert: (fn) => {
+    const listener = (_e, d) => fn(d);
+    ipcRenderer.on('tab-insert', listener);
+    return () => ipcRenderer.removeListener('tab-insert', listener);
+  },
+  // This separate window was let go over the main window's tab strip: { x }.
+  onReturnTab: (fn) => {
+    const listener = (_e, at) => fn(at);
+    ipcRenderer.on('return-tab', listener);
+    return () => ipcRenderer.removeListener('return-tab', listener);
+  },
   onSync: (fn) => {
     const listener = (_e, data) => fn(data);
     ipcRenderer.on('sync', listener);

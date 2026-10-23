@@ -240,6 +240,23 @@ function createWindow(opts) {
       if (await store.reloadIfChanged()) broadcast('data-changed', store.view());
     } catch (e) { /* ignore */ }
   });
+  // A separate window dragged by its title bar over the main window's tab strip turns see-through, and the main window
+  // shows where its tab will go («Отпустите — вкладка вернётся сюда»). Letting go there brings the tab back (return-tab).
+  let catching = false;
+  const catchAt = (at) => {
+    if (!at && !catching) return;
+    catching = !!at;
+    if (!w.isDestroyed()) w.setOpacity(at ? 0.6 : 1);
+    if (win && !win.isDestroyed()) win.webContents.send('tab-hover', at);
+  };
+  w.on('move', () => { if (w !== win) catchAt(overTabStrip(screen.getCursorScreenPoint())); });
+  w.on('moved', () => {
+    if (w === win || !catching) return;
+    const at = overTabStrip(screen.getCursorScreenPoint());
+    catchAt(null);
+    if (at && !w.isDestroyed()) w.webContents.send('return-tab', at);
+  });
+
   // When the main window closes and others stay, the next one becomes the main window (and remembers its tabs).
   w.on('closed', () => {
     if (w !== win) return;
@@ -248,6 +265,29 @@ function createWindow(opts) {
   });
   return w;
 }
+
+// Where a point of the screen falls on the main window's tab strip: { x } in its page's pixels, or null when it is not there.
+// The strip is the title bar right of the sidebar, without the place where Windows draws its own buttons.
+function overTabStrip(p) {
+  if (!win || win.isDestroyed() || win.isMinimized() || !win.isVisible()) return null;
+  const b = win.getContentBounds(), zoom = win.webContents.getZoomFactor();
+  const left = b.x + SIDEBAR_WIDTH * zoom, right = b.x + b.width - (IS_WIN ? 150 : 0), bottom = b.y + TITLEBAR_HEIGHT * zoom;
+  if (p.x < left || p.x > right || p.y < b.y - 4 || p.y > bottom + 6) return null;
+  return { x: Math.round((p.x - b.x) / zoom) };
+}
+
+// The tab of a separate window goes back into the main window (dropped on its tab strip or «Вернуть»);
+// x: where on the strip, or nothing for the end. The separate window closes.
+handle('window-return', async function (tab, x) {
+  const from = BrowserWindow.fromWebContents(this.sender);
+  if (!win || win.isDestroyed() || !from || from === win) return { ok: false, error: 'Основного окна нет: эта вкладка и так в нём.' };
+  if (!tab || !TAB_KINDS.includes(tab.kind)) return { ok: false, error: 'Нечего вернуть.' };
+  const desc = tab.kind === 'assistant' && typeof tab.chatId === 'string' ? { kind: tab.kind, chatId: tab.chatId.slice(0, 64) } : { kind: tab.kind };
+  win.webContents.send('tab-insert', { tab: desc, x: Number.isFinite(x) ? x : null });
+  showWin(win);
+  setTimeout(() => { if (!from.isDestroyed()) from.close(); }, 50);
+  return { ok: true };
+});
 
 // A tab moved into a window of its own (it shows only that tab, without the sidebar, so it is narrower).
 // mode 'point': the new window opens where the tab was dropped; otherwise a little lower and to the right.
@@ -258,10 +298,16 @@ handle('window-open', async function (tabs, mode, point) {
   if (!list.length) return { ok: false, error: 'Нечего открыть.' };
   const from = BrowserWindow.fromWebContents(this.sender) || win;
   const fb = from.getNormalBounds ? from.getNormalBounds() : from.getBounds();
-  const size = { width: Math.max(640, fb.width - SIDEBAR_WIDTH), height: fb.height };
+  const atPoint = mode === 'point' && point && Number.isFinite(point.x) && Number.isFinite(point.y);
+  // As wide as the window it came from without the sidebar, but never more than 3/4 of the screen it lands on
+  // (otherwise a tab pulled out of a full-screen window would cover everything).
+  const wa = (atPoint ? screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) }) : screen.getDisplayMatching(fb)).workArea;
+  const size = {
+    width: Math.round(Math.min(Math.max(640, fb.width - SIDEBAR_WIDTH), wa.width * 0.75)),
+    height: Math.round(Math.min(fb.height, wa.height * 0.75))
+  };
   let bounds;
-  if (mode === 'point' && point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
-    const wa = screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) }).workArea;
+  if (atPoint) {
     const width = Math.min(size.width, wa.width), height = Math.min(size.height, wa.height);
     bounds = {
       x: Math.max(wa.x, Math.min(Math.round(point.x) - 300, wa.x + wa.width - width)),
@@ -374,7 +420,7 @@ function fail(e) {
 }
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
-const NO_SYNC = new Set(['load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
+const NO_SYNC = new Set(['load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {

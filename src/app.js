@@ -85,7 +85,7 @@
     calTimeline: $("cal-timeline"),
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
-    tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
+    tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), soloBack: $("solo-back"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
     tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tbarIdeas: $("tbar-ideas"), tnotes: $("tnotes"),
     tpanel: $("tpanel"), utoast: $("utoast"), utoastText: $("utoast-text"), utoastUndo: $("utoast-undo"),
     tview: $("tview"), tsearch: $("tsearch"), tfTag: $("tf-tag"), tfPrio: $("tf-prio"), tfDone: $("tf-done"), tfReset: $("tf-reset"), tlist: $("tlist"), boardHint: $("board-hint"),
@@ -962,7 +962,7 @@
   function saveTabs() {
     if (!isMainWindow) return;
     api.setTabs({
-      list: tabs.list.map(function (t) { return t.kind === "assistant" ? { kind: t.kind, chatId: t.session.id || t.session.loadId || undefined } : { kind: t.kind }; }),
+      list: tabs.list.map(tabDesc),
       active: tabs.active
     });
   }
@@ -1031,20 +1031,99 @@
   function endTabDrag(e) {
     var from = tabDrag.from;
     tabDrag.from = null;
+    tabGhost.hidden = true;
     els.tabs.querySelectorAll(".drop-before, .drop-after").forEach(function (el) { el.classList.remove("drop-before", "drop-after"); });
     if (tabDrag.dropped || from === null) return;
     var outside = e.screenX < window.screenX || e.screenX > window.screenX + window.outerWidth || e.screenY < window.screenY || e.screenY > window.screenY + window.outerHeight;
     if (outside && (e.screenX || e.screenY)) tabToWindow(from, "point", { x: e.screenX, y: e.screenY });
   }
+  // Pulled down off the tab strip, a tab can be let go anywhere in the window, on any monitor: a frame of the future
+  // window follows the mouse («Отпустите — откроется в отдельном окне»), and the window opens where it was let go.
+  // Let go on the strip again, nothing happens.
+  var tabGhost = h("div", { class: "tab-ghost", hidden: true, "aria-hidden": "true" },
+    h("div", { class: "tab-ghost-bar" }, h("span", { class: "tab-ghost-ico" }), h("span", { class: "tab-ghost-t" })),
+    h("div", { class: "tab-ghost-hint", text: "Отпустите — откроется в отдельном окне" }));
+  document.body.append(tabGhost);
+  function offTabStrip(e) { return e.clientY > els.titlebar.getBoundingClientRect().bottom + 4; }
+  document.addEventListener("dragover", function (e) {
+    if (tabDrag.from === null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    var off = offTabStrip(e), t = tabs.list[tabDrag.from];
+    tabGhost.hidden = !off || !t;
+    if (!off || !t) return;
+    tabGhost.querySelector(".tab-ghost-ico").innerHTML = ICONS[TABS[t.kind].icon];
+    tabGhost.querySelector(".tab-ghost-t").textContent = tabTitle(t);
+    tabGhost.style.left = Math.max(4, Math.min(window.innerWidth - 264, e.clientX - 60)) + "px";
+    tabGhost.style.top = Math.max(4, Math.min(window.innerHeight - 170, e.clientY - 14)) + "px";
+  });
+  document.addEventListener("drop", function (e) {
+    if (tabDrag.from === null || e.target.closest && e.target.closest(".tab")) return;
+    e.preventDefault();
+    var from = tabDrag.from;
+    tabDrag.dropped = true;
+    tabGhost.hidden = true;
+    if (offTabStrip(e)) tabToWindow(from, "point", { x: e.screenX, y: e.screenY });
+  });
+  // What is needed to open a tab in another window: its kind and, for LLM, the conversation.
+  function tabDesc(t) { return t.kind === "assistant" ? { kind: t.kind, chatId: t.session.id || t.session.loadId || undefined } : { kind: t.kind }; }
   // Moves a tab into a new window. An LLM conversation goes with it (it is saved, the new window loads it);
   // a tab whose answer is still being written waits. The last tab leaves "Главная" behind.
   function tabToWindow(i, mode, point) {
     var t = tabs.list[i];
     if (!t) return;
     if (t.session && t.session.current) { toast("Дождитесь, пока ассистент допишет ответ, и попробуйте ещё раз."); return; }
-    var desc = t.kind === "assistant" ? { kind: t.kind, chatId: t.session.id || t.session.loadId || undefined } : { kind: t.kind };
-    call(api.windowOpen([desc], mode, point)).then(function (r) { if (r) closeTab(tabs.list.indexOf(t)); });
+    call(api.windowOpen([tabDesc(t)], mode, point)).then(function (r) { if (r) closeTab(tabs.list.indexOf(t)); });
   }
+
+  /* Bringing a separate window's tab back. While that window is dragged by its title bar over this window's tab strip,
+     main.js sends where the mouse is; a slot shows where the tab will go. Let go there (or press «Вернуть в основное окно»
+     in the separate window), and the tab comes back right there and opens. */
+  var tabSlot = h("div", { class: "tab-slot", "aria-hidden": "true" }, icon("window"), h("span", { text: "Отпустите — вкладка вернётся сюда" }));
+  // The place on the strip for a point x (page pixels): before the first tab whose middle is to the right of it.
+  function tabIndexAt(x) {
+    if (x === null || x === undefined) return tabs.list.length;
+    var kids = Array.prototype.filter.call(els.tabs.children, function (el) { return el.classList.contains("tab"); });
+    for (var i = 0; i < kids.length; i++) {
+      var r = kids[i].getBoundingClientRect();
+      if (x < r.left + r.width / 2) return i;
+    }
+    return kids.length;
+  }
+  api.onTabHover(function (at) {
+    els.titlebar.classList.toggle("catching", !!at);
+    if (!at) { tabSlot.remove(); return; }
+    var kids = Array.prototype.filter.call(els.tabs.children, function (el) { return el.classList.contains("tab"); });
+    tabSlot.remove();
+    var i = tabIndexAt(at.x);
+    if (kids[i]) els.tabs.insertBefore(tabSlot, kids[i]); else els.tabs.append(tabSlot);
+  });
+  api.onTabInsert(function (d) {
+    els.titlebar.classList.remove("catching");
+    tabSlot.remove();
+    var x = d && d.tab;
+    if (!x || !TABS[x.kind]) return;
+    // Already open here (a section or the same conversation): just switch to it.
+    var have = tabs.list.findIndex(function (t) {
+      return t.kind === x.kind && (!TABS[x.kind].many || x.chatId && t.session && (t.session.id === x.chatId || t.session.loadId === x.chatId));
+    });
+    if (have !== -1) { activateTab(have); return; }
+    var t = makeTab(x.kind);
+    if (t.session && x.chatId) t.session.loadId = x.chatId;
+    var at = tabIndexAt(d.x);
+    tabs.list.splice(at, 0, t);
+    activateTab(at);
+  });
+  // In a separate window: hand its tab back to the main window.
+  function returnToMain(x) {
+    var t = activeTab();
+    if (!t || isMainWindow) return;
+    if (t.session && t.session.current) { toast("Дождитесь, пока ассистент допишет ответ, и попробуйте ещё раз."); return; }
+    if (t.session) persist(t.session);
+    call(api.windowReturn(tabDesc(t), x));
+  }
+  api.onReturnTab(function (at) { returnToMain(at ? at.x : null); });
+  els.soloBack.addEventListener("click", function () { returnToMain(null); });
   // Right click on a tab.
   var ctxMenu = h("div", { class: "menu tab-ctx", role: "menu", hidden: true });
   document.body.append(ctxMenu);
@@ -2998,7 +3077,7 @@
   var BASE_COLS = [{ id: "todo", name: "Предстоит", base: true }, { id: "doing", name: "В процессе", base: true }, { id: "done", name: "Готово", base: true }];
   var PRIORITIES = ["Обычная", "Важная", "Срочная"];
   var TASK_TAGS = ["Монтаж", "Съёмка", "Сценарий", "Промты", "Публикация", "Сайт", "Обучение", "Звонок", "Генерация"];
-  var WEEKDAYS_SHORT = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+  var TASK_WEEKDAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];   // by getDay(); the calendar has its own WEEKDAYS_SHORT from Monday
   // open: the task in the panel; fresh: tasks the assistant just changed (they flash once); focusSub: back to the subtask field;
   // colMenu: the column whose «⋯» menu is open; renaming: the column being renamed; newCol: the «+ Столбец» field is open.
   var tb = { adding: null, dragId: null, focus: false, open: null, fresh: [], focusSub: false, colMenu: null, renaming: null, newCol: false };
@@ -3029,7 +3108,7 @@
   // "Сегодня", "Завтра 15:00", "Пн, 26 октября", "3 ноября"; late — the day has passed and the task is not done.
   function dueInfo(t) {
     var d = new Date(t.due + "T00:00"), today = new Date(), n = Math.round((d - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 864e5);
-    var text = n === 0 ? "Сегодня" : n === 1 ? "Завтра" : n === -1 ? "Вчера" : n > 1 && n < 7 ? WEEKDAYS_SHORT[d.getDay()] + ", " + fmtDay(d) : fmtDay(d, d.getFullYear() !== today.getFullYear());
+    var text = n === 0 ? "Сегодня" : n === 1 ? "Завтра" : n === -1 ? "Вчера" : n > 1 && n < 7 ? TASK_WEEKDAYS[d.getDay()] + ", " + fmtDay(d) : fmtDay(d, d.getFullYear() !== today.getFullYear());
     var open = t.status !== "done";
     return { text: text + (t.time ? " " + t.time : ""), late: open && n < 0, today: open && n === 0 };
   }

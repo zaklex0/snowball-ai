@@ -144,6 +144,36 @@ button { cursor: pointer; }
 .solo .side, .solo .tabs, .solo .tab-plus { display: none; }
 .tab.drop-before { box-shadow: inset 3px 0 0 var(--accent-strong); }
 .tab.drop-after { box-shadow: inset -3px 0 0 var(--accent-strong); }
+/* A tab pulled down off the strip: a frame of the future window under the mouse */
+.tab-ghost {
+  position: fixed; z-index: 60; width: 260px; height: 160px; pointer-events: none; display: grid; grid-template-rows: 30px 1fr;
+  border: 2px dashed var(--accent-strong); border-radius: 12px; background: color-mix(in srgb, var(--surface) 82%, transparent);
+  box-shadow: var(--pop-shadow); overflow: hidden; animation: ghost-in .16s ease-out;
+}
+.tab-ghost-bar { display: flex; align-items: center; gap: 7px; padding: 0 10px; background: color-mix(in srgb, var(--accent) 22%, var(--titlebar)); font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.tab-ghost-ico { display: grid; }
+.tab-ghost-ico svg { width: 14px; height: 14px; }
+.tab-ghost-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-ghost-hint { display: grid; place-items: center; padding: 10px 16px; text-align: center; font-size: 13px; color: var(--ink-soft); }
+@keyframes ghost-in { from { opacity: 0; transform: scale(.92); } }
+/* A separate window is dragged over the strip: the strip glows and a slot shows where its tab will go */
+.titlebar.catching { background: color-mix(in srgb, var(--accent) 22%, var(--titlebar)); transition: background-color .15s; }
+.tab-slot {
+  flex: 0 0 auto; align-self: center; display: flex; align-items: center; gap: 7px; height: 30px; margin: 0 4px; padding: 0 12px;
+  border: 2px dashed var(--accent-strong); border-radius: 9px; background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  color: var(--ink); font-size: 12.5px; font-weight: 600; white-space: nowrap; animation: slot-in .25s cubic-bezier(.2, .9, .3, 1.2);
+}
+.tab-slot .ico svg { width: 15px; height: 15px; }
+@keyframes slot-in { from { opacity: 0; transform: scaleX(.6); } }
+/* «Вернуть в основное окно» in the title bar of a separate window */
+.solo-back {
+  -webkit-app-region: no-drag; display: none; align-self: center; align-items: center; gap: 7px; margin-left: auto; height: 28px; padding: 0 11px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink-soft); font-size: 12.5px; font-weight: 500; white-space: nowrap;
+}
+.solo-back:hover { color: var(--ink); border-color: var(--ink-soft); }
+.solo-back svg { width: 15px; height: 15px; flex: none; }
+.solo .solo-back { display: inline-flex; }
+@media (max-width: 560px) { .solo-back span { display: none; } }
 .menu.tab-ctx { position: fixed; bottom: auto; right: auto; z-index: 45; min-width: 250px; }
 .menu.tab-ctx[hidden] { display: none; }
 .tab:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
