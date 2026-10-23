@@ -3121,13 +3121,15 @@
         h("button", { type: "button", class: "nav-item timer-main", title: st === "paused" ? "Таймер на паузе" : "Идёт таймер", "aria-expanded": String(tm.pop),
           onclick: function () { setTimerPop(!tm.pop); } },
           h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: st === "paused" ? "Пауза" : "Фокус" }),
-          h("span", { class: "timer-time", text: fmtLeft(left) }), fill),
+          h("span", { class: "timer-time", text: fmtLeft(left) })),
         h("button", { type: "button", class: "timer-ico", title: st === "paused" ? "Продолжить" : "Пауза", "aria-label": st === "paused" ? "Продолжить" : "Пауза",
           html: st === "paused" ? ICONS.play : TICONS.pause, onclick: function () { timerCmd(st === "paused" ? "resume" : "pause"); } }),
-        h("button", { type: "button", class: "timer-ico", title: "Остановить", "aria-label": "Остановить таймер", html: TICONS.stop, onclick: function () { timerCmd("stop"); } })
+        h("button", { type: "button", class: "timer-ico", title: "Остановить", "aria-label": "Остановить таймер", html: TICONS.stop, onclick: function () { timerCmd("stop"); } }),
+        fill
       ];
     }
     row.replaceChildren.apply(row, kids);
+    els.timerPop.hidden = !tm.pop;
     if (tm.pop) renderTimerPop();
   }
   // The panel: presets and an own number of minutes; while it runs — "+5 минут", pause and stop.
@@ -3158,7 +3160,7 @@
   }
   els.timerPop.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); setTimerPop(false); } });
   document.addEventListener("mousedown", function (e) {
-    if (tm.pop && !els.timerPop.contains(e.target) && !els.timerRow.contains(e.target)) setTimerPop(false);
+    if (!els.timerPop.hidden && !els.timerPop.contains(e.target) && !els.timerRow.contains(e.target)) setTimerPop(false);
   });
   // Every second while it runs; the panel's "осталось" too.
   setInterval(function () {

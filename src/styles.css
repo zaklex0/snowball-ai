@@ -256,17 +256,20 @@ button { cursor: pointer; }
 
 /* Focus timer above "Статистика": a plain countdown; the panel above it starts and controls it */
 .timer-wrap { position: relative; }
-.timer-row { display: flex; align-items: center; gap: 4px; }
+.timer-row { position: relative; display: flex; align-items: center; gap: 2px; border-radius: 11px; }
+/* Running or paused: one long white box like an open section in the list, the buttons inside it */
+.timer-row.running, .timer-row.paused { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; padding-right: 4px; }
 .timer-row .nav-item { flex: 1; min-width: 0; }
 .timer-main { position: relative; overflow: hidden; }
 .timer-time { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); font-size: 15px; }
 .timer-row.paused .timer-time { color: var(--ink-soft); }
 .timer-fill { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent-strong); border-radius: 0 3px 3px 0; transition: width 1s linear; }
 .timer-row.paused .timer-fill { background: var(--ink-soft); }
-.timer-ico { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
+.timer-ico { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
 .timer-ico:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--ink); }
 .timer-ico svg { width: 17px; height: 17px; }
-.timer-row.running .timer-main, .timer-row.paused .timer-main { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+.timer-row.running .timer-main, .timer-row.paused .timer-main { background: none; color: var(--ink); box-shadow: none; padding-right: 6px; }
+.timer-row.running .timer-ico:hover, .timer-row.paused .timer-ico:hover { background: var(--surface-2); }
 .timer-row.ringing .timer-main { background: var(--accent); color: var(--accent-ink); animation: timer-ring 1.2s ease-in-out infinite; }
 .timer-row.ringing .timer-main svg, .timer-row.ringing .timer-time { color: var(--accent-ink); }
 @keyframes timer-ring { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 0%, transparent); } }
