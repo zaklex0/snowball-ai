@@ -86,7 +86,7 @@
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
     tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
-    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tbarReply: $("tbar-reply"), tbarIdeas: $("tbar-ideas"),
+    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tbarIdeas: $("tbar-ideas"), tnotes: $("tnotes"),
     tpanel: $("tpanel"), utoast: $("utoast"), utoastText: $("utoast-text"), utoastUndo: $("utoast-undo"),
     tview: $("tview"), tsearch: $("tsearch"), tfTag: $("tf-tag"), tfPrio: $("tf-prio"), tfDone: $("tf-done"), tfReset: $("tf-reset"), tlist: $("tlist"), boardHint: $("board-hint"),
     qa: $("qa"), qaBtn: $("qa-btn"), qaModel: $("qa-model"), qaNew: $("qa-new"), qaFull: $("qa-full"), qaClose: $("qa-close"),
@@ -3484,27 +3484,23 @@
   }
 
   /* The tasks assistant bar: its own assistant that only knows tasks (the cheapest model, quick thinking).
-     Every message is a separate request; changes apply at once and «Отменить» under the answer takes back what it changed. */
+     Every message is a separate request; changes apply at once. Enter sends, Ctrl + Enter (or Shift + Enter) starts a new line.
+     The answer comes as a notification in the bottom right corner (taskNote) with «Отменить», which takes back what it changed. */
   var TBAR_IDEAS = ["Смонтировать рилс завтра срочно и позвонить Диме в пятницу", "Что у меня на сегодня?", "Что горит?"];
-  var tbar = { busy: false, reply: null };   // reply: { text, failed?, undoId?, cost? }
+  var tbar = { busy: false };
+  function growTbar() {
+    var t = els.tbarInput;
+    if (!t.value) { t.style.height = ""; return; }   // empty: one line (the long hint would count as two)
+    t.style.height = "auto";
+    t.style.height = Math.min(t.scrollHeight, 150) + "px";
+  }
   function renderTbar() {
     els.tbarModel.textContent = quickModelName();
+    els.tbar.classList.toggle("busy", tbar.busy);
     els.tbarInput.disabled = tbar.busy;
     els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim();
-    var r = tbar.reply;
-    els.tbarReply.hidden = !tbar.busy && !r;
-    if (tbar.busy) {
-      els.tbarReply.className = "tbar-reply busy";
-      els.tbarReply.replaceChildren(icon("spark"), h("p", null, "Разбираю: «" + r.text + "»", h("span", { class: "typing", "aria-label": "Ассистент думает" }, h("i"), h("i"), h("i"))));
-    } else if (r) {
-      els.tbarReply.className = "tbar-reply" + (r.failed ? " bad" : "");
-      els.tbarReply.replaceChildren(icon("spark"), h("p", { text: r.text }),
-        h("div", { class: "tbar-acts" },
-          r.cost > 0 ? h("span", { class: "msg-cost", title: "Столько стоил этот ответ (примерно)", text: fmtCost(r.cost) }) : null,
-          r.undoId ? h("button", { type: "button", class: "btn-mini", onclick: function () { undoTbar(r.undoId); } }, "Отменить") : null,
-          h("button", { type: "button", class: "tbar-x", html: ICONS.x, title: "Скрыть ответ", "aria-label": "Скрыть ответ", onclick: function () { tbar.reply = null; renderTbar(); } })));
-    }
-    els.tbarIdeas.hidden = tbar.busy || !!r;
+    els.tbarSend.title = tbar.busy ? "Ассистент разбирает…" : "Отправить (Enter)";
+    els.tbarIdeas.hidden = tbar.busy;
     if (!els.tbarIdeas.firstChild) {
       els.tbarIdeas.replaceChildren.apply(els.tbarIdeas, [h("span", { text: "Попробуйте:" })].concat(TBAR_IDEAS.map(function (idea) {
         return h("button", { type: "button", class: "fchip", onclick: function () { sendTbar(idea); } }, idea);
@@ -3515,31 +3511,90 @@
     var v = String(text || "").trim();
     if (!v || tbar.busy) return;
     tbar.busy = true;
-    tbar.reply = { text: v };
     els.tbarInput.value = "";
+    growTbar();
     renderTbar();
-    var fail = function (msg) { tbar.busy = false; tbar.reply = { text: msg || "Ассистент не ответил. Попробуйте ещё раз.", failed: true }; renderTbar(); };
+    var fail = function (msg) {
+      tbar.busy = false;
+      if (!els.tbarInput.value) { els.tbarInput.value = v; growTbar(); }   // the message is not lost: it can be sent again
+      renderTbar();
+      taskNote({ text: msg || "Ассистент не ответил. Попробуйте ещё раз.", failed: true });
+    };
     api.tasksAssistant(v).then(function (r) {
       if (!r || !r.ok) { fail(r && r.error); return; }
       applyData(r);
       tbar.busy = false;
-      tbar.reply = { text: r.reply, failed: r.failed, undoId: r.undoId, cost: r.cost };
       tb.fresh = r.changed || [];
       render();
       tb.fresh = [];
+      taskNote({ text: r.reply, failed: r.failed, undoId: r.undoId, cost: r.cost });
       if (state.page === "tasks") els.tbarInput.focus();
     }, function () { fail(); });
   }
-  function undoTbar(undoId) {
-    call(api.tasksAssistantUndo(undoId)).then(function (r) {
-      if (!r) return;
-      tbar.reply = { text: "Отменил: задачи вернулись как были до этого сообщения." };
-      render();
-    });
-  }
   els.tbar.addEventListener("submit", function (e) { e.preventDefault(); sendTbar(els.tbarInput.value); });
-  els.tbarInput.addEventListener("input", function () { els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim(); });
-  els.tbarInput.addEventListener("keydown", function (e) { if (e.key === "Escape" && els.tbarInput.value) { e.stopPropagation(); els.tbarInput.value = ""; els.tbarSend.disabled = true; } });
+  els.tbarInput.addEventListener("input", function () { growTbar(); els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim(); });
+  els.tbarInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.isComposing) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        els.tbarInput.setRangeText("\n", els.tbarInput.selectionStart, els.tbarInput.selectionEnd, "end");
+        els.tbarInput.dispatchEvent(new Event("input"));
+      } else if (!e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        sendTbar(els.tbarInput.value);
+      }
+    } else if (e.key === "Escape" && els.tbarInput.value) {
+      e.stopPropagation();
+      els.tbarInput.value = "";
+      els.tbarInput.dispatchEvent(new Event("input"));
+    }
+  });
+
+  /* Notifications in the bottom right corner: what the tasks assistant did, with «Отменить» and the price.
+     They slide in, stay about 8 seconds (an error 12), wait while the mouse is over them (the thin line at the bottom
+     shows the time left) and slide out. At most three at a time: a new one pushes out the oldest. */
+  var NOTE_LIFE = 8, NOTE_LIFE_BAD = 12, NOTES_MAX = 3;
+  function closeNote(el) {
+    if (el.classList.contains("out")) return;
+    el.style.setProperty("--h", el.offsetHeight + "px");   // its height, so the stack closes up smoothly after it fades
+    el.classList.add("out");
+    setTimeout(function () { el.remove(); }, reducedMotion ? 0 : 420);
+  }
+  function taskNote(n) {
+    var live = Array.prototype.filter.call(els.tnotes.children, function (x) { return !x.classList.contains("out"); });
+    while (live.length >= NOTES_MAX) closeNote(live.shift());
+    var text = h("p", { class: "tnote-text", text: n.text });
+    var acts = h("div", { class: "tnote-acts" });
+    var el = h("div", { class: "tnote" + (n.failed ? " bad" : ""), role: n.failed ? "alert" : "status" },
+      h("span", { class: "tnote-ico", html: n.failed ? ICONS.x : ICONS.spark, "aria-hidden": "true" }),
+      h("div", { class: "tnote-body" }, text, acts),
+      h("button", { type: "button", class: "tnote-x", html: ICONS.x, title: "Закрыть", "aria-label": "Закрыть уведомление", onclick: function () { closeNote(el); } }));
+    var life = function (sec) {
+      el.style.setProperty("--life", sec + "s");
+      el.classList.remove("timing");
+      void el.offsetWidth;   // restarts the countdown line
+      el.classList.add("timing");
+    };
+    if (n.cost > 0) acts.append(h("span", { class: "tnote-cost", title: "Столько стоил этот ответ (примерно)", text: fmtCost(n.cost) }));
+    if (n.undoId) {
+      acts.append(h("button", { type: "button", class: "tnote-undo", onclick: function () {
+        var btn = this;
+        btn.disabled = true;
+        call(api.tasksAssistantUndo(n.undoId)).then(function (r) {
+          if (!r) { btn.disabled = false; return; }
+          render();
+          text.textContent = "Отменил: задачи вернулись как были до этого сообщения.";
+          btn.remove();
+          life(4);
+        });
+      } }, "Отменить"));
+    }
+    if (!acts.firstChild) acts.remove();
+    // The countdown is the line's animation: it pauses on hover by itself, and when it ends the note leaves.
+    el.addEventListener("animationend", function (e) { if (e.pseudoElement === "::after" && e.animationName === "tnote-time") closeNote(el); });
+    els.tnotes.append(el);
+    life(n.failed ? NOTE_LIFE_BAD : NOTE_LIFE);
+  }
 
   // The generator is not there yet: the two buttons show what is coming.
   document.querySelectorAll(".gen-card").forEach(function (b) {

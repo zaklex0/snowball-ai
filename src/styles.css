@@ -1302,31 +1302,65 @@ h1 .brand { color: var(--accent-strong); }
 
 /* The tasks assistant bar above the board */
 .tbar-wrap { display: grid; gap: 8px; }
-.tbar { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
+.tbar { display: flex; align-items: flex-end; gap: 10px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .tbar:focus-within { border-color: var(--accent-strong); }
-.tbar-ico { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
+.tbar-ico { flex: none; margin-bottom: 4px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
 .tbar-ico svg { width: 17px; height: 17px; }
-.tbar-input { flex: 1; min-width: 0; padding: 8px 0; border: 0; outline: none; background: none; color: var(--ink); font: inherit; font-size: 15px; }
+.tbar-input { flex: 1; min-width: 0; height: 38px; max-height: 150px; padding: 8px 0; border: 0; outline: none; background: none; color: var(--ink); font: inherit; font-size: 15px; line-height: 22px; resize: none; overflow-y: auto; }
+.tbar-input:disabled { opacity: .6; }
+.tbar-input:placeholder-shown { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tbar-input::placeholder { color: var(--ink-soft); opacity: .85; }
-.tbar-model { flex: none; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+.tbar-model { flex: none; margin-bottom: 8px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
 .tbar-send { flex: none; display: grid; place-items: center; width: 38px; height: 38px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
 .tbar-send:hover { background: var(--accent-hover); }
 .tbar-send:disabled { opacity: .45; cursor: default; }
 .tbar-send svg { width: 18px; height: 18px; }
-.tbar-reply { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 9px 12px; border-radius: 14px; font-size: 14px;
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
-.tbar-reply > .ico { color: var(--accent-strong); margin-top: 2px; }
-.tbar-reply > .ico svg { width: 17px; height: 17px; }
-.tbar-reply p { margin: 0; line-height: 1.45; overflow-wrap: anywhere; }
-.tbar-reply.busy p { color: var(--ink-soft); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.tbar-reply.busy .typing { padding: 0; }
-.tbar-reply.bad { background: color-mix(in srgb, var(--danger) 10%, var(--surface)); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); }
-.tbar-acts { display: flex; align-items: center; gap: 8px; }
-.tbar-x { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 7px; background: none; color: var(--ink-soft); }
-.tbar-x:hover { background: var(--surface-2); color: var(--ink); }
-.tbar-x svg { width: 12px; height: 12px; }
+/* While the assistant thinks, the send button turns into a spinning ring */
+.tbar.busy .tbar-send { opacity: 1; background: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
+.tbar.busy .tbar-send svg { display: none; }
+.tbar.busy .tbar-send::after { content: ""; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: tbar-spin .8s linear infinite; }
+@keyframes tbar-spin { to { transform: rotate(360deg); } }
 .tbar-ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-soft); }
 .tbar-ideas[hidden] { display: none; }
+
+/* What the tasks assistant did: notifications in the bottom right corner (left of the task panel when it is open) */
+.tnotes { position: fixed; right: 20px; bottom: 20px; z-index: 45; width: min(380px, calc(100vw - 40px)); display: flex; flex-direction: column; gap: 10px; pointer-events: none; transition: right .25s ease; }
+.tpanel:not([hidden]) ~ .tnotes { right: calc(min(420px, 100vw - 80px) + 20px); }
+.tnote {
+  position: relative; overflow: hidden; pointer-events: auto; display: grid; grid-template-columns: 30px minmax(0, 1fr) 26px; align-items: start; gap: 10px;
+  padding: 12px 10px 14px 12px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 16px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface)); color: var(--ink); box-shadow: var(--pop-shadow);
+  animation: tnote-in .45s cubic-bezier(.2, .9, .3, 1.15) both;
+}
+.tnote.bad { border-color: color-mix(in srgb, var(--danger) 40%, var(--line)); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.tnote-ico { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }
+.tnote.bad .tnote-ico { background: color-mix(in srgb, var(--danger) 18%, var(--surface)); color: var(--danger); }
+.tnote-ico svg { width: 16px; height: 16px; }
+.tnote.bad .tnote-ico svg { width: 12px; height: 12px; }
+.tnote-body { display: grid; gap: 8px; min-width: 0; padding-top: 5px; }
+.tnote-text { margin: 0; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.tnote-acts { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.tnote-cost { margin-right: auto; font-size: 12px; color: var(--ink-soft); }
+.tnote-undo { padding: 4px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; }
+.tnote-undo:hover { border-color: var(--ink-soft); }
+.tnote-undo:disabled { opacity: .6; }
+.tnote-x { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--ink-soft); }
+.tnote-x:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.tnote-x svg { width: 11px; height: 11px; }
+/* The thin line at the bottom: time left; it waits while the mouse is over the notification */
+.tnote::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: 100%; background: color-mix(in srgb, var(--accent-strong) 55%, transparent); transform-origin: left; transform: scaleX(0); }
+.tnote.bad::after { background: color-mix(in srgb, var(--danger) 55%, transparent); }
+.tnote.timing::after { animation: tnote-time var(--life, 8s) linear forwards; }
+.tnote:hover::after, .tnote:focus-within::after { animation-play-state: paused; }
+.tnote.out { animation: tnote-out .42s ease-in forwards; pointer-events: none; }
+@keyframes tnote-in { from { opacity: 0; transform: translateX(40px) scale(.94); } }
+@keyframes tnote-time { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+@keyframes tnote-out {
+  0% { opacity: 1; transform: none; height: var(--h); }
+  55% { opacity: 0; transform: translateX(40px) scale(.96); height: var(--h); margin-bottom: 0; }
+  100% { opacity: 0; transform: translateX(40px) scale(.96); height: 0; padding-top: 0; padding-bottom: 0; border-width: 0; margin-bottom: -10px; }
+}
+@media (prefers-reduced-motion: reduce) { .tnote, .tnote.out { animation: none; } }
 
 /* The whole task: a panel on the right under the tab bar */
 .tpanel {
