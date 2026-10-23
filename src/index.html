@@ -118,19 +118,14 @@
                 </button>
                 <button type="button" role="menuitem" data-action="export">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 20h14"/></svg>
-                  Сохранить промты в файл…
+                  Сохранить все промты в файл…
                 </button>
                 <button type="button" role="menuitem" data-action="import">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 20h14"/></svg>
-                  Загрузить промты из файла…
+                  Загрузить промты или копию…
                 </button>
               </div>
             </div>
-            <hr>
-            <button type="button" role="menuitem" data-action="check-updates">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4.5h-4.5"/></svg>
-              Проверить обновления
-            </button>
           </div>
           <button type="button" class="profile-btn" id="menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="menu" title="Профиль, тема, обновления и папка с промтами">
             <span class="avatar" id="side-avatar" aria-hidden="true"></span>
@@ -413,6 +408,14 @@
               <h1 id="settings-title">Настройки</h1>
             </div>
           </header>
+          <nav class="set-nav" aria-label="Разделы настроек">
+            <button type="button" class="fchip" data-target="set-openai-title">ChatGPT и Claude</button>
+            <button type="button" class="fchip" data-target="set-as-title">Ассистент</button>
+            <button type="button" class="fchip" data-target="set-dir-title">Папка с данными</button>
+            <button type="button" class="fchip" data-target="set-backup-title">Резервная копия</button>
+            <button type="button" class="fchip" data-target="set-update-title">Обновление<span class="set-nav-dot" id="set-nav-dot" hidden></span></button>
+            <button type="button" class="fchip" data-target="set-keys-title">Горячие клавиши</button>
+          </nav>
           <section class="card set-card set-provider" data-provider="openai" aria-labelledby="set-openai-title">
             <div class="set-head">
               <h2 class="card-title" id="set-openai-title">ChatGPT</h2>
@@ -491,6 +494,33 @@
               <button type="button" class="btn btn-ghost" id="set-dir-change">Выбрать другую папку…</button>
             </div>
           </section>
+          <section class="card set-card" aria-labelledby="set-backup-title">
+            <h2 class="card-title" id="set-backup-title">Резервная копия</h2>
+            <p class="set-text">Один файл <b>.snowball</b> со всем, что есть в программе: промты с картинками и видео, разговоры с ассистентом, календарь, статистика, профиль и тема. Пригодится, чтобы перенести всё на другой компьютер или поставить программу заново. Ключей ChatGPT и Claude в копии нет, их вводят заново.</p>
+            <p class="set-text">При восстановлении ничего не удаляется: добавляется только то, чего в программе ещё нет. Файл копии можно и просто перетащить в окно программы.</p>
+            <div class="set-dir-row">
+              <button type="button" class="btn btn-primary" id="set-backup-save">Сохранить все данные в файл…</button>
+              <button type="button" class="btn btn-ghost" id="set-backup-open">Восстановить из файла…</button>
+            </div>
+          </section>
+          <section class="card set-card" id="set-update" aria-labelledby="set-update-title">
+            <div class="set-head">
+              <h2 class="card-title" id="set-update-title">Обновление</h2>
+              <span class="set-status" id="upd-badge"></span>
+            </div>
+            <p class="set-text" id="upd-line"></p>
+            <div class="upd-bar" id="upd-bar" hidden><span id="upd-bar-fill"></span></div>
+            <div class="set-dir-row" id="upd-actions"></div>
+            <div class="upd-notes" id="upd-new" hidden>
+              <p class="upd-notes-title" id="upd-new-title"></p>
+              <div class="rt" id="upd-new-body"></div>
+            </div>
+            <details class="upd-current" id="upd-current">
+              <summary id="upd-current-title">Что нового в вашей версии</summary>
+              <div class="rt" id="upd-current-body"></div>
+            </details>
+            <p class="files-hint">Программа сама проверяет обновления при запуске и раз в 4 часа, но ничего не скачивает без вашей кнопки. <a href="https://github.com/zaklex0/snowball-ai/releases" target="_blank" rel="noopener">Все версии на GitHub</a></p>
+          </section>
           <section class="card set-card" aria-labelledby="set-keys-title">
             <h2 class="card-title" id="set-keys-title">Горячие клавиши</h2>
             <dl class="shortcuts">
@@ -502,8 +532,8 @@
               <dt><kbd>Enter</kbd> / <kbd>Shift</kbd> + <kbd>Enter</kbd></dt><dd>Отправить сообщение ассистенту / новая строка</dd>
               <dt><kbd>Esc</kbd></dt><dd>Закрыть редактор или остановить ответ ассистента</dd>
               <dt>Перетащить файл</dt><dd>На строку промта — прикрепить файл к нему</dd>
+              <dt>Перетащить .snowprompt или .snowball</dt><dd>В любое место окна — загрузить промты или резервную копию</dd>
             </dl>
-            <p class="muted" id="settings-version"></p>
           </section>
         </section>
       </div>
@@ -568,6 +598,7 @@
       <button type="button" class="btn btn-ghost" id="pd-cancel">Отмена</button>
       <span class="form-msg" id="pd-msg" role="status"></span>
     </div>
+    <p class="pd-restore" id="pd-restore" hidden>Уже пользовались Snowball.ai? <button type="button" class="link-btn" id="pd-restore-btn">Восстановить из резервной копии…</button></p>
   </form>
 </dialog>
 

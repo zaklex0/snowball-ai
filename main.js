@@ -5,7 +5,9 @@ const fs = require('fs');
 const fsp = fs.promises;
 const Anthropic = require('@anthropic-ai/sdk').default;
 const OpenAI = require('openai').default;
-const { Store, copyDataTo, hasData, normalizeEvent } = require('./storage');
+const os = require('os');
+const { Store, copyDataTo, hasData, normalizeEvent, sanitizeName } = require('./storage');
+const { writeZip, extractZip } = require('./archive');
 
 const APP_TITLE = 'Snowball.ai';
 // Names used by earlier versions (newest first). Their data folder and settings are moved over on first start.
@@ -167,6 +169,8 @@ function createWindow() {
   win.once('ready-to-show', () => win.show());
 
   win.webContents.on('did-finish-load', () => {
+    // The program was started by a double click on a file: open it once the page is ready.
+    if (pendingArchive) { const f = pendingArchive; pendingArchive = null; setTimeout(() => openArchiveFromOS(f), 600); }
     if (settings.zoom) win.webContents.setZoomFactor(settings.zoom);
   });
 
@@ -224,22 +228,55 @@ let downloading = false;
 let updateReady = null;   // version that is downloaded and waits for a restart
 let manualCheck = false;  // the user asked from the menu, so report "no update" and errors too
 let lastPercent = -1;
+let updateNotes = '';     // what is new in the found version, as simple Markdown
+let whatsNew = null;      // this version was just installed over an older one: tell about it once
+
+// CHANGELOG.md goes inside the program: "## 1.8.3" starts the part about that version.
+function changelogFor(version) {
+  let text = '';
+  try { text = fs.readFileSync(path.join(__dirname, 'CHANGELOG.md'), 'utf8'); } catch (e) { return ''; }
+  const parts = text.split(/^## +/m);
+  const part = parts.find((p) => p.split('\n')[0].trim() === version);
+  return part ? part.slice(part.indexOf('\n') + 1).trim() : '';
+}
+// GitHub gives the release description as HTML; the window shows Markdown with its own safe renderer.
+function htmlToMarkdown(html) {
+  if (Array.isArray(html)) html = html.map((n) => n && n.note).filter(Boolean).join('\n');
+  if (typeof html !== 'string') return '';
+  return html
+    .replace(/<h[1-6][^>]*>/gi, '\n### ').replace(/<\/h[1-6]>/gi, '\n')
+    .replace(/<li[^>]*>/gi, '\n- ').replace(/<\/li>/gi, '')
+    .replace(/<\/?(strong|b)>/gi, '**').replace(/<\/?code>/gi, '`')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>|<\/ul>|<\/ol>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n))
+    .replace(/[ \t]+\n/g, '\n').replace(/\n\s*\n(?=- )/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
 
 function sendUpdate(u) { if (win && !win.isDestroyed()) win.webContents.send('update', u); }
 
 function checkUpdates() { updater.checkForUpdates().catch(() => { /* reported by the 'error' event */ }); }
 
 function setupUpdates() {
+  const prev = settings.lastVersion;
+  if (prev !== app.getVersion()) {
+    // Versions before 1.8.3 did not remember themselves; a settings file with a window size means an update.
+    if (prev || settings.bounds) whatsNew = app.getVersion();
+    settings.lastVersion = app.getVersion();
+    saveSettings();
+  }
   if (!app.isPackaged) return;
   updater = require('electron-updater').autoUpdater;
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = true;
   updater.on('update-available', (i) => {
     updateFound = i.version;
-    if (!downloading) sendUpdate({ kind: 'available', version: i.version, manual: manualCheck });
+    updateNotes = htmlToMarkdown(i.releaseNotes);
+    if (!downloading) sendUpdate({ kind: 'available', version: i.version, notes: updateNotes, manual: manualCheck });
     manualCheck = false;
   });
-  updater.on('update-not-available', () => { if (manualCheck) sendUpdate({ kind: 'latest' }); manualCheck = false; });
+  updater.on('update-not-available', () => { sendUpdate({ kind: 'latest', manual: manualCheck }); manualCheck = false; });
   updater.on('download-progress', (p) => {
     const percent = Math.floor(p.percent || 0);
     if (percent !== lastPercent) { lastPercent = percent; sendUpdate({ kind: 'progress', version: updateFound, percent }); }
@@ -248,12 +285,12 @@ function setupUpdates() {
     downloading = false;
     updateReady = i.version;
     manualCheck = false;
-    sendUpdate({ kind: 'ready', version: i.version });
+    sendUpdate({ kind: 'ready', version: i.version, notes: updateNotes });
   });
   updater.on('error', (e) => {
     console.error('update', e);
     if (downloading) { downloading = false; sendUpdate({ kind: 'download-error', version: updateFound }); }
-    else if (manualCheck) sendUpdate({ kind: 'error' });
+    else if (manualCheck) sendUpdate({ kind: 'error', manual: true });
     manualCheck = false;
   });
   setTimeout(checkUpdates, 10 * 1000);
@@ -402,9 +439,19 @@ handle('set-mode', async (mode) => {
   return { ok: true, info: info() };
 });
 
+handle('update-state', async () => {
+  const current = app.getVersion();
+  const state = { ok: true, packaged: !!updater, current, currentNotes: changelogFor(current), whatsNew };
+  whatsNew = null;
+  if (updateReady) Object.assign(state, { status: 'ready', version: updateReady, notes: updateNotes });
+  else if (downloading) Object.assign(state, { status: 'progress', version: updateFound, notes: updateNotes, percent: Math.max(0, lastPercent) });
+  else if (updateFound) Object.assign(state, { status: 'available', version: updateFound, notes: updateNotes });
+  return state;
+});
+
 handle('check-updates', async () => {
   if (!updater) return { ok: false, error: 'Обновления проверяются только в установленной программе.' };
-  if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady }); return { ok: true }; }
+  if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady, notes: updateNotes }); return { ok: true }; }
   if (downloading) { sendUpdate({ kind: 'progress', version: updateFound, percent: Math.max(0, lastPercent) }); return { ok: true }; }
   manualCheck = true;
   checkUpdates();
@@ -460,35 +507,139 @@ handle('change-data-dir', async () => {
   return ok({ info: info(), mode, oldDir });
 });
 
-handle('export', async () => {
-  const d = new Date();
-  const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+/* ---------- backup and sharing ---------- */
+// ".snowball" — everything: prompts with their files, chats, calendar, statistics, profile and look settings.
+// ".snowprompt" — one or more prompts with comments and attached files, to give to someone else.
+// Both are zip archives (archive.js) with manifest.json on top; API keys never go into them.
+const BACKUP_EXT = 'snowball';
+const SHARE_EXT = 'snowprompt';
+const SETTINGS_IN_BACKUP = ['theme', 'mode', 'assistantModel', 'assistantEffort', 'confirm', 'notify'];
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+function manifest(kind, counts) {
+  return { name: 'manifest.json', data: JSON.stringify({ format: kind === 'backup' ? 'snowball-backup' : 'snowball-prompts', version: 1, app: app.getVersion(), createdAt: new Date().toISOString(), counts }, null, 2) };
+}
+const plural = (n, a, b, c) => { const m = n % 10, mm = n % 100; return m === 1 && mm !== 11 ? a : m >= 2 && m <= 4 && (mm < 12 || mm > 14) ? b : c; };
+
+handle('backup-export', async () => {
   const r = await dialog.showSaveDialog(win, {
-    title: 'Сохранить промты в файл',
-    defaultPath: path.join(app.getPath('documents'), `${APP_TITLE} ${stamp}.json`),
-    filters: [{ name: 'Файл промтов', extensions: ['json'] }]
+    title: 'Сохранить все данные в файл',
+    defaultPath: path.join(app.getPath('documents'), `${APP_TITLE} — копия ${today()}.${BACKUP_EXT}`),
+    filters: [{ name: 'Резервная копия Snowball.ai', extensions: [BACKUP_EXT] }]
   });
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
-  await fsp.writeFile(r.filePath, store.exportJson(), 'utf8');
-  return { ok: true, path: r.filePath, count: store.data.prompts.length };
+  await store.queue;
+  const pack = store.packEntries('backup', null);
+  const look = {};
+  SETTINGS_IN_BACKUP.forEach((k) => { if (settings[k] !== undefined) look[k] = settings[k]; });
+  await writeZip(r.filePath, [manifest('backup', pack.counts)].concat(pack.entries, [{ name: 'settings.json', data: JSON.stringify(look, null, 2) }]));
+  return { ok: true, path: r.filePath, counts: pack.counts };
 });
 
-handle('import', async () => {
-  const r = await dialog.showOpenDialog(win, {
-    title: 'Загрузить промты из файла',
-    properties: ['openFile'],
-    filters: [{ name: 'Файл промтов', extensions: ['json'] }, { name: 'Все файлы', extensions: ['*'] }]
+// ids: the prompts to share; empty or missing — all of them.
+handle('prompts-export', async (ids) => {
+  const list = Array.isArray(ids) && ids.length ? ids.filter((id) => store.find(id)) : null;
+  const one = list && list.length === 1 ? store.find(list[0]) : null;
+  const base = one ? sanitizeName(one.title || 'Промт').replace(/\.[^.]*$/, '') : (list ? 'Промты (' + list.length + ')' : APP_TITLE + ' — промты ' + today());
+  const r = await dialog.showSaveDialog(win, {
+    title: one ? 'Поделиться промтом' : 'Сохранить промты в файл',
+    defaultPath: path.join(app.getPath('documents'), base + '.' + SHARE_EXT),
+    filters: [{ name: 'Промты Snowball.ai', extensions: [SHARE_EXT] }]
   });
-  if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
-  let raw;
-  try { raw = await fsp.readFile(r.filePaths[0], 'utf8'); } catch (e) { return { ok: false, error: 'Не получилось прочитать файл.' }; }
-  try {
-    return ok(await store.importJson(raw));
-  } catch (e) {
-    if (e instanceof SyntaxError || /списка промтов/.test(e.message)) return { ok: false, error: 'В этом файле нет промтов. Выберите файл, сохранённый через «Сохранить в файл».' };
-    throw e;
-  }
+  if (r.canceled || !r.filePath) return { ok: true, canceled: true };
+  await store.queue;
+  const pack = store.packEntries('share', list);
+  await writeZip(r.filePath, [manifest('share', pack.counts)].concat(pack.entries));
+  return { ok: true, path: r.filePath, counts: pack.counts };
 });
+
+// Opens a .snowball or .snowprompt file: unpacks it to a temporary folder, asks before adding anything,
+// and adds only what is missing (storage.js mergeFrom). Also used for double-click and drag-and-drop.
+async function openArchive(file) {
+  const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'snowball-'));
+  try {
+    await extractZip(file, tmp);
+    let m = null;
+    try { m = JSON.parse(await fsp.readFile(path.join(tmp, 'manifest.json'), 'utf8')); } catch (e) { m = null; }
+    if (!m || (m.format !== 'snowball-backup' && m.format !== 'snowball-prompts')) {
+      return { ok: false, error: 'Это не файл Snowball.ai: в нём нет ни промтов, ни резервной копии.' };
+    }
+    const kind = m.format === 'snowball-backup' ? 'backup' : 'share';
+    let titles = [];
+    try { titles = JSON.parse(await fsp.readFile(path.join(tmp, 'prompts.json'), 'utf8')).prompts.map((x) => x.title || 'Без названия'); } catch (e) { titles = []; }
+    const c = m.counts || {};
+    let message, detail;
+    if (kind === 'backup') {
+      const when = m.createdAt ? new Date(m.createdAt).toLocaleString('ru-RU') : 'неизвестно когда';
+      message = 'Восстановить данные из резервной копии?';
+      detail = 'Копия от ' + when + ': промтов ' + (c.prompts || 0) + ', файлов ' + (c.files || 0) + ', разговоров ' + (c.chats || 0) + ', дел в календаре ' + (c.events || 0) + '.\n\n' +
+        'Из того, что уже есть в программе, ничего не удалится и не изменится: добавится только недостающее. Тема и выбор модели станут как в копии.\n\n' +
+        'Ключей ChatGPT и Claude в копии нет: если нужно, введите их заново в «Настройках».';
+    } else {
+      message = titles.length === 1 ? 'Добавить промт «' + titles[0] + '» в вашу таблицу?' : 'Добавить ' + titles.length + ' ' + plural(titles.length, 'промт', 'промта', 'промтов') + ' в вашу таблицу?';
+      detail = (titles.length > 1 ? titles.slice(0, 6).map((t) => '• ' + t).join('\n') + (titles.length > 6 ? '\n• и ещё ' + (titles.length - 6) : '') + '\n\n' : '') +
+        'Вместе с комментариями и приложенными файлами (' + (c.files || 0) + '). Промты, которые у вас уже есть, пропустятся.';
+    }
+    const answer = await dialog.showMessageBox(win, { type: 'question', buttons: [kind === 'backup' ? 'Восстановить' : 'Добавить', 'Отмена'], defaultId: 0, cancelId: 1, title: APP_TITLE, message, detail, noLink: true });
+    if (answer.response !== 0) return { ok: true, canceled: true };
+    const res = await store.mergeFrom(tmp, kind);
+    if (kind === 'backup') {
+      let look = null;
+      try { look = JSON.parse(await fsp.readFile(path.join(tmp, 'settings.json'), 'utf8')); } catch (e) { look = null; }
+      if (look && typeof look === 'object') {
+        SETTINGS_IN_BACKUP.forEach((k) => { if (look[k] !== undefined) settings[k] = look[k]; });
+        if (!THEMES.includes(settings.theme)) settings.theme = 'system';
+        applyTheme();
+        if (win && !win.isDestroyed()) { win.setBackgroundColor(bgColor()); if (IS_WIN) { try { win.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } } }
+        saveSettings(true);
+      }
+    }
+    return ok({ kind, result: res, info: info() });
+  } finally {
+    fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+handle('archive-open', async (file) => {
+  let target = typeof file === 'string' ? file : '';
+  if (!target) {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Загрузить промты или резервную копию',
+      properties: ['openFile'],
+      filters: [{ name: 'Файлы Snowball.ai', extensions: [SHARE_EXT, BACKUP_EXT, 'json'] }, { name: 'Все файлы', extensions: ['*'] }]
+    });
+    if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
+    target = r.filePaths[0];
+  }
+  // A list of prompts saved by versions before 1.9 (prompts only, without files).
+  if (/\.json$/i.test(target)) {
+    let raw;
+    try { raw = await fsp.readFile(target, 'utf8'); } catch (e) { return { ok: false, error: 'Не получилось прочитать файл.' }; }
+    try {
+      const r = await store.importJson(raw);
+      return ok({ kind: 'share', result: { prompts: r.added, skipped: r.skipped, files: 0 } });
+    } catch (e) {
+      if (e instanceof SyntaxError || /списка промтов/.test(e.message)) return { ok: false, error: 'В этом файле нет промтов.' };
+      throw e;
+    }
+  }
+  return openArchive(target);
+});
+
+// A file Windows gave us: a double click on .snowprompt / .snowball, or "Открыть с помощью".
+function archiveFromArgs(argv) {
+  return (argv || []).slice(1).find((a) => /\.(snowprompt|snowball)$/i.test(a) && fs.existsSync(a)) || null;
+}
+let pendingArchive = null;
+async function openArchiveFromOS(file) {
+  if (!file || !win || win.isDestroyed()) return;
+  try {
+    const r = await openArchive(file);
+    win.webContents.send('archive-opened', r);
+  } catch (e) {
+    console.error('archive', e);
+    win.webContents.send('archive-opened', fail(e));
+  }
+}
 
 /* ---------- assistant ---------- */
 // The window sends the whole conversation, main.js answers piece by piece through the 'assistant' event:
@@ -1290,11 +1441,12 @@ handle('assistant-set-options', async (opts) => {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
     if (!win) return;
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
+    openArchiveFromOS(archiveFromArgs(argv));
   });
 
   // Windows ties the taskbar icon and notifications to this id through a Start Menu shortcut, and Electron
@@ -1315,6 +1467,7 @@ if (!app.requestSingleInstanceLock()) {
       app.quit();
       return;
     }
+    pendingArchive = archiveFromArgs(process.argv);
     createWindow();
     setupUpdates();
     setInterval(checkReminders, 20 * 1000);

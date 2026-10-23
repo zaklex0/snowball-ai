@@ -601,18 +601,7 @@ class Store {
     });
   }
 
-  exportJson() {
-    return JSON.stringify({
-      format: FORMAT,
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      prompts: this.data.prompts.map((p) => ({
-        id: p.id, title: p.title, type: p.type, text: p.text, comment: p.comment, createdAt: p.createdAt, updatedAt: p.updatedAt,
-        files: p.files.map((f) => f.name)
-      }))
-    }, null, 2);
-  }
-
+  // importJson reads the prompt lists saved by versions before 1.9 (prompts only, no files).
   importJson(raw) {
     return this.run(async () => {
       const incoming = parseData(raw).prompts;
@@ -632,6 +621,109 @@ class Store {
       }
       if (added) await this.write();
       return { added, skipped };
+    });
+  }
+
+  /* ---------- backup (.snowball) and shared prompts (.snowprompt) ---------- */
+  // Both are zip archives (archive.js) with prompts.json and files/<prompt id>/<file>. A backup also carries
+  // chats.json, calendar.json, activity.json, profile.json and avatar.png. ids: the prompts to share, or null for all.
+  packEntries(kind, ids) {
+    const chosen = ids ? this.data.prompts.filter((p) => ids.includes(p.id)) : this.data.prompts;
+    const entries = [];
+    const prompts = chosen.map((p) => {
+      const files = p.files.filter((f) => fs.existsSync(path.join(this.promptDir(p.id), f.stored)));
+      files.forEach((f) => entries.push({ name: 'files/' + p.id + '/' + f.stored, file: path.join(this.promptDir(p.id), f.stored) }));
+      return Object.assign({}, p, { files });
+    });
+    const counts = { prompts: prompts.length, files: entries.length, chats: 0, events: 0 };
+    entries.unshift({ name: 'prompts.json', data: JSON.stringify({ format: FORMAT, version: 1, prompts }, null, 2) });
+    if (kind === 'backup') {
+      entries.push({ name: CHATS_FILE, data: JSON.stringify({ format: 'snowball-chats', version: 1, chats: this.chats }, null, 2) });
+      entries.push({ name: CALENDAR_FILE, data: JSON.stringify({ format: 'snowball-calendar', version: 1, events: this.events }, null, 2) });
+      entries.push({ name: ACTIVITY_FILE, data: JSON.stringify(this.activity, null, 2) });
+      entries.push({ name: PROFILE_FILE, data: JSON.stringify(this.profile, null, 2) });
+      if (this.profile.avatarAt && fs.existsSync(this.avatarPath)) entries.push({ name: AVATAR_FILE, file: this.avatarPath });
+      counts.chats = this.chats.length;
+      counts.events = this.events.length;
+    }
+    return { entries, counts };
+  }
+
+  // Brings in what an unpacked archive (dir) holds without changing or removing anything already here.
+  // 'backup': prompts, chats and events keep their ids and dates; those already here (same id) stay as they are.
+  // 'share': prompts from someone else get new ids and today's date; one with the same title and text as here is skipped.
+  mergeFrom(dir, kind) {
+    return this.run(async () => {
+      const res = { prompts: 0, files: 0, skipped: 0, chats: 0, events: 0 };
+      let incoming = [];
+      try { incoming = parseData(await fsp.readFile(path.join(dir, 'prompts.json'), 'utf8')).prompts; } catch (e) { incoming = []; }
+      const sig = (p) => p.title.trim().toLowerCase() + '\u0000' + p.text.trim();
+      const known = new Set(this.data.prompts.map(sig));
+      const ids = new Set(this.data.prompts.map((p) => p.id));
+      const now = Date.now();
+      for (const p of incoming) {
+        if (!p.title && !p.text) { res.skipped++; continue; }
+        if (kind === 'backup' ? ids.has(p.id) : known.has(sig(p))) { res.skipped++; continue; }
+        const src = path.join(dir, 'files', p.id);   // the folder the files were packed under
+        const prompt = Object.assign({}, p, { files: [] });
+        if (kind === 'share' || ids.has(prompt.id)) prompt.id = newId('p');
+        if (kind === 'share') { prompt.createdAt = now; prompt.updatedAt = now; }
+        for (const f of p.files) {
+          const from = path.join(src, f.stored);
+          if (!(await exists(from))) continue;
+          const target = this.promptDir(prompt.id);
+          await fsp.mkdir(target, { recursive: true });
+          const stored = await uniqueTarget(target, sanitizeName(f.stored));
+          await fsp.copyFile(from, path.join(target, stored));
+          prompt.files.push({ id: f.id, name: f.name, stored, size: f.size, kind: kindOf(stored), addedAt: f.addedAt || now });
+          res.files++;
+        }
+        this.data.prompts.push(prompt);
+        ids.add(prompt.id);
+        known.add(sig(prompt));
+        res.prompts++;
+      }
+      if (res.prompts) await this.write();
+      if (kind !== 'backup') return res;
+
+      const chats = await readJson(path.join(dir, CHATS_FILE));
+      (chats && Array.isArray(chats.chats) ? chats.chats : []).map(normalizeChat).filter(Boolean).forEach((c) => {
+        if (this.getChat(c.id)) return;
+        this.chats.push(c);
+        res.chats++;
+      });
+      if (res.chats) await this.writeChats();
+      const cal = await readJson(path.join(dir, CALENDAR_FILE));
+      (cal && Array.isArray(cal.events) ? cal.events : []).map((e) => normalizeEvent(e)).filter(Boolean).forEach((e) => {
+        if (this.findEvent(e.id)) return;
+        this.events.push(e);
+        res.events++;
+      });
+      if (res.events) await this.writeCalendar();
+      // Statistics: for each day and kind the larger number, so restoring the same backup twice does not double it.
+      const act = await readJson(path.join(dir, ACTIVITY_FILE));
+      if (act) {
+        const a = normalizeActivity(act);
+        Object.keys(a.days).forEach((k) => {
+          const day = this.activity.days[k] || (this.activity.days[k] = {});
+          ACTIONS.forEach((n) => { if ((a.days[k][n] || 0) > (day[n] || 0)) day[n] = a.days[k][n]; });
+        });
+        if (a.since && (!this.activity.since || a.since < this.activity.since)) this.activity.since = a.since;
+        try { await writeJson(this.activityPath, this.activity); } catch (e) { /* statistics are a convenience */ }
+      }
+      // Profile: only fills what is empty here (a fresh install has no nickname and no avatar).
+      const prof = await readJson(path.join(dir, PROFILE_FILE));
+      const pr = this.profile;
+      let profChanged = false;
+      if (prof && !pr.name && normalizeProfile(prof).name) { pr.name = normalizeProfile(prof).name; pr.welcomed = true; profChanged = true; }
+      if (!pr.avatarAt && await exists(path.join(dir, AVATAR_FILE))) {
+        await retry(() => fsp.copyFile(path.join(dir, AVATAR_FILE), this.avatarPath));
+        pr.avatarAt = Date.now();
+        pr.welcomed = true;
+        profChanged = true;
+      }
+      if (profChanged) await writeJson(this.profilePath, pr);
+      return res;
     });
   }
 }

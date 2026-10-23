@@ -18,13 +18,20 @@ contextBridge.exposeInMainWorld('vsApi', {
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   setMode: (mode) => ipcRenderer.invoke('set-mode', mode),
   setConfirm: (on) => ipcRenderer.invoke('set-confirm', on),
+  updateState: () => ipcRenderer.invoke('update-state'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
   openDataDir: () => ipcRenderer.invoke('open-data-dir'),
   changeDataDir: () => ipcRenderer.invoke('change-data-dir'),
-  exportJson: () => ipcRenderer.invoke('export'),
-  importJson: () => ipcRenderer.invoke('import'),
+  backupExport: () => ipcRenderer.invoke('backup-export'),
+  promptsExport: (ids) => ipcRenderer.invoke('prompts-export', ids),
+  archiveOpen: (file) => ipcRenderer.invoke('archive-open', file),
+  onArchiveOpened: (fn) => {
+    const listener = (_e, r) => fn(r);
+    ipcRenderer.on('archive-opened', listener);
+    return () => ipcRenderer.removeListener('archive-opened', listener);
+  },
   assistantSend: (messages) => ipcRenderer.invoke('assistant-send', messages),
   assistantStop: (id) => ipcRenderer.invoke('assistant-stop', id),
   assistantReset: () => ipcRenderer.invoke('assistant-reset'),

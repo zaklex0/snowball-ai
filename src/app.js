@@ -66,7 +66,9 @@
     menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
     statsAvatar: $("stats-avatar"), statsName: $("stats-name"), statsSince: $("stats-since"), statsEdit: $("stats-edit"),
     metrics: $("metrics"), topList: $("top-list"), heat: $("heat"), heatTip: $("heat-tip"), breakdown: $("breakdown"),
-    settingsVersion: $("settings-version"),
+    updCard: $("set-update"), updBadge: $("upd-badge"), updLine: $("upd-line"), updBar: $("upd-bar"), updBarFill: $("upd-bar-fill"),
+    updActions: $("upd-actions"), updNew: $("upd-new"), updNewTitle: $("upd-new-title"), updNewBody: $("upd-new-body"),
+    updCurrent: $("upd-current"), updCurrentTitle: $("upd-current-title"), updCurrentBody: $("upd-current-body"), setNavDot: $("set-nav-dot"),
     chat: $("chat"), chatEmpty: $("chat-empty"), chatIdeas: $("chat-ideas"), chatNew: $("chat-new"),
     composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"),
     calMeta: $("cal-meta"), calAdd: $("cal-add"), calTitle: $("cal-title"), calToday: $("cal-today"), calPrev: $("cal-prev"), calNext: $("cal-next"),
@@ -77,13 +79,13 @@
     cfKind: $("cf-kind"), cfRemind: $("cf-remind"), cfNote: $("cf-note"), cfSave: $("cf-save"), cfCancel: $("cf-cancel"), cfDelete: $("cf-delete"), cfMsg: $("cf-msg"),
     calTimeline: $("cal-timeline"),
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
-    setDir: $("set-dir"), setDirChange: $("set-dir-change"), themeValue: $("theme-value"),
+    setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
     modeBtn: $("mode-btn"), modeMenu: $("mode-menu"), modeName: $("mode-name"), modeIco: $("mode-ico"), navBase: $("nav-base"), navGen: $("nav-gen"),
     chatHistory: $("chat-history"), chatHistoryBtn: $("chat-history-btn"), chatList: $("chat-list"),
     chatCost: $("chat-cost"), modelBtn: $("model-btn"), modelBtnText: $("model-btn-text"), modelMenu: $("model-menu"),
     profileDlg: $("profile-dlg"), pdForm: $("pd-form"), pdTitle: $("pd-title"), pdText: $("pd-text"),
     pdAvatar: $("pd-avatar"), pdPick: $("pd-pick"), pdRemove: $("pd-remove"), pdName: $("pd-name"),
-    pdSave: $("pd-save"), pdCancel: $("pd-cancel"), pdMsg: $("pd-msg")
+    pdSave: $("pd-save"), pdCancel: $("pd-cancel"), pdMsg: $("pd-msg"), pdRestore: $("pd-restore"), pdRestoreBtn: $("pd-restore-btn")
   };
   var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -103,6 +105,7 @@
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>',
     bell: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
     folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>',
+    share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5.5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="18.5" r="2.5"/><path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1"/></svg>',
     note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9.5L15.5 20.5H5A1.5 1.5 0 0 1 3.5 19V6A1.5 1.5 0 0 1 5 4.5Z"/><path d="M15.5 20.5V16a.5.5 0 0 1 .5-.5h4.5M7.5 9h9M7.5 12.5h6"/></svg>',
     spark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>'
   };
@@ -686,6 +689,8 @@
     return h("div", { class: "row-actions" },
       h("button", { type: "button", class: "btn-mini edit-btn", onclick: function () { openEditor(item); } },
         icon("pencil"), h("span", { text: "Редактировать" })),
+      h("button", { type: "button", class: "btn-mini", title: "Сохранить промт с комментарием и файлами в файл, чтобы отправить другу",
+        onclick: function () { exportPrompts([item.id]); } }, icon("share"), h("span", { text: "Поделиться" })),
       h("button", { type: "button", class: "link-btn", onclick: function () { state.confirmId = item.id; render(); } }, "Удалить")
     );
   }
@@ -808,7 +813,6 @@
       els.setDir.replaceChildren(h("span", { class: "ico", html: ICONS.folder, "aria-hidden": "true" }), h("code", { text: state.info.dataDir }));
       markTheme(state.info.theme);
       renderMode();
-      els.settingsVersion.textContent = state.info.version ? "Версия " + state.info.version : "";
       renderAssistantSettings();
     }
 
@@ -1054,6 +1058,7 @@
     els.pdText.textContent = welcome ? "Как вас называть? Ник и аватарка видны внизу слева, поменять их можно в любой момент." : "";
     els.pdSave.textContent = welcome ? "Начать" : "Сохранить";
     els.pdCancel.textContent = welcome ? "Пропустить" : "Отмена";
+    els.pdRestore.hidden = !welcome;
     els.pdName.value = (state.profile && state.profile.name) || "";
     els.pdMsg.textContent = "";
     els.pdSave.disabled = false;
@@ -1076,6 +1081,14 @@
   });
   els.pdRemove.addEventListener("click", function () { pd.avatar = null; renderPdAvatar(); });
   els.pdCancel.addEventListener("click", closeProfile);
+  // A clean install (or a new computer): bring everything back from a .snowball file right away.
+  els.pdRestoreBtn.addEventListener("click", function () {
+    els.profileDlg.close();
+    call(api.archiveOpen()).then(function (r) {
+      if (r && !r.canceled) archiveDone(r);
+      if (!state.profile || !state.profile.welcomed) openProfile(true);
+    });
+  });
   els.profileDlg.addEventListener("cancel", function (e) { e.preventDefault(); closeProfile(); });
   els.pdForm.addEventListener("submit", function (e) {
     e.preventDefault();
@@ -1188,22 +1201,59 @@
     else if (a === "settings") setPage("settings");
     else if (a === "open-dir") call(api.openDataDir());
     else if (a === "change-dir") changeDir();
-    else if (a === "export") {
-      call(api.exportJson()).then(function (r) {
-        if (!r || r.canceled) return;
-        toast("Сохранено: " + r.count + " " + plural(r.count, "промт", "промта", "промтов") + ". Прикреплённые файлы в этот файл не входят.", true);
-      });
-    } else if (a === "import") {
-      call(api.importJson()).then(function (r) {
-        if (!r || r.canceled) return;
-        render();
-        if (r.added) toast("Добавлено: " + r.added + " " + plural(r.added, "промт", "промта", "промтов") + (r.skipped ? ". Уже были в таблице: " + r.skipped : ""), true);
-        else toast("Новых промтов в файле нет: все уже есть в таблице", true);
-      });
-    } else if (a === "check-updates") {
-      call(api.checkUpdates()).then(function (r) { if (r) toast("Проверяю обновления…"); });
-    }
+    else if (a === "export") exportPrompts(null);
+    else if (a === "import") openArchive();
   });
+  /* ---------- backup and sharing ---------- */
+  // ".snowprompt" carries prompts with comments and files to another Snowball.ai; ".snowball" is a backup of everything.
+  function exportPrompts(ids) {
+    call(api.promptsExport(ids)).then(function (r) {
+      if (!r || r.canceled) return;
+      var c = r.counts;
+      toast("Сохранено: " + c.prompts + " " + plural(c.prompts, "промт", "промта", "промтов") +
+        (c.files ? " и " + c.files + " " + plural(c.files, "файл", "файла", "файлов") : "") + ". Этот файл можно отправить другу.", true);
+    });
+  }
+  function exportBackup() {
+    toast("Собираю резервную копию…");
+    call(api.backupExport()).then(function (r) {
+      if (!r || r.canceled) return;
+      var c = r.counts;
+      showBanner("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + ". Ключей ChatGPT и Claude в ней нет.");
+    });
+  }
+  // file: a path (drag and drop) or nothing (the program asks which file).
+  function openArchive(file) {
+    if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
+    call(api.archiveOpen(file)).then(archiveDone);
+  }
+  function archiveDone(r) {
+    if (!r) return;
+    if (!r.ok) { toast(r.error || "Не получилось открыть файл.", true); return; }
+    if (r.canceled) return;
+    applyData(r);
+    var x = r.result || {};
+    if (r.kind === "backup") {
+      refreshChats();
+      render();
+      var parts = [];
+      if (x.prompts) parts.push("промтов " + x.prompts);
+      if (x.chats) parts.push("разговоров " + x.chats);
+      if (x.events) parts.push("дел в календаре " + x.events);
+      showBanner(parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
+        : "Всё из этой копии уже есть в программе, ничего добавлять не пришлось.");
+      return;
+    }
+    render();
+    if (x.prompts) {
+      setPage("prompts");
+      toast("Добавлено: " + x.prompts + " " + plural(x.prompts, "промт", "промта", "промтов") + (x.files ? " и " + x.files + " " + plural(x.files, "файл", "файла", "файлов") : "") +
+        (x.skipped ? ". Уже были у вас: " + x.skipped : ""), true);
+    } else toast("Новых промтов в файле нет: все уже есть в таблице", true);
+  }
+  // A double click on a file in Windows while the program is open (or that started it).
+  api.onArchiveOpened(archiveDone);
+
   function changeDir() {
       if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
       call(api.changeDataDir()).then(function (r) {
@@ -1223,53 +1273,144 @@
   }
   els.setDir.addEventListener("click", function () { call(api.openDataDir()); });
   els.setDirChange.addEventListener("click", changeDir);
+  els.setBackupSave.addEventListener("click", exportBackup);
+  els.setBackupOpen.addEventListener("click", function () { openArchive(); });
 
   /* ---------- updates ---------- */
-  // A new version is downloaded only after the user presses "Скачать".
-  var upd = { dismissed: null, progressHidden: false };
-  function startDownload(version) {
+  // Settings → "Обновление": check, read what is new, download, restart. A new version is downloaded
+  // only after the user presses "Скачать обновление"; the background check only shows a banner.
+  // status: idle, checking, latest, error, available, progress, download-error, ready.
+  var upd = { packaged: false, current: "", currentNotes: "", status: "idle", version: "", notes: "", percent: 0, dismissed: null };
+  function updButton(label, primary, onclick, disabled) {
+    return h("button", { type: "button", class: "btn " + (primary ? "btn-primary" : "btn-ghost"), disabled: !!disabled, onclick: onclick }, label);
+  }
+  function renderUpdates() {
+    var s = upd.status, v = upd.version, found = s === "available" || s === "progress" || s === "download-error" || s === "ready";
+    var line, actions = [];
+    if (!upd.packaged && !found) {
+      line = "У вас версия " + upd.current + ". Обновления проверяются только в установленной программе.";
+      actions.push(updButton("Проверить обновления", true, null, true));
+    } else if (s === "checking") {
+      line = "Проверяю, нет ли новой версии…";
+      actions.push(updButton("Проверяю…", true, null, true));
+    } else if (s === "latest") {
+      line = "У вас последняя версия — " + upd.current + ".";
+      actions.push(updButton("Проверить ещё раз", false, checkForUpdates));
+    } else if (s === "error") {
+      line = "Не получилось проверить обновления. Проверьте интернет и попробуйте ещё раз.";
+      actions.push(updButton("Попробовать ещё раз", true, checkForUpdates));
+    } else if (s === "available") {
+      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + ". Скачивание займёт около минуты, а установится она после перезапуска.";
+      actions.push(updButton("Скачать обновление", true, startDownload));
+    } else if (s === "progress") {
+      line = "Скачиваю версию " + v + "… " + upd.percent + "%. Можно продолжать работать, программа сообщит, когда всё будет готово.";
+    } else if (s === "download-error") {
+      line = "Не получилось скачать версию " + v + ". Проверьте интернет и попробуйте ещё раз.";
+      actions.push(updButton("Попробовать ещё раз", true, startDownload));
+    } else if (s === "ready") {
+      line = "Версия " + v + " скачана. Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.";
+      actions.push(updButton("Перезапустить и обновить", true, installNow));
+    } else {
+      line = "У вас версия " + upd.current + ".";
+      actions.push(updButton("Проверить обновления", true, checkForUpdates));
+    }
+    els.updLine.textContent = line;
+    els.updActions.replaceChildren.apply(els.updActions, actions);
+    els.updActions.hidden = !actions.length;
+    els.updBar.hidden = s !== "progress";
+    els.updBarFill.style.width = upd.percent + "%";
+    els.updBadge.textContent = found ? "Есть новая версия" : upd.current ? "Версия " + upd.current : "";
+    els.updBadge.className = "set-status" + (found ? " new" : "");
+    els.setNavDot.hidden = !found;
+    els.updNew.hidden = !found;
+    if (found) {
+      els.updNewTitle.textContent = "Что нового в версии " + v;
+      els.updNewBody.replaceChildren.apply(els.updNewBody, upd.notes ? richText(upd.notes)
+        : [h("p", { text: "Описание этой версии не загрузилось. Его можно прочитать на GitHub по ссылке ниже." })]);
+    }
+    els.updCurrent.hidden = !upd.currentNotes;
+    els.updCurrentTitle.textContent = "Что нового в вашей версии " + upd.current;
+    els.updCurrentBody.replaceChildren.apply(els.updCurrentBody, upd.currentNotes ? richText(upd.currentNotes) : []);
+  }
+  function checkForUpdates() {
+    upd.status = "checking";
+    renderUpdates();
+    call(api.checkUpdates()).then(function (r) { if (!r && upd.status === "checking") { upd.status = "error"; renderUpdates(); } });
+  }
+  function startDownload() {
     call(api.downloadUpdate()).then(function (r) {
       if (!r) return;
-      upd.progressHidden = false;
-      showUpdateProgress(version, 0);
+      upd.status = "progress";
+      upd.percent = 0;
+      renderUpdates();
     });
   }
-  function showUpdateProgress(version, percent) {
-    if (upd.progressHidden) return;
-    showBanner("Скачиваю Snowball.ai " + version + "… " + percent + "%. Можно продолжать работать, программа сообщит, когда всё будет готово.", {
-      close: "Скрыть", onclose: function () { upd.progressHidden = true; }
-    });
+  function installNow() {
+    if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
+    call(api.installUpdate());
   }
-  api.onUpdate(function (u) {
-    if (u.kind === "available") {
-      // The background check asks once per version; "Проверить обновления" always asks.
-      if (!u.manual && upd.dismissed === u.version) return;
-      showBanner("Вышла новая версия Snowball.ai " + u.version + ". Скачать её? Это займёт около минуты, а установится она после перезапуска.", {
-        label: "Скачать",
-        close: "Не сейчас",
-        onclick: function () { startDownload(u.version); },
-        onclose: function () { upd.dismissed = u.version; }
-      });
-    }
-    else if (u.kind === "progress") showUpdateProgress(u.version, u.percent);
-    else if (u.kind === "download-error") {
-      showBanner("Не получилось скачать Snowball.ai " + u.version + ". Проверьте интернет и попробуйте ещё раз.", {
-        label: "Попробовать ещё раз", close: "Не сейчас", onclick: function () { startDownload(u.version); }
-      });
-    }
-    else if (u.kind === "latest") toast("У вас последняя версия", true);
-    else if (u.kind === "error") toast("Не получилось проверить обновления. Проверьте интернет.", true);
-    else if (u.kind === "ready") {
-      showBanner("Скачана новая версия Snowball.ai " + u.version + ". Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.", {
-        label: "Перезапустить и обновить",
-        close: "Позже",
-        onclick: function () {
-          if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
-          call(api.installUpdate());
-        }
-      });
-    }
+  // Opens Settings at the "Обновление" card; showCurrent unfolds what is new in the installed version.
+  function openUpdates(showCurrent) {
+    setPage("settings");
+    if (showCurrent) els.updCurrent.open = true;
+    els.updCard.scrollIntoView({ block: "start", behavior: "smooth" });
+    els.updCard.classList.remove("flash");
+    void els.updCard.offsetWidth;
+    els.updCard.classList.add("flash");
+  }
+  document.querySelectorAll(".set-nav [data-target]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var card = document.getElementById(b.dataset.target).closest(".set-card");
+      card.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
   });
+  api.onUpdate(function (u) {
+    var away = state.page !== "settings";
+    if (u.notes !== undefined) upd.notes = u.notes || "";
+    if (u.version) upd.version = u.version;
+    if (u.kind === "available") {
+      upd.status = "available";
+      // The background check asks once per version; the button in Settings shows it right there.
+      if (away && !u.manual && upd.dismissed !== u.version) {
+        showBanner("Вышла новая версия Snowball.ai " + u.version + ". Посмотрите, что в ней нового, и скачайте её в «Настройках».", {
+          label: "Что нового", close: "Не сейчас",
+          onclick: function () { els.banner.hidden = true; openUpdates(false); },
+          onclose: function () { upd.dismissed = u.version; }
+        });
+      }
+    }
+    else if (u.kind === "progress") { upd.status = "progress"; upd.percent = u.percent || 0; }
+    else if (u.kind === "download-error") {
+      upd.status = "download-error";
+      if (away) showBanner("Не получилось скачать Snowball.ai " + u.version + ". Проверьте интернет и попробуйте ещё раз.", {
+        label: "Попробовать ещё раз", close: "Не сейчас", onclick: function () { els.banner.hidden = true; startDownload(); }
+      });
+    }
+    else if (u.kind === "latest") { if (u.manual || upd.status === "checking") upd.status = "latest"; }
+    else if (u.kind === "error") { if (u.manual || upd.status === "checking") upd.status = "error"; }
+    else if (u.kind === "ready") {
+      upd.status = "ready";
+      showBanner("Скачана новая версия Snowball.ai " + u.version + ". Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.", {
+        label: "Перезапустить и обновить", close: "Позже", onclick: installNow
+      });
+    }
+    renderUpdates();
+  });
+  api.updateState().then(function (r) {
+    if (!r || !r.ok) return;
+    upd.packaged = r.packaged;
+    upd.current = r.current;
+    upd.currentNotes = r.currentNotes || "";
+    if (r.status) { upd.status = r.status; upd.version = r.version; upd.notes = r.notes || ""; upd.percent = r.percent || 0; }
+    renderUpdates();
+    // Just updated: tell once what changed.
+    if (r.whatsNew && upd.currentNotes) {
+      showBanner("Snowball.ai обновлена до версии " + r.whatsNew + ". Посмотрите, что нового и как этим пользоваться.", {
+        label: "Что нового", close: "Понятно",
+        onclick: function () { els.banner.hidden = true; openUpdates(true); }
+      });
+    }
+  }, function () {});
 
   /* ---------- calendar ---------- */
   var KINDS = [
@@ -2376,6 +2517,8 @@
   document.addEventListener("drop", function (e) {
     if (!hasFiles(e)) return;
     e.preventDefault();
+    var archive = Array.prototype.find.call(e.dataTransfer.files || [], function (f) { return /\.(snowprompt|snowball)$/i.test(f.name); });
+    if (archive) { clearDrag(); var ap = api.pathForFile(archive); if (ap) openArchive(ap); return; }
     var inEditor = state.editorOpen && els.editor.contains(e.target);
     var tr = !inEditor && e.target.closest ? e.target.closest("tr[data-id]:not(.editing)") : null;
     var files = e.dataTransfer.files;
