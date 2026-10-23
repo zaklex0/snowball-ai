@@ -315,6 +315,8 @@ h1 .brand { color: var(--accent-strong); }
   border-radius: 14px; padding: 12px 14px; font-size: 14px;
 }
 .banner p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.banner-bar { display: block; height: 8px; margin-top: 8px; max-width: 420px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.banner-bar span { display: block; height: 100%; background: var(--accent-strong); border-radius: inherit; transition: width .3s; }
 .banner .btn-mini { flex: none; background: var(--accent); border-color: transparent; color: var(--accent-ink); }
 .banner .btn-mini:hover { background: var(--accent-hover); border-color: transparent; }
 
@@ -758,15 +760,49 @@ h1 .brand { color: var(--accent-strong); }
 
 /* Settings page */
 .set-card { padding: 20px 22px; display: grid; gap: 16px; }
-.set-card { scroll-margin-top: 20px; }
 .set-card .files-hint a { color: var(--ink); text-underline-offset: 3px; }
-.set-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.set-nav-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-strong); margin-left: 2px; }
+.set-nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-strong); margin-left: auto; flex: none; }
 .set-nav-dot[hidden] { display: none; }
-.set-card.flash { animation: set-flash 1.4s ease-out; }
-@keyframes set-flash { 0%, 30% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 3px transparent; } }
+.set-backup-msg:empty { display: none; }
+
+/* Settings open as their own window: sections on the left, the chosen one on the right */
+.settings-dlg {
+  width: min(1040px, calc(100vw - 48px)); height: min(760px, calc(100vh - 48px)); max-width: none; max-height: none;
+  padding: 0; border: 1px solid var(--line); border-radius: 20px; overflow: hidden;
+  background: var(--surface); color: var(--ink); box-shadow: var(--pop-shadow);
+}
+.settings-dlg[open] { display: flex; flex-direction: column; }
+.settings-dlg::backdrop { background: rgba(30, 18, 12, .55); }
+.settings-dlg:focus { outline: none; }
+.sd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 14px 22px; border-bottom: 1px solid var(--line); }
+.sd-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 18px; letter-spacing: -0.01em; }
+.sd-close { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
+.sd-close:hover { background: var(--surface-2); color: var(--ink); }
+.sd-close svg { width: 18px; height: 18px; }
+.sd-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 236px minmax(0, 1fr); }
+.sd-nav { display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; border-right: 1px solid var(--line); background: var(--bg); overflow-y: auto; }
+.sd-item {
+  display: flex; align-items: center; gap: 11px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px;
+  background: none; color: var(--ink-soft); font: inherit; font-size: 14.5px; font-weight: 500; text-align: left;
+}
+.sd-item svg { width: 18px; height: 18px; flex: none; }
+.sd-item:hover { background: var(--surface-2); color: var(--ink); }
+.sd-item[aria-current="page"] { background: var(--surface-2); color: var(--ink); font-weight: 600; }
+.sd-main { overflow-y: auto; padding: 26px 30px 30px; }
+.sd-sec { display: grid; gap: 0; }
+.sd-sec[hidden] { display: none; }
+.sd-main .card { background: none; border: 0; border-radius: 0; box-shadow: none; overflow: visible; padding: 0; }
+.sd-sec > .card + .card { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 26px; }
+.sd-main .card-title { font-size: 18px; }
+@media (max-width: 760px) {
+  .settings-dlg { width: calc(100vw - 16px); height: calc(100vh - 16px); }
+  .sd-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .sd-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; }
+  .sd-item { width: auto; white-space: nowrap; }
+  .sd-main { padding: 20px 18px 24px; }
+}
 .set-status.new { background: var(--accent); color: var(--accent-ink); }
-.upd-bar { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; max-width: 520px; }
+.upd-bar { height: 12px; border-radius: 999px; background: var(--surface-2); overflow: hidden; max-width: 560px; }
 .upd-bar[hidden] { display: none; }
 .upd-bar span { display: block; height: 100%; width: 0; background: var(--accent-strong); border-radius: inherit; transition: width .3s; }
 .upd-notes { background: var(--surface-2); border-radius: 14px; padding: 14px 18px; display: grid; gap: 10px; max-width: 760px; }

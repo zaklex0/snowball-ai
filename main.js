@@ -229,6 +229,8 @@ let updateReady = null;   // version that is downloaded and waits for a restart
 let manualCheck = false;  // the user asked from the menu, so report "no update" and errors too
 let lastPercent = -1;
 let updateNotes = '';     // what is new in the found version, as simple Markdown
+let updateSize = 0;       // size of the installer, bytes (from latest.yml)
+let lastProgress = { transferred: 0, total: 0 };
 let whatsNew = null;      // this version was just installed over an older one: tell about it once
 
 // CHANGELOG.md goes inside the program: "## 1.8.3" starts the part about that version.
@@ -273,13 +275,15 @@ function setupUpdates() {
   updater.on('update-available', (i) => {
     updateFound = i.version;
     updateNotes = htmlToMarkdown(i.releaseNotes);
-    if (!downloading) sendUpdate({ kind: 'available', version: i.version, notes: updateNotes, manual: manualCheck });
+    updateSize = ((i.files || [])[0] || {}).size || 0;
+    if (!downloading) sendUpdate({ kind: 'available', version: i.version, notes: updateNotes, size: updateSize, manual: manualCheck });
     manualCheck = false;
   });
   updater.on('update-not-available', () => { sendUpdate({ kind: 'latest', manual: manualCheck }); manualCheck = false; });
   updater.on('download-progress', (p) => {
     const percent = Math.floor(p.percent || 0);
-    if (percent !== lastPercent) { lastPercent = percent; sendUpdate({ kind: 'progress', version: updateFound, percent }); }
+    lastProgress = { transferred: p.transferred || 0, total: p.total || updateSize };
+    if (percent !== lastPercent) { lastPercent = percent; sendUpdate({ kind: 'progress', version: updateFound, percent, size: updateSize, transferred: lastProgress.transferred, total: lastProgress.total }); }
   });
   updater.on('update-downloaded', (i) => {
     downloading = false;
@@ -443,16 +447,16 @@ handle('update-state', async () => {
   const current = app.getVersion();
   const state = { ok: true, packaged: !!updater, current, currentNotes: changelogFor(current), whatsNew };
   whatsNew = null;
-  if (updateReady) Object.assign(state, { status: 'ready', version: updateReady, notes: updateNotes });
-  else if (downloading) Object.assign(state, { status: 'progress', version: updateFound, notes: updateNotes, percent: Math.max(0, lastPercent) });
-  else if (updateFound) Object.assign(state, { status: 'available', version: updateFound, notes: updateNotes });
+  if (updateReady) Object.assign(state, { status: 'ready', version: updateReady, notes: updateNotes, size: updateSize });
+  else if (downloading) Object.assign(state, { status: 'progress', version: updateFound, notes: updateNotes, size: updateSize, percent: Math.max(0, lastPercent), transferred: lastProgress.transferred, total: lastProgress.total });
+  else if (updateFound) Object.assign(state, { status: 'available', version: updateFound, notes: updateNotes, size: updateSize });
   return state;
 });
 
 handle('check-updates', async () => {
   if (!updater) return { ok: false, error: 'Обновления проверяются только в установленной программе.' };
   if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady, notes: updateNotes }); return { ok: true }; }
-  if (downloading) { sendUpdate({ kind: 'progress', version: updateFound, percent: Math.max(0, lastPercent) }); return { ok: true }; }
+  if (downloading) { sendUpdate({ kind: 'progress', version: updateFound, percent: Math.max(0, lastPercent), size: updateSize, transferred: lastProgress.transferred, total: lastProgress.total }); return { ok: true }; }
   manualCheck = true;
   checkUpdates();
   return { ok: true };
@@ -464,6 +468,7 @@ handle('download-update', async () => {
   if (!downloading && !updateReady) {
     downloading = true;
     lastPercent = -1;
+    lastProgress = { transferred: 0, total: updateSize };
     updater.downloadUpdate().catch(() => { /* reported by the 'error' event */ });
   }
   return { ok: true };

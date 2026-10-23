@@ -28,7 +28,7 @@
 
   var state = {
     loaded: false,
-    page: "prompts",      // a key of els.views: "prompts", "calendar", "assistant", "generator", "stats", "settings"
+    page: "prompts",      // a key of els.views: "prompts", "calendar", "assistant", "generator", "stats"
     items: [],
     info: null,
     profile: null,        // { name, welcomed, avatar }
@@ -60,7 +60,7 @@
     navItems: Array.prototype.slice.call(document.querySelectorAll(".nav-item[data-page]")),
     views: {
       prompts: $("view-prompts"), generator: $("view-generator"), calendar: $("view-calendar"), assistant: $("view-assistant"),
-      stats: $("view-stats"), settings: $("view-settings")
+      stats: $("view-stats")
     },
     sideAvatar: $("side-avatar"), sideName: $("side-name"),
     menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
@@ -68,6 +68,7 @@
     metrics: $("metrics"), topList: $("top-list"), heat: $("heat"), heatTip: $("heat-tip"), breakdown: $("breakdown"),
     updCard: $("set-update"), updBadge: $("upd-badge"), updLine: $("upd-line"), updBar: $("upd-bar"), updBarFill: $("upd-bar-fill"),
     updActions: $("upd-actions"), updNew: $("upd-new"), updNewTitle: $("upd-new-title"), updNewBody: $("upd-new-body"),
+    settingsDlg: $("settings-dlg"), settingsClose: $("settings-close"), settingsMain: $("settings-main"), setBackupMsg: $("set-backup-msg"),
     updCurrent: $("upd-current"), updCurrentTitle: $("upd-current-title"), updCurrentBody: $("upd-current-body"), setNavDot: $("set-nav-dot"),
     chat: $("chat"), chatEmpty: $("chat-empty"), chatIdeas: $("chat-ideas"), chatNew: $("chat-new"),
     composer: $("composer"), chatInput: $("chat-input"), chatSend: $("chat-send"),
@@ -216,6 +217,8 @@
 
   var toastTimer = null;
   function toast(msg, long) {
+    var host = document.querySelector("dialog[open]") || document.body;
+    if (els.toast.parentNode !== host) host.appendChild(els.toast);
     els.toast.textContent = msg;
     els.toast.classList.add("show");
     clearTimeout(toastTimer);
@@ -225,6 +228,12 @@
   var bannerOnClose = null;
   function showBanner(text, action) {
     els.bannerText.textContent = text;
+    // action.percent: a download bar under the text
+    if (action && typeof action.percent === "number") {
+      var fill = h("span");
+      fill.style.width = Math.max(0, Math.min(100, action.percent)) + "%";
+      els.bannerText.append(h("span", { class: "banner-bar" }, fill));
+    }
     els.bannerAction.hidden = !(action && action.label);
     els.bannerAction.textContent = (action && action.label) || "";
     els.bannerAction.onclick = (action && action.onclick) || null;
@@ -876,7 +885,7 @@
     call(api.setMode(m)).then(function (r) {
       if (!r) return;
       var inMode = m === "base" ? BASE_PAGES.indexOf(state.page) !== -1 : state.page === "generator";
-      if (!inMode && state.page !== "stats" && state.page !== "settings") setPage(MODES[m].first); else render();
+      if (!inMode && state.page !== "stats") setPage(MODES[m].first); else render();
     });
   });
   els.modeMenu.addEventListener("keydown", function (e) {
@@ -1198,7 +1207,7 @@
     setMenu(false);
     var a = b.dataset.action;
     if (a === "edit-profile") openProfile(false);
-    else if (a === "settings") setPage("settings");
+    else if (a === "settings") openSettings();
     else if (a === "open-dir") call(api.openDataDir());
     else if (a === "change-dir") changeDir();
     else if (a === "export") exportPrompts(null);
@@ -1214,12 +1223,16 @@
         (c.files ? " и " + c.files + " " + plural(c.files, "файл", "файла", "файлов") : "") + ". Этот файл можно отправить другу.", true);
     });
   }
+  // In the settings window the result is written under the buttons, otherwise in the banner.
+  function backupMessage(text) {
+    if (els.settingsDlg.open) els.setBackupMsg.textContent = text; else showBanner(text);
+  }
   function exportBackup() {
     toast("Собираю резервную копию…");
     call(api.backupExport()).then(function (r) {
       if (!r || r.canceled) return;
       var c = r.counts;
-      showBanner("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + ". Ключей ChatGPT и Claude в ней нет.");
+      backupMessage("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + ". Ключей ChatGPT и Claude в ней нет.");
     });
   }
   // file: a path (drag and drop) or nothing (the program asks which file).
@@ -1240,11 +1253,12 @@
       if (x.prompts) parts.push("промтов " + x.prompts);
       if (x.chats) parts.push("разговоров " + x.chats);
       if (x.events) parts.push("дел в календаре " + x.events);
-      showBanner(parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
+      backupMessage(parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
         : "Всё из этой копии уже есть в программе, ничего добавлять не пришлось.");
       return;
     }
     render();
+    if (els.settingsDlg.open) els.settingsDlg.close();
     if (x.prompts) {
       setPage("prompts");
       toast("Добавлено: " + x.prompts + " " + plural(x.prompts, "промт", "промта", "промтов") + (x.files ? " и " + x.files + " " + plural(x.files, "файл", "файла", "файлов") : "") +
@@ -1276,11 +1290,41 @@
   els.setBackupSave.addEventListener("click", exportBackup);
   els.setBackupOpen.addEventListener("click", function () { openArchive(); });
 
+  /* ---------- settings window ---------- */
+  // Sections on the left, the chosen one on the right; the program stays where it was behind it.
+  var settingsSec = "keys";
+  function showSettingsSection(sec) {
+    settingsSec = sec;
+    els.settingsDlg.querySelectorAll(".sd-sec").forEach(function (el) { el.hidden = el.dataset.sec !== sec; });
+    els.settingsDlg.querySelectorAll(".sd-item").forEach(function (b) {
+      if (b.dataset.sec === sec) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
+    els.settingsMain.scrollTop = 0;
+  }
+  function openSettings(sec) {
+    setMenu(false);
+    showSettingsSection(sec || settingsSec);
+    els.setBackupMsg.textContent = "";
+    if (!els.settingsDlg.open) { els.settingsDlg.showModal(); els.settingsDlg.focus(); }
+  }
+  els.settingsDlg.querySelectorAll(".sd-item").forEach(function (b) {
+    b.addEventListener("click", function () { showSettingsSection(b.dataset.sec); });
+  });
+  els.settingsClose.addEventListener("click", function () { els.settingsDlg.close(); });
+  // A click on the dark area around the window closes it.
+  els.settingsDlg.addEventListener("mousedown", function (e) { if (e.target === els.settingsDlg) els.settingsDlg.close(); });
+  els.settingsDlg.addEventListener("close", function () { if (els.toast.parentNode !== document.body) document.body.appendChild(els.toast); });
+
   /* ---------- updates ---------- */
   // Settings → "Обновление": check, read what is new, download, restart. A new version is downloaded
   // only after the user presses "Скачать обновление"; the background check only shows a banner.
   // status: idle, checking, latest, error, available, progress, download-error, ready.
-  var upd = { packaged: false, current: "", currentNotes: "", status: "idle", version: "", notes: "", percent: 0, dismissed: null };
+  var upd = { packaged: false, current: "", currentNotes: "", status: "idle", version: "", notes: "", percent: 0, size: 0, transferred: 0, total: 0, dismissed: null, progressHidden: false };
+  function fmtMB(bytes) {
+    var mb = bytes / (1024 * 1024);
+    return (mb >= 10 ? Math.round(mb) : mb.toFixed(1).replace(".", ",")) + " МБ";
+  }
+  function sizeNote() { return upd.size ? " Размер обновления — " + fmtMB(upd.size) + "." : ""; }
   function updButton(label, primary, onclick, disabled) {
     return h("button", { type: "button", class: "btn " + (primary ? "btn-primary" : "btn-ghost"), disabled: !!disabled, onclick: onclick }, label);
   }
@@ -1300,15 +1344,16 @@
       line = "Не получилось проверить обновления. Проверьте интернет и попробуйте ещё раз.";
       actions.push(updButton("Попробовать ещё раз", true, checkForUpdates));
     } else if (s === "available") {
-      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + ". Скачивание займёт около минуты, а установится она после перезапуска.";
+      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + "." + sizeNote() + " Скачивание займёт около минуты, а установится она после перезапуска.";
       actions.push(updButton("Скачать обновление", true, startDownload));
     } else if (s === "progress") {
-      line = "Скачиваю версию " + v + "… " + upd.percent + "%. Можно продолжать работать, программа сообщит, когда всё будет готово.";
+      var total = upd.total || upd.size;
+      line = "Скачиваю версию " + v + ": " + (total ? fmtMB(upd.transferred) + " из " + fmtMB(total) + ", " : "") + upd.percent + "%. Можно закрыть настройки и продолжать работать, программа сообщит, когда всё будет готово.";
     } else if (s === "download-error") {
       line = "Не получилось скачать версию " + v + ". Проверьте интернет и попробуйте ещё раз.";
       actions.push(updButton("Попробовать ещё раз", true, startDownload));
     } else if (s === "ready") {
-      line = "Версия " + v + " скачана. Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.";
+      line = "Версия " + v + " скачана" + (upd.size ? " (" + fmtMB(upd.size) + ")" : "") + ". Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.";
       actions.push(updButton("Перезапустить и обновить", true, installNow));
     } else {
       line = "У вас версия " + upd.current + ".";
@@ -1319,7 +1364,7 @@
     els.updActions.hidden = !actions.length;
     els.updBar.hidden = s !== "progress";
     els.updBarFill.style.width = upd.percent + "%";
-    els.updBadge.textContent = found ? "Есть новая версия" : upd.current ? "Версия " + upd.current : "";
+    els.updBadge.textContent = found ? "Есть новая версия" + (upd.size ? " · " + fmtMB(upd.size) : "") : upd.current ? "Версия " + upd.current : "";
     els.updBadge.className = "set-status" + (found ? " new" : "");
     els.setNavDot.hidden = !found;
     els.updNew.hidden = !found;
@@ -1342,44 +1387,50 @@
       if (!r) return;
       upd.status = "progress";
       upd.percent = 0;
+      upd.transferred = 0;
+      upd.progressHidden = false;
       renderUpdates();
     });
   }
+  // While the settings window is closed, the download shows in a banner with its own bar.
+  function showProgressBanner() {
+    if (upd.progressHidden || updatesInView()) return;
+    var total = upd.total || upd.size;
+    showBanner("Скачиваю Snowball.ai " + upd.version + ": " + (total ? fmtMB(upd.transferred) + " из " + fmtMB(total) + ", " : "") + upd.percent + "%.", {
+      label: "Подробнее", close: "Скрыть", percent: upd.percent,
+      onclick: function () { els.banner.hidden = true; openUpdates(false); },
+      onclose: function () { upd.progressHidden = true; }
+    });
+  }
+  function updatesInView() { return els.settingsDlg.open && settingsSec === "update"; }
   function installNow() {
     if (editorDirty()) { toast("Сначала сохраните или отмените правку промта."); return; }
     call(api.installUpdate());
   }
   // Opens Settings at the "Обновление" card; showCurrent unfolds what is new in the installed version.
   function openUpdates(showCurrent) {
-    setPage("settings");
     if (showCurrent) els.updCurrent.open = true;
-    els.updCard.scrollIntoView({ block: "start", behavior: "smooth" });
-    els.updCard.classList.remove("flash");
-    void els.updCard.offsetWidth;
-    els.updCard.classList.add("flash");
+    openSettings("update");
   }
-  document.querySelectorAll(".set-nav [data-target]").forEach(function (b) {
-    b.addEventListener("click", function () {
-      var card = document.getElementById(b.dataset.target).closest(".set-card");
-      card.scrollIntoView({ block: "start", behavior: "smooth" });
-    });
-  });
   api.onUpdate(function (u) {
-    var away = state.page !== "settings";
+    var away = !updatesInView();
     if (u.notes !== undefined) upd.notes = u.notes || "";
     if (u.version) upd.version = u.version;
+    if (u.size) upd.size = u.size;
+    if (u.transferred !== undefined) upd.transferred = u.transferred;
+    if (u.total) upd.total = u.total;
     if (u.kind === "available") {
       upd.status = "available";
       // The background check asks once per version; the button in Settings shows it right there.
       if (away && !u.manual && upd.dismissed !== u.version) {
-        showBanner("Вышла новая версия Snowball.ai " + u.version + ". Посмотрите, что в ней нового, и скачайте её в «Настройках».", {
+        showBanner("Вышла новая версия Snowball.ai " + u.version + (upd.size ? " (" + fmtMB(upd.size) + ")" : "") + ". Посмотрите, что в ней нового, и скачайте её в «Настройках».", {
           label: "Что нового", close: "Не сейчас",
           onclick: function () { els.banner.hidden = true; openUpdates(false); },
           onclose: function () { upd.dismissed = u.version; }
         });
       }
     }
-    else if (u.kind === "progress") { upd.status = "progress"; upd.percent = u.percent || 0; }
+    else if (u.kind === "progress") { upd.status = "progress"; upd.percent = u.percent || 0; showProgressBanner(); }
     else if (u.kind === "download-error") {
       upd.status = "download-error";
       if (away) showBanner("Не получилось скачать Snowball.ai " + u.version + ". Проверьте интернет и попробуйте ещё раз.", {
@@ -1401,7 +1452,10 @@
     upd.packaged = r.packaged;
     upd.current = r.current;
     upd.currentNotes = r.currentNotes || "";
-    if (r.status) { upd.status = r.status; upd.version = r.version; upd.notes = r.notes || ""; upd.percent = r.percent || 0; }
+    if (r.status) {
+      upd.status = r.status; upd.version = r.version; upd.notes = r.notes || ""; upd.percent = r.percent || 0;
+      upd.size = r.size || 0; upd.transferred = r.transferred || 0; upd.total = r.total || 0;
+    }
     renderUpdates();
     // Just updated: tell once what changed.
     if (r.whatsNew && upd.currentNotes) {
@@ -2279,7 +2333,7 @@
   });
   function keyCard(provider) { return keyCards.find(function (c) { return c.provider === provider; }); }
   function goToKey(provider) {
-    setPage("settings");
+    openSettings("keys");
     var c = keyCard(provider || "openai");
     if (!c) return;
     try { c.card.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" }); } catch (e) {}
@@ -2566,7 +2620,7 @@
   els.fTitle.addEventListener("input", function () { if (els.formMsg.textContent) setMsg(""); });
   els.search.addEventListener("input", function () { state.query = els.search.value; render(); });
   document.addEventListener("keydown", function (e) {
-    if (els.viewer.open || els.profileDlg.open || els.calDialog.open) return;
+    if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open) return;
     var mod = e.ctrlKey || e.metaKey;
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();

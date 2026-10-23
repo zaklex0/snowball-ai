@@ -401,21 +401,27 @@
           </div>
         </section>
 
-        <section class="view" id="view-settings" aria-labelledby="settings-title" hidden>
-          <header class="top">
-            <div class="top-text">
-              <p class="eyebrow">Snowball.ai</p>
-              <h1 id="settings-title">Настройки</h1>
-            </div>
-          </header>
-          <nav class="set-nav" aria-label="Разделы настроек">
-            <button type="button" class="fchip" data-target="set-openai-title">ChatGPT и Claude</button>
-            <button type="button" class="fchip" data-target="set-as-title">Ассистент</button>
-            <button type="button" class="fchip" data-target="set-dir-title">Папка с данными</button>
-            <button type="button" class="fchip" data-target="set-backup-title">Резервная копия</button>
-            <button type="button" class="fchip" data-target="set-update-title">Обновление<span class="set-nav-dot" id="set-nav-dot" hidden></span></button>
-            <button type="button" class="fchip" data-target="set-keys-title">Горячие клавиши</button>
-          </nav>
+      </div>
+    </main>
+  </div>
+</div>
+
+<dialog class="settings-dlg" id="settings-dlg" aria-labelledby="settings-title" tabindex="-1">
+  <div class="sd-head">
+    <h2 id="settings-title">Настройки</h2>
+    <button type="button" class="sd-close" id="settings-close" aria-label="Закрыть настройки" title="Закрыть (Esc)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="sd-body">
+    <nav class="sd-nav" aria-label="Разделы настроек">
+      <button type="button" class="sd-item" data-sec="keys"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M16 7l2.5 2.5M14 9l2 2"/></svg><span>ChatGPT и Claude</span></button>
+      <button type="button" class="sd-item" data-sec="assistant"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8.5 10.5h.01M12 10.5h.01M15.5 10.5h.01"/></svg><span>Ассистент</span></button>
+      <button type="button" class="sd-item" data-sec="data"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Папка с данными</span></button>
+      <button type="button" class="sd-item" data-sec="backup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v5c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12v5c0 1.7 3.6 3 8 3s8-1.3 8-3v-5"/></svg><span>Резервная копия</span></button>
+      <button type="button" class="sd-item" data-sec="update"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4.5h-4.5"/></svg><span>Обновление</span><span class="set-nav-dot" id="set-nav-dot" hidden></span></button>
+      <button type="button" class="sd-item" data-sec="shortcuts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg><span>Горячие клавиши</span></button>
+    </nav>
+    <div class="sd-main" id="settings-main">
+      <div class="sd-sec" data-sec="keys" hidden>
           <section class="card set-card set-provider" data-provider="openai" aria-labelledby="set-openai-title">
             <div class="set-head">
               <h2 class="card-title" id="set-openai-title">ChatGPT</h2>
@@ -474,6 +480,8 @@
               </form>
             </div>
           </section>
+      </div>
+      <div class="sd-sec" data-sec="assistant" hidden>
           <section class="card set-card" aria-labelledby="set-as-title">
             <h2 class="card-title" id="set-as-title">Ассистент</h2>
             <p class="set-text">Ключи хранятся только на этом компьютере, зашифрованными средствами Windows, отдельно от папки с промтами. В файл с промтами и в другие программы они не попадают. Пока нет ни одного ключа, в «Ассистенте» отвечает заглушка. Модель и глубину размышлений выбирают кнопкой «Модель» в поле ввода.</p>
@@ -486,6 +494,8 @@
               <span><b>Уведомлять об ответах ассистента</b><span class="muted">Когда окно свёрнуто или закрыто другим окном, Windows покажет уведомление, а кнопка программы на панели задач замигает.</span></span>
             </label>
           </section>
+      </div>
+      <div class="sd-sec" data-sec="data" hidden>
           <section class="card set-card" aria-labelledby="set-dir-title">
             <h2 class="card-title" id="set-dir-title">Папка с данными</h2>
             <p class="set-text">Здесь лежат промты и их файлы, разговоры с ассистентом, календарь и статистика.</p>
@@ -494,6 +504,8 @@
               <button type="button" class="btn btn-ghost" id="set-dir-change">Выбрать другую папку…</button>
             </div>
           </section>
+      </div>
+      <div class="sd-sec" data-sec="backup" hidden>
           <section class="card set-card" aria-labelledby="set-backup-title">
             <h2 class="card-title" id="set-backup-title">Резервная копия</h2>
             <p class="set-text">Один файл <b>.snowball</b> со всем, что есть в программе: промты с картинками и видео, разговоры с ассистентом, календарь, статистика, профиль и тема. Пригодится, чтобы перенести всё на другой компьютер или поставить программу заново. Ключей ChatGPT и Claude в копии нет, их вводят заново.</p>
@@ -502,7 +514,10 @@
               <button type="button" class="btn btn-primary" id="set-backup-save">Сохранить все данные в файл…</button>
               <button type="button" class="btn btn-ghost" id="set-backup-open">Восстановить из файла…</button>
             </div>
+            <p class="form-msg set-backup-msg" id="set-backup-msg" role="status"></p>
           </section>
+      </div>
+      <div class="sd-sec" data-sec="update" hidden>
           <section class="card set-card" id="set-update" aria-labelledby="set-update-title">
             <div class="set-head">
               <h2 class="card-title" id="set-update-title">Обновление</h2>
@@ -521,6 +536,8 @@
             </details>
             <p class="files-hint">Программа сама проверяет обновления при запуске и раз в 4 часа, но ничего не скачивает без вашей кнопки. <a href="https://github.com/zaklex0/snowball-ai/releases" target="_blank" rel="noopener">Все версии на GitHub</a></p>
           </section>
+      </div>
+      <div class="sd-sec" data-sec="shortcuts" hidden>
           <section class="card set-card" aria-labelledby="set-keys-title">
             <h2 class="card-title" id="set-keys-title">Горячие клавиши</h2>
             <dl class="shortcuts">
@@ -535,11 +552,10 @@
               <dt>Перетащить .snowprompt или .snowball</dt><dd>В любое место окна — загрузить промты или резервную копию</dd>
             </dl>
           </section>
-        </section>
       </div>
-    </main>
+    </div>
   </div>
-</div>
+</dialog>
 
 <dialog class="cal-dialog" id="cal-dialog" aria-labelledby="cal-form-title">
   <form class="cal-form" id="cal-form" novalidate>
