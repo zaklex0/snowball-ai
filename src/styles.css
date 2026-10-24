@@ -801,8 +801,8 @@ h1 .brand { color: var(--accent-strong); }
 }
 .composer:focus-within { border-color: var(--accent-strong); box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
 .composer textarea {
-  min-width: 0; max-height: 220px; margin: 0; padding: 3px 7px 3px 0; border: 0; background: transparent; resize: none; outline: none;
-  font-size: 15px; line-height: 1.5; overflow-y: auto;
+  min-width: 0; min-height: 30px; max-height: 220px; margin: 0; padding: 3px 7px 3px 0; border: 0; background: transparent; resize: none; outline: none;
+  font-size: 15px; line-height: 1.5; overflow-y: auto; caret-color: var(--accent-strong);
 }
 .composer-bar { display: flex; align-items: center; gap: 8px; margin-left: -8px; }
 .composer-bar .spacer { flex: 1; }

@@ -944,7 +944,7 @@
     els.scroller.scrollTop = 0;
     render();
     saveTabs();
-    if (t.kind === "assistant") { scrollChat(); els.chatInput.focus({ preventScroll: true }); }
+    if (t.kind === "assistant") { growInput(); scrollChat(); els.chatInput.focus({ preventScroll: true }); }
   }
   // Closing a tab with an answer being written stops the answer, like closing a page in a browser.
   function closeTab(i) {
@@ -2839,8 +2839,11 @@
     addChatImages(cd.files);
   });
 
+  // The box grows with the text. While the LLM page is hidden its height cannot be measured (it would be 0),
+  // so then it keeps its usual one-line height and is measured again when the page shows.
   function growInput() {
     var t = els.chatInput;
+    if (t.offsetParent === null) { t.style.height = ""; updateCostHint(); return; }
     t.style.height = "auto";
     t.style.height = Math.min(t.scrollHeight + 2, 220) + "px";
     updateCostHint();
