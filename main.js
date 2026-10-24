@@ -391,7 +391,7 @@ function setupUpdates() {
     downloading = false;
     updateReady = i.version;
     manualCheck = false;
-    sendUpdate({ kind: 'ready', version: i.version, notes: updateNotes });
+    sendUpdate({ kind: 'ready', version: i.version, notes: updateNotes, size: updateSize, total: lastProgress.total });
   });
   updater.on('error', (e) => {
     console.error('update', e);
@@ -563,7 +563,7 @@ handle('update-state', async () => {
   const current = app.getVersion();
   const state = { ok: true, packaged: !!updater, current, currentNotes: changelogFor(current), whatsNew };
   whatsNew = null;
-  if (updateReady) Object.assign(state, { status: 'ready', version: updateReady, notes: updateNotes, size: updateSize });
+  if (updateReady) Object.assign(state, { status: 'ready', version: updateReady, notes: updateNotes, size: updateSize, total: lastProgress.total });
   else if (downloading) Object.assign(state, { status: 'progress', version: updateFound, notes: updateNotes, size: updateSize, percent: Math.max(0, lastPercent), transferred: lastProgress.transferred, total: lastProgress.total });
   else if (updateFound) Object.assign(state, { status: 'available', version: updateFound, notes: updateNotes, size: updateSize });
   return state;
@@ -571,7 +571,7 @@ handle('update-state', async () => {
 
 handle('check-updates', async () => {
   if (!updater) return { ok: false, error: 'Обновления проверяются только в установленной программе.' };
-  if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady, notes: updateNotes }); return { ok: true }; }
+  if (updateReady) { sendUpdate({ kind: 'ready', version: updateReady, notes: updateNotes, size: updateSize, total: lastProgress.total }); return { ok: true }; }
   if (downloading) { sendUpdate({ kind: 'progress', version: updateFound, percent: Math.max(0, lastPercent), size: updateSize, transferred: lastProgress.transferred, total: lastProgress.total }); return { ok: true }; }
   manualCheck = true;
   checkUpdates();

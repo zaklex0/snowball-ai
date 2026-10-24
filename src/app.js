@@ -1687,7 +1687,9 @@
     var mb = bytes / (1024 * 1024);
     return (mb >= 10 ? Math.round(mb) : mb.toFixed(1).replace(".", ",")) + " МБ";
   }
-  function sizeNote() { return upd.size ? " Размер обновления — " + fmtMB(upd.size) + "." : ""; }
+  // The full installer (size) is big, but the program downloads only what changed since your version (total in progress),
+  // usually much less. So before the download it says so, and after it — how much really came down.
+  function sizeNote() { return upd.size ? " Полная версия весит " + fmtMB(upd.size) + ", но скачается только то, что изменилось, — обычно намного меньше." : ""; }
   function updButton(label, primary, onclick, disabled) {
     return h("button", { type: "button", class: "btn " + (primary ? "btn-primary" : "btn-ghost"), disabled: !!disabled, onclick: onclick }, label);
   }
@@ -1707,7 +1709,7 @@
       line = "Не получилось проверить обновления. Проверьте интернет и попробуйте ещё раз.";
       actions.push(updButton("Попробовать ещё раз", true, checkForUpdates));
     } else if (s === "available") {
-      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + "." + sizeNote() + " Скачивание займёт около минуты, а установится она после перезапуска.";
+      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + "." + sizeNote() + " Установится она после перезапуска.";
       actions.push(updButton("Скачать обновление", true, startDownload));
     } else if (s === "progress") {
       var total = upd.total || upd.size;
@@ -1716,7 +1718,7 @@
       line = "Не получилось скачать версию " + v + ". Проверьте интернет и попробуйте ещё раз.";
       actions.push(updButton("Попробовать ещё раз", true, startDownload));
     } else if (s === "ready") {
-      line = "Версия " + v + " скачана" + (upd.size ? " (" + fmtMB(upd.size) + ")" : "") + ". Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.";
+      line = "Версия " + v + " готова к установке" + (upd.total ? " (скачано " + fmtMB(upd.total) + ")" : "") + ". Перезапустите программу, чтобы её установить. Если не сейчас, она установится сама, когда вы закроете программу.";
       actions.push(updButton("Перезапустить и обновить", true, installNow));
     } else {
       line = "У вас версия " + upd.current + ".";
@@ -1727,7 +1729,7 @@
     els.updActions.hidden = !actions.length;
     els.updBar.hidden = s !== "progress";
     els.updBarFill.style.width = upd.percent + "%";
-    els.updBadge.textContent = found ? "Есть новая версия" + (upd.size ? " · " + fmtMB(upd.size) : "") : upd.current ? "Версия " + upd.current : "";
+    els.updBadge.textContent = found ? "Есть новая версия" : upd.current ? "Версия " + upd.current : "";
     els.updBadge.className = "set-status" + (found ? " new" : "");
     els.setNavDot.hidden = !found;
     els.updNew.hidden = !found;
@@ -1786,7 +1788,7 @@
       upd.status = "available";
       // The background check asks once per version; the button in Settings shows it right there.
       if (away && !u.manual && upd.dismissed !== u.version) {
-        showBanner("Вышла новая версия Snowball.ai " + u.version + (upd.size ? " (" + fmtMB(upd.size) + ")" : "") + ". Посмотрите, что в ней нового, и скачайте её в «Настройках».", {
+        showBanner("Вышла новая версия Snowball.ai " + u.version + ". Посмотрите, что в ней нового, и скачайте её в «Настройках».", {
           label: "Что нового", close: "Не сейчас",
           onclick: function () { els.banner.hidden = true; openUpdates(false); },
           onclose: function () { upd.dismissed = u.version; }
