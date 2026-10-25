@@ -1549,15 +1549,16 @@
     else if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); openSub(document.activeElement.dataset.sub, true); }
     else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); var w = sub.closest(".sub-wrap"); openSub(null); w.querySelector(".has-sub").focus(); }
   });
-  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная" };
+  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная", zaklex: "Zaklex" };
   function markTheme(theme) {
     var t = theme || "system";
     els.menu.querySelectorAll("button[data-theme]").forEach(function (b) {
       b.setAttribute("aria-checked", String(b.dataset.theme === t));
     });
     els.themeValue.textContent = THEME_NAMES[t] || "";
-    // "Белая" and "Чёрная" are colour sets on top of the light and dark ones (styles.css, :root[data-theme]).
-    if (t === "white" || t === "black") document.documentElement.dataset.theme = t;
+    // "Белая" and "Чёрная" are colour sets on top of the light and dark ones (styles.css, :root[data-theme]);
+    // "Zaklex" sits on top of the dark one and also changes shapes and fonts (theme-zaklex.css).
+    if (t === "white" || t === "black" || t === "zaklex") document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
   }
   // Theme items keep the menu open, so the change can be seen right away.

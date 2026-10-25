@@ -16,7 +16,8 @@ const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 40;
 const SIDEBAR_WIDTH = 236;   // .side in styles.css; a window with one moved tab has no sidebar
 // "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
-const THEMES = ['system', 'light', 'dark', 'white', 'black'];
+// "zaklex" is a dark theme in the SHAPE MOTION style (src/theme-zaklex.css).
+const THEMES = ['system', 'light', 'dark', 'white', 'black', 'zaklex'];
 // What a tab on top of the window can show. LLM ("assistant") tabs may be open many times, one conversation each.
 const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'generator', 'stats'];
 
@@ -118,7 +119,7 @@ async function openStore() {
 function currentTheme() { return THEMES.includes(settings.theme) ? settings.theme : 'system'; }
 function applyTheme() {
   const t = currentTheme();
-  nativeTheme.themeSource = t === 'black' ? 'dark' : t === 'white' ? 'light' : t;
+  nativeTheme.themeSource = t === 'black' || t === 'zaklex' ? 'dark' : t === 'white' ? 'light' : t;
 }
 
 // Title bar and window background for each theme (the page draws the rest).
@@ -126,7 +127,8 @@ const WINDOW_COLORS = {
   light: { bar: '#F9E3D4', symbol: '#4B3128', bg: '#FCEEE4' },
   dark: { bar: '#2C201B', symbol: '#F5E6DC', bg: '#251B17' },
   white: { bar: '#F7F7F8', symbol: '#1F1F23', bg: '#FFFFFF' },
-  black: { bar: '#000000', symbol: '#F2F2F2', bg: '#000000' }
+  black: { bar: '#000000', symbol: '#F2F2F2', bg: '#000000' },
+  zaklex: { bar: '#14110F', symbol: '#F0E3CE', bg: '#14110F' }
 };
 function windowColors() {
   const t = currentTheme();

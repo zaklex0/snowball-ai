@@ -1,0 +1,423 @@
+/* Theme "Zaklex": the SHAPE MOTION style (mockups/shape-motion.html) on top of the dark theme.
+   Ink and paper only, hard cyan shadows without blur, square corners, halftone dots instead of fills,
+   poster headings (Roboto Condensed 900, caps) and mono caps labels (JetBrains Mono).
+   Only the brand palette: other shades come from ink or paper with transparency.
+   Small coloured text is avoided: the colour goes to a frame or a square, the text stays paper
+   (cyan on ink is the exception, it reads well).
+   Rules are wrapped in :where(...), so each keeps the weight of the plain rule it replaces in styles.css
+   and wins only because this file comes later; more specific rules there still win over these. */
+
+:root[data-theme="zaklex"] {
+  --zx-ink: #14110F; --zx-paper: #F0E3CE; --zx-red: #E1332B; --zx-deep: #8C1B14; --zx-teal: #3E7D77;
+  --zx-cyan: #17C7BC; --zx-brown: #8A5F3F; --zx-skin: #F2C79B; --zx-clay: #A87A5F;
+  --zx-dots: radial-gradient(rgba(240, 227, 206, .07) 1.5px, transparent 1.8px);
+
+  --bg: #14110F; --glow: #14110F; --titlebar: #14110F; --surface: #14110F;
+  --surface-2: rgba(240, 227, 206, .08); --line: rgba(240, 227, 206, .18);
+  --ink: #F0E3CE; --ink-soft: rgba(240, 227, 206, .6);
+  --accent: #F0E3CE; --accent-hover: #F2C79B; --accent-ink: #14110F; --accent-strong: #17C7BC;
+  --row-hover: rgba(240, 227, 206, .05); --drop: rgba(240, 227, 206, .14); --danger: #E1332B;
+  --ok-bg: rgba(240, 227, 206, .1); --ok-ink: #17C7BC;
+  --toast-bg: #F0E3CE; --toast-ink: #14110F; --scroll-thumb: rgba(240, 227, 206, .22);
+  --shadow: 6px 6px 0 #17C7BC;
+  --pop-shadow: 6px 6px 0 #17C7BC;
+
+  --cat-static-bg: transparent; --cat-static-ink: #F0E3CE; --cat-static-dot: #17C7BC;
+  --cat-video-bg:  transparent; --cat-video-ink:  #F0E3CE; --cat-video-dot:  #F2C79B;
+  --cat-system-bg: transparent; --cat-system-ink: #F0E3CE; --cat-system-dot: #E1332B;
+  --cat-other-bg:  transparent; --cat-other-ink:  #F0E3CE; --cat-other-dot:  #A87A5F;
+
+  /* Kinds of events: a task is a hollow square, the rest come from the palette */
+  --ev-task: #A87A5F;  --ev-task-bg: rgba(240, 227, 206, .06);
+  --ev-meet: #17C7BC;  --ev-meet-bg: rgba(240, 227, 206, .06);
+  --ev-call: #F2C79B;  --ev-call-bg: rgba(240, 227, 206, .06);
+  --ev-shoot: #E1332B; --ev-shoot-bg: rgba(240, 227, 206, .06);
+  --ev-edit: #F0E3CE;  --ev-edit-bg: rgba(240, 227, 206, .06);
+  /* Busy days are halftone dots (below), weekends only change the colour of the number */
+  --busy-1: transparent; --busy-2: transparent; --busy-3: transparent; --off-bg: transparent;
+
+  --font-display: "Roboto Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Onest", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+
+/* ---------- shapes: square corners everywhere, round only the avatar (the brand medallion) ---------- */
+:root[data-theme="zaklex"] *, :root[data-theme="zaklex"] *::before, :root[data-theme="zaklex"] *::after { border-radius: 0 !important; }
+:root[data-theme="zaklex"] .avatar, :root[data-theme="zaklex"] .avatar img { border-radius: 50% !important; }
+:where(html[data-theme="zaklex"]) ::selection { background: var(--zx-cyan); color: var(--zx-ink); }
+
+/* Halftone on the page; cards are flat ink and hide it */
+:where(html[data-theme="zaklex"]) .scroller { background: var(--zx-dots) 0 0 / 10px 10px, var(--bg); background-attachment: local; }
+
+/* Blinking "now" without glow: the ring switches on and off */
+@keyframes zx-now { 50% { box-shadow: inset 0 0 0 2px var(--c); } }
+@keyframes zx-now-out { 0%, 100% { box-shadow: 0 0 0 2px var(--c); } 50% { box-shadow: 0 0 0 2px transparent; } }
+
+/* ---------- type ---------- */
+:where(html[data-theme="zaklex"]) h1 { font-weight: 900; text-transform: uppercase; letter-spacing: -.025em; line-height: .9; font-size: clamp(36px, 5vw, 56px); }
+:where(html[data-theme="zaklex"]) h1 .brand { color: var(--zx-red); }
+:where(html[data-theme="zaklex"]) :is(.editor h2, .state h2, .chat-empty h2, .card-title, .sd-head h2, .cal-dialog h2, .profile-dlg h2,
+  .cal-month-title, .cal-day-title, .stats-name, .home-tile b, .gen-name) {
+  font-weight: 900; text-transform: uppercase; letter-spacing: -.01em; line-height: 1;
+}
+:where(html[data-theme="zaklex"]) :is(.editor h2, .state h2, .chat-empty h2, .card-title, .cal-dialog h2, .profile-dlg h2, .cal-day-title) { font-size: 24px; }
+:where(html[data-theme="zaklex"]) .sd-head h2 { font-size: 24px; }
+:where(html[data-theme="zaklex"]) .cal-month-title { font-size: 32px; }
+:where(html[data-theme="zaklex"]) .stats-name { font-size: 32px; }
+/* Mono caps labels */
+:where(html[data-theme="zaklex"]) :is(.eyebrow, .side-h, .field-label, .menu-label, .table th, .mm-label, .ch-title, .tcol-pop-h, .tp-block-h,
+  .cal-wd, .cw-day .wd, .alpha, .tab-t, .nav-item, .btn, .btn-mini, .fchip, .model-btn, .tview button, .tp-opt, .gen-soon, .set-status,
+  .tcol-name, .tmark, .sd-item, .qa-title, .up-day, .tgroup-h, .tnote-undo, .utoast-btn, .tbar-model, .mm-badge, .chip) {
+  font-family: var(--font-mono); font-weight: 700; text-transform: uppercase; letter-spacing: .16em; font-size: 11px;
+}
+:where(html[data-theme="zaklex"]) .tp-block-h .tmark { letter-spacing: .16em; }
+:where(html[data-theme="zaklex"]) .alpha-big { font-size: 11px; }
+:where(html[data-theme="zaklex"]) :is(.timer-time, .up-ev .tm, .cal-ev .tm, .cw-t, .cal-hour .t, .chars) { font-family: var(--font-mono); font-weight: 700; letter-spacing: 0; }
+:where(html[data-theme="zaklex"]) .timer-time { font-size: 17px; }
+
+/* ---------- title bar and tabs ---------- */
+:where(html[data-theme="zaklex"]) .titlebar { border-bottom: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tab { margin-bottom: -3px; border-width: 3px; }
+:where(html[data-theme="zaklex"]) .tab:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .tab.on { border-color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) :is(.tab-busy, .tab-unread) { background: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tab.drop-before { box-shadow: inset 3px 0 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tab.drop-after { box-shadow: inset -3px 0 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) :is(.tab-ghost, .tab-slot) { border: 3px dashed var(--zx-cyan); }
+
+/* ---------- left panel ---------- */
+:where(html[data-theme="zaklex"]) .side { border-right: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .side-head span { font-family: "Unbounded", sans-serif; font-weight: 800; text-transform: uppercase; letter-spacing: -.02em; font-size: 14px; }
+:where(html[data-theme="zaklex"]) .nav-icon:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .nav-icon[aria-current="page"] { background: var(--zx-paper); color: var(--zx-ink); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .nav-badge { background: var(--zx-cyan); color: var(--zx-ink); font-family: var(--font-mono); font-weight: 700; font-size: 11px; box-shadow: none; }
+:where(html[data-theme="zaklex"]) .nav-item:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .nav-item[aria-current="page"] { background: var(--zx-paper); color: var(--zx-ink); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .nav-item .soon { background: none; border: 2px solid var(--line); }
+:where(html[data-theme="zaklex"]) .up-ev:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .up-ev i { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .up-ev.now { background: var(--surface-2); animation: zx-now 1.6s steps(2) infinite; }
+/* A task is a hollow square, so it is not mixed up with other kinds */
+:where(html[data-theme="zaklex"]) :is(.up-ev.ev-task i, .cal-cell .ev.ev-task i, .ev-task > span::before) { background: transparent; box-shadow: inset 0 0 0 2px var(--zx-paper); }
+:where(html[data-theme="zaklex"]) :is(.timer-row.running, .timer-row.paused) { background: none; box-shadow: inset 0 0 0 3px var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .timer-fill { height: 4px; background: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) :is(.timer-ico:hover, .timer-row.running .timer-ico:hover, .timer-row.paused .timer-ico:hover) { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .timer-pop { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .timer-presets button { border: 2px solid var(--line); font-family: var(--font-mono); font-weight: 700; }
+:where(html[data-theme="zaklex"]) .timer-presets button:hover { border-color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .qa-btn { background: var(--zx-red); color: var(--zx-ink); border: 3px solid var(--zx-ink); box-shadow: 4px 4px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) :is(.qa-btn:hover, .qa-btn[aria-expanded="true"]) { background: var(--zx-red); transform: translate(4px, 4px); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .profile-btn { background: none; border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) :is(.profile-btn:hover, .profile-btn[aria-expanded="true"]) { background: var(--surface-2); border-color: var(--zx-paper); }
+/* The avatar is the brand medallion: a red circle with a paper ring */
+:where(html[data-theme="zaklex"]) .avatar { background: var(--zx-red); color: var(--zx-paper); border: 3px solid var(--zx-paper); font-family: var(--font-display); font-weight: 900; }
+:where(html[data-theme="zaklex"]) .avatar-xl { border-width: 5px; }
+
+/* ---------- buttons ---------- */
+:where(html[data-theme="zaklex"]) .btn { border: 3px solid var(--zx-paper); padding: 10px 16px; }
+:where(html[data-theme="zaklex"]) .btn-primary { background: var(--zx-paper); color: var(--zx-ink); box-shadow: 4px 4px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .btn-primary:hover { background: var(--zx-skin); border-color: var(--zx-skin); }
+:where(html[data-theme="zaklex"]) .btn-primary:active { transform: translate(4px, 4px); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .btn-primary:disabled:hover { background: var(--zx-paper); border-color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .btn-ghost { border-color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .btn-ghost:active { transform: translate(2px, 2px); }
+:where(html[data-theme="zaklex"]) .btn-danger { background: var(--zx-deep); border-color: var(--zx-deep); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .btn-mini { border: 2px solid var(--line); background: none; padding: 6px 10px; }
+:where(html[data-theme="zaklex"]) .btn-mini:hover { background: var(--surface-2); border-color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .copy { background: var(--zx-paper); border-color: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .copy:hover { background: var(--zx-skin); border-color: var(--zx-skin); }
+:where(html[data-theme="zaklex"]) .copy.done { background: none; border-color: var(--zx-cyan); color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .alpha { background: none; color: var(--zx-cyan); box-shadow: inset 0 0 0 2px var(--zx-cyan); padding: 2px 8px; }
+
+/* ---------- menus and pop-ups ---------- */
+:where(html[data-theme="zaklex"]) :is(.menu, .model-menu, .tcol-pop) { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub, .tcol-pop button:hover, .tcol-pop button:focus-visible) { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub) :is(svg, .sub-value, .sub-chev, .tick) { color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) :is(.menu hr, .model-menu hr) { border-top-width: 3px; }
+:where(html[data-theme="zaklex"]) .menu-head { border-bottom-width: 3px; }
+:where(html[data-theme="zaklex"]) .theme-swatch { border: 2px solid var(--line); }
+:where(html[data-theme="zaklex"]) .tcol-pop button.danger:hover { color: var(--zx-deep); }
+.sw-zaklex { background: linear-gradient(135deg, #14110F 50%, #17C7BC 50%); }
+:where(html[data-theme="zaklex"]) :is(.settings-dlg, .cal-dialog, .profile-dlg, .viewer) { border: 3px solid var(--zx-paper); box-shadow: 10px 10px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) :is(.settings-dlg, .cal-dialog, .profile-dlg)::backdrop { background: rgba(20, 17, 15, .72); }
+:where(html[data-theme="zaklex"]) .viewer::backdrop { background: rgba(20, 17, 15, .85); }
+:where(html[data-theme="zaklex"]) .viewer-nav { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .toast { box-shadow: 4px 4px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .banner { border: 3px solid var(--zx-paper); border-left: 8px solid var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .banner-bar { height: 8px; }
+:where(html[data-theme="zaklex"]) .banner .btn-mini { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .test-note { background: none; border: 3px solid var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .test-note svg { color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .foot kbd, :where(html[data-theme="zaklex"]) .composer-hint kbd, :where(html[data-theme="zaklex"]) .shortcuts kbd { font-family: var(--font-mono); border: 2px solid var(--line); }
+
+/* ---------- fields ---------- */
+:where(html[data-theme="zaklex"]) :is(.input, .textarea) { border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) :is(.input:focus, .textarea:focus) { border-color: var(--zx-cyan); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .search .input { background: var(--bg); }
+:where(html[data-theme="zaklex"]) .cat-option span { border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .cat-option span::before { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .cat-option input:checked + span { background: var(--surface-2); border-color: var(--dot); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .fchip { border: 3px solid var(--line); background: none; padding: 8px 12px; }
+:where(html[data-theme="zaklex"]) .fchip .dot { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .fchip[aria-pressed="true"] { background: var(--zx-paper); border-color: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .fchip[class*="cat-"][aria-pressed="true"] { background: var(--surface-2); border-color: var(--dot); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) :is(.tile, .att-thumb) { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tile:hover { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tile-add { border: 3px dashed var(--line); }
+:where(html[data-theme="zaklex"]) .tile-remove { border: 2px solid var(--zx-paper); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .tile .ext { box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .tile-new::after { font-family: var(--font-mono); }
+
+/* ---------- cards ---------- */
+:where(html[data-theme="zaklex"]) :is(.card, .editor, .chat-empty, .home-tile) { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .editor.inline { border-width: 3px; }
+:where(html[data-theme="zaklex"]) .home-tile:hover { transform: translate(-2px, -2px); box-shadow: 8px 8px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .home-tile .ico { background: none; box-shadow: inset 0 0 0 3px var(--line); color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .home-tile b { font-size: 26px; }
+:where(html[data-theme="zaklex"]) .state .dots i { width: 12px; height: 12px; }
+
+/* ---------- prompts table ---------- */
+:where(html[data-theme="zaklex"]) .table th { background: none; border-bottom: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .table td { border-bottom: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .table tbody tr.editing td { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .name { font-family: var(--font-display); font-weight: 700; font-size: 19px; line-height: 1.05; text-transform: uppercase; letter-spacing: -.01em; }
+/* Type of a prompt: the colour is the frame, the text stays paper */
+:where(html[data-theme="zaklex"]) .chip { background: none; color: var(--zx-paper); box-shadow: inset 0 0 0 3px var(--dot); padding: 6px 10px; }
+:where(html[data-theme="zaklex"]) .chip::before { display: none; }
+:where(html[data-theme="zaklex"]) .prompt-text { background: var(--bg); box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .prompt.can-toggle .prompt-text.is-collapsed::after { background: linear-gradient(to bottom, transparent, var(--bg) 85%); left: 2px; right: 2px; bottom: 2px; }
+/* The comment: a deep red plate with paper text, as the brand book makes red blocks with text */
+:where(html[data-theme="zaklex"]) .prompt-note { background: var(--zx-deep); color: var(--zx-paper); border-left: 0; }
+:where(html[data-theme="zaklex"]) .prompt-note svg { color: var(--zx-skin); }
+:where(html[data-theme="zaklex"]) .prompt-note.can-toggle:hover { background: var(--zx-deep); }
+:where(html[data-theme="zaklex"]) .foot code { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+
+/* ---------- statistics ---------- */
+:where(html[data-theme="zaklex"]) .metric { background: none; box-shadow: inset 0 0 0 3px var(--line); padding: 16px; }
+:where(html[data-theme="zaklex"]) .metric .v { font-weight: 900; font-size: 40px; line-height: 1; }
+/* Activity: one dot a day, the more actions the bigger the dot (halftone) */
+:where(html[data-theme="zaklex"]) .heat .d { background: radial-gradient(circle, var(--line) 1.2px, transparent 1.8px); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .legend i { background: radial-gradient(circle, var(--line) 1.2px, transparent 1.8px); box-shadow: none; }
+:where(html[data-theme="zaklex"]) :is(.heat .d.l0, .legend i.l0) { box-shadow: none; }
+:root[data-theme="zaklex"] :is(.heat .d, .legend i).l1 { background: radial-gradient(circle, var(--zx-clay) 32%, transparent 36%) !important; }
+:root[data-theme="zaklex"] :is(.heat .d, .legend i).l2 { background: radial-gradient(circle, var(--zx-paper) 40%, transparent 44%) !important; }
+:root[data-theme="zaklex"] :is(.heat .d, .legend i).l3 { background: radial-gradient(circle, var(--zx-paper) 52%, transparent 56%) !important; }
+:root[data-theme="zaklex"] :is(.heat .d, .legend i).l4 { background: radial-gradient(circle, var(--zx-cyan) 62%, transparent 66%) !important; }
+:where(html[data-theme="zaklex"]) .heat .d:hover { outline: 2px solid var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .top-bar { height: 24px; background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .top-fill { font-family: var(--font-mono); font-weight: 700; }
+:where(html[data-theme="zaklex"]) .top-row:first-child .top-fill { background: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) :is(.top-row:nth-child(n+2) .top-fill) { background: rgba(240, 227, 206, .7); }
+:where(html[data-theme="zaklex"]) :is(.top-row:nth-child(n+4) .top-fill) { background: rgba(240, 227, 206, .45); }
+:where(html[data-theme="zaklex"]) .bchip { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+
+/* ---------- LLM ---------- */
+:where(html[data-theme="zaklex"]) .bubble { background: var(--zx-deep); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .bot-mark { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .msg-main { background: none; border: 0; padding: 4px 0; }
+:where(html[data-theme="zaklex"]) .rt code { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .rt-code pre { background: var(--bg); box-shadow: inset 0 0 0 3px var(--zx-paper); padding: 12px 16px; }
+:where(html[data-theme="zaklex"]) .caret { background: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .typing i { background: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .act-card { background: var(--bg); border: 3px solid var(--zx-paper); box-shadow: 6px 6px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .act-card.settled { border-color: var(--line); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .act-head svg { color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .act-text { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .act-done { box-shadow: inset 0 0 0 2px var(--zx-cyan); background: none; }
+:where(html[data-theme="zaklex"]) .act-done.off { box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .act-done.bad { box-shadow: inset 0 0 0 2px var(--zx-red); background: none; color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .composer { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .composer:focus-within { border-color: var(--zx-cyan); box-shadow: var(--shadow); }
+:where(html[data-theme="zaklex"]) .model-btn { border: 2px solid var(--line); padding: 6px 10px; }
+:where(html[data-theme="zaklex"]) :is(.model-btn:hover, .model-btn[aria-expanded="true"]) { border-color: var(--zx-paper); background: none; }
+:where(html[data-theme="zaklex"]) :is(.chat-cost, .msg-cost) { font-family: var(--font-mono); letter-spacing: 0; }
+:where(html[data-theme="zaklex"]) .mm-badge { background: none; border: 2px solid var(--line); }
+:where(html[data-theme="zaklex"]) .mm-warn { color: var(--zx-cyan); }
+/* One send button everywhere: a red square with an ink arrow */
+:where(html[data-theme="zaklex"]) :is(.send-btn, .tbar-send) { width: 40px; height: 40px; background: var(--zx-red); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) :is(.send-btn:hover, .tbar-send:hover) { background: var(--zx-red); box-shadow: inset 0 0 0 3px var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .tbar.busy .tbar-send { background: var(--zx-red); }
+:where(html[data-theme="zaklex"]) .att-btn:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .att-x { background: rgba(20, 17, 15, .8); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .bubble-img img { box-shadow: inset 0 0 0 2px var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .ch-open:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .ch-open[aria-current="true"] { background: var(--zx-paper); color: var(--zx-ink); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .ch-open[aria-current="true"] .ch-when { color: rgba(20, 17, 15, .7); }
+:where(html[data-theme="zaklex"]) .ch-open[aria-current="true"] + .ch-del { color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .chat-history { border-width: 3px; }
+
+/* ---------- the small assistant window ---------- */
+:where(html[data-theme="zaklex"]) .qa { border: 3px solid var(--zx-paper); box-shadow: 8px 8px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) :is(.qa-head, .qa-form) { border-color: var(--zx-paper); border-width: 3px; }
+:where(html[data-theme="zaklex"]) .qa-mark { background: var(--zx-red); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .qa-model { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .16em; font-size: 11px; }
+
+/* ---------- settings ---------- */
+:where(html[data-theme="zaklex"]) .sd-head { border-bottom: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .sd-nav { border-right: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .sd-item { padding: 10px 12px; }
+:where(html[data-theme="zaklex"]) .sd-item[aria-current="page"] { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .sd-sec > .card + .card { border-top: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .set-nav-dot { background: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .set-status { background: none; box-shadow: inset 0 0 0 2px var(--line); padding: 4px 10px; }
+:where(html[data-theme="zaklex"]) .set-status.on { background: none; color: var(--zx-cyan); box-shadow: inset 0 0 0 2px var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .set-status.new { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .set-spend { border-top-width: 3px; }
+:where(html[data-theme="zaklex"]) .set-dir-path { border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .set-dir-path:hover { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .upd-bar { height: 8px; }
+:where(html[data-theme="zaklex"]) .upd-notes { background: none; box-shadow: inset 0 0 0 3px var(--line); }
+
+/* ---------- calendar ---------- */
+:where(html[data-theme="zaklex"]) .cal-icon-btn { border: 3px solid var(--zx-paper); background: none; }
+:where(html[data-theme="zaklex"]) .cal-cell { background: var(--bg); border: 2px solid var(--line); }
+:where(html[data-theme="zaklex"]) .cal-cell:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .cal-cell .num { font-family: var(--font-display); font-weight: 900; font-size: 20px; line-height: 1; }
+:where(html[data-theme="zaklex"]) .cal-cell .ev i { width: 8px; height: 8px; }
+/* Text in a cell sits on an ink strip, so the halftone around it does not get in the way */
+:where(html[data-theme="zaklex"]) :is(.cal-cell .num, .cal-cell .ev, .cal-cell .more, .cal-cell .hol) { justify-self: start; max-width: 100%; padding: 0 4px; background: var(--bg); }
+:where(html[data-theme="zaklex"]) .cal-cell .num { padding: 2px 4px; margin: -2px 0 0 -2px; }
+/* Weekends and holidays: only the big number is red */
+:where(html[data-theme="zaklex"]) :is(.cal-cell.off .num, .cw-day.off .num) { color: var(--zx-red); }
+:where(html[data-theme="zaklex"]) :is(.cal-wd.off, .cw-day.off .wd, .cal-cell .hol, .cw-day .hol) { color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .cal-cell.off { border-color: var(--line); }
+:where(html[data-theme="zaklex"]) :is(.cal-cell.off.b1, .cal-cell.off.b2, .cal-cell.off.b3) { border: 2px solid var(--line); }
+/* Busy days: the more events, the bigger and denser the dots */
+:where(html[data-theme="zaklex"]) :is(.cal-cell.b1, .cal-cell.off.b1, .cal-legend .lg-b1) { background: radial-gradient(rgba(240, 227, 206, .45) 1px, transparent 1.4px) 0 0 / 8px 8px, var(--bg); }
+:where(html[data-theme="zaklex"]) :is(.cal-cell.b2, .cal-cell.off.b2, .cal-legend .lg-b2) { background: radial-gradient(rgba(240, 227, 206, .45) 1.6px, transparent 2px) 0 0 / 8px 8px, var(--bg); }
+:where(html[data-theme="zaklex"]) :is(.cal-cell.b3, .cal-cell.off.b3, .cal-legend .lg-b3) { background: radial-gradient(rgba(240, 227, 206, .45) 2.3px, transparent 2.7px) 0 0 / 8px 8px, var(--bg); }
+:where(html[data-theme="zaklex"]) .cal-legend i { border: 2px solid var(--line); }
+:where(html[data-theme="zaklex"]) .cal-legend .lg-off { background: var(--bg); border-color: var(--zx-red); }
+:where(html[data-theme="zaklex"]) .cal-legend .lg-offbusy { background: radial-gradient(rgba(240, 227, 206, .45) 1.6px, transparent 2px) 0 0 / 8px 8px, var(--bg); border: 2px solid var(--zx-red); }
+/* Today: the number turned inside out (paper on ink), a square instead of a circle */
+:where(html[data-theme="zaklex"]) :is(.cal-cell.today .num, .cw-day.today .num) { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .cal-cell.today .num { width: 28px; height: 28px; margin: -2px 0 0 -2px; }
+:where(html[data-theme="zaklex"]) .cal-cell.sel { outline: 3px solid var(--zx-cyan); outline-offset: 2px; }
+:where(html[data-theme="zaklex"]) .cw-day .num { font-weight: 900; }
+:where(html[data-theme="zaklex"]) .cw-head { background: none; border-bottom: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .cal-hour { border-top-width: 3px; }
+:where(html[data-theme="zaklex"]) .cal-ev { border-left: 8px solid var(--c); }
+:where(html[data-theme="zaklex"]) .cal-ev.cw-ev { box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .cal-ev.now { animation: zx-now-out 1.6s steps(2) infinite; box-shadow: 0 0 0 2px var(--c); }
+:where(html[data-theme="zaklex"]) .cal-now { border-top: 3px solid var(--zx-red); }
+:where(html[data-theme="zaklex"]) .cal-now::before { left: -4px; top: -6px; width: 9px; height: 9px; background: var(--zx-red); }
+:where(html[data-theme="zaklex"]) .cal-badge { background: none; color: var(--zx-paper); box-shadow: inset 0 0 0 2px var(--zx-red); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .16em; font-size: 11px; }
+:where(html[data-theme="zaklex"]) .cal-form { border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .cal-kinds span { border: 3px solid var(--line); background: none; }
+:where(html[data-theme="zaklex"]) .cal-kinds span::before { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .cal-kinds input:checked + span { background: var(--surface-2); border-color: var(--c); box-shadow: none; }
+
+/* ---------- tasks ---------- */
+/* Columns: a thick bar of their colour on top, no fill; «Предстоит» is neutral (not started yet) */
+:where(html[data-theme="zaklex"]) .tcol { background: none; border: 0; border-top: 8px solid var(--c); padding: 12px 0 8px; }
+:where(html[data-theme="zaklex"]) .tc-todo { --c: rgba(240, 227, 206, .18); }
+:where(html[data-theme="zaklex"]) .tc-doing { --c: #17C7BC; }
+:where(html[data-theme="zaklex"]) .tc-done { --c: #F0E3CE; }
+:where(html[data-theme="zaklex"]) .tcc-0 { --c: #F2C79B; } :where(html[data-theme="zaklex"]) .tcc-1 { --c: #A87A5F; } :where(html[data-theme="zaklex"]) .tcc-2 { --c: #E1332B; }
+:where(html[data-theme="zaklex"]) .tcc-3 { --c: #8A5F3F; } :where(html[data-theme="zaklex"]) .tcc-4 { --c: #3E7D77; } :where(html[data-theme="zaklex"]) .tcc-5 { --c: #8C1B14; }
+:where(html[data-theme="zaklex"]) .tcol.drop { outline: 3px dashed var(--zx-cyan); outline-offset: 2px; }
+:where(html[data-theme="zaklex"]) .tcol-name { background: none; padding: 4px 0; }
+:where(html[data-theme="zaklex"]) .tcol-name i { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .tcol-more:hover, :where(html[data-theme="zaklex"]) .tcol-more[aria-expanded="true"] { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .tcol-in { border: 3px solid var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tcol-add { border: 3px dashed var(--line); }
+:where(html[data-theme="zaklex"]) .tcol-add:hover { border-color: var(--zx-cyan); background: none; }
+:where(html[data-theme="zaklex"]) .tarch-info { border: 3px dashed var(--line); }
+:where(html[data-theme="zaklex"]) .task { border: 3px solid var(--zx-paper); box-shadow: 4px 4px 0 var(--zx-cyan); gap: 8px 8px; padding: 12px; }
+:where(html[data-theme="zaklex"]) .task:hover { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .task.sel { border-color: var(--zx-cyan); box-shadow: 4px 4px 0 var(--zx-paper); }
+@keyframes zx-fresh { 0%, 40% { background: rgba(23, 199, 188, .25); } }
+:where(html[data-theme="zaklex"]) :is(.task.fresh, .trow.fresh) { animation: zx-fresh 1.6s ease-out; }
+/* Done tasks step back: no shadow, and the title is crossed out with a thick red line */
+:where(html[data-theme="zaklex"]) .task.is-done { border-color: var(--line); box-shadow: none; }
+:where(html[data-theme="zaklex"]) :is(.task.is-done .task-t, .trow.is-done .task-t, .tp-sub.done span) { text-decoration-color: var(--zx-red); text-decoration-thickness: 3px; }
+:where(html[data-theme="zaklex"]) .tchk { border: 3px solid var(--zx-paper); background: none; }
+:where(html[data-theme="zaklex"]) .tchk:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .tchk.on { background: var(--zx-paper); border-color: var(--zx-paper); color: var(--zx-ink); }
+/* Marks: the colour is the frame, the text stays paper */
+:where(html[data-theme="zaklex"]) .tmark { background: none; color: var(--ink-soft); box-shadow: inset 0 0 0 2px var(--line); padding: 2px 8px; }
+:where(html[data-theme="zaklex"]) .tmark.p1 { background: none; color: var(--zx-paper); box-shadow: inset 0 0 0 2px var(--zx-skin); }
+:where(html[data-theme="zaklex"]) .tmark.p2 { background: none; color: var(--zx-paper); box-shadow: inset 0 0 0 2px var(--zx-red); }
+:where(html[data-theme="zaklex"]) .tmark.due.today { background: none; color: var(--zx-cyan); box-shadow: inset 0 0 0 2px var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tmark.due.late { background: none; color: var(--zx-paper); box-shadow: inset 0 0 0 2px var(--zx-red); }
+:where(html[data-theme="zaklex"]) :is(.tmark.tag::before, .tp-tag::before) { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .tg-0 { --tg: #17C7BC; } :where(html[data-theme="zaklex"]) .tg-1 { --tg: #F2C79B; } :where(html[data-theme="zaklex"]) .tg-2 { --tg: #A87A5F; }
+:where(html[data-theme="zaklex"]) .tg-3 { --tg: #F0E3CE; } :where(html[data-theme="zaklex"]) .tg-4 { --tg: #8A5F3F; } :where(html[data-theme="zaklex"]) .tg-5 { --tg: #E1332B; }
+:where(html[data-theme="zaklex"]) .tmini { height: 4px; background: var(--line); }
+:where(html[data-theme="zaklex"]) .tmini span { background: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .task-input { border: 3px solid var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .task-add:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .tview { padding: 0; border: 3px solid var(--zx-paper); background: none; }
+:where(html[data-theme="zaklex"]) .tview button { padding: 8px 16px; }
+:where(html[data-theme="zaklex"]) .tview button[aria-pressed="true"] { background: var(--zx-paper); color: var(--zx-ink); box-shadow: none; }
+:where(html[data-theme="zaklex"]) :is(.tsearch, .tsel) { border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .tsearch:focus-within { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .trow { border: 3px solid var(--line); }
+:where(html[data-theme="zaklex"]) .trow:hover { border-color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .trow.sel { border-color: var(--zx-cyan); box-shadow: none; }
+:where(html[data-theme="zaklex"]) .trow-col i { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .tgroup-h.late { color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tgroup-h.late::before { content: ""; width: 8px; height: 8px; background: var(--zx-red); }
+:where(html[data-theme="zaklex"]) .tlist-empty { border: 3px dashed var(--line); }
+/* The tasks assistant bar */
+:where(html[data-theme="zaklex"]) .tbar { border: 3px solid var(--zx-paper); padding: 8px 8px 8px 12px; }
+:where(html[data-theme="zaklex"]) .tbar:focus-within { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tbar-ico { background: none; color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tbar-model { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+/* Notifications of the tasks assistant */
+:where(html[data-theme="zaklex"]) .tnote { background: var(--bg); border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tnote.bad { background: var(--bg); border-color: var(--zx-red); }
+:where(html[data-theme="zaklex"]) .tnote-ico { background: none; color: var(--zx-cyan); box-shadow: inset 0 0 0 2px var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tnote.bad .tnote-ico { background: none; color: var(--zx-red); box-shadow: inset 0 0 0 2px var(--zx-red); }
+:where(html[data-theme="zaklex"]) .tnote::after { height: 4px; background: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tnote.bad::after { background: var(--zx-red); }
+:where(html[data-theme="zaklex"]) .tnote-cost { font-family: var(--font-mono); }
+:where(html[data-theme="zaklex"]) .tnote-undo { border: 3px solid var(--zx-paper); background: none; }
+:where(html[data-theme="zaklex"]) .tnote-undo:hover { background: var(--zx-paper); color: var(--zx-ink); }
+/* The task panel on the right */
+:where(html[data-theme="zaklex"]) .tpanel { border-left: 3px solid var(--zx-paper); box-shadow: none; }
+:where(html[data-theme="zaklex"]) :is(.tp-head, .tp-foot) { border-color: var(--line); border-width: 3px; }
+:where(html[data-theme="zaklex"]) .tp-col i { width: 8px; height: 8px; }
+:where(html[data-theme="zaklex"]) .tp-title { font-family: var(--font-display); font-weight: 700; text-transform: uppercase; font-size: 22px; line-height: 1.1; }
+:where(html[data-theme="zaklex"]) .tp-title:focus { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) :is(.tp-select, .tp-date) { border: 2px solid var(--line); }
+:where(html[data-theme="zaklex"]) .tp-opt { border: 2px solid var(--line); background: none; padding: 4px 10px; }
+:where(html[data-theme="zaklex"]) .tp-opt.on { background: var(--zx-paper); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .tp-opt.p1.on { background: var(--zx-skin); color: var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .tp-opt.p2.on { background: var(--zx-deep); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tp-tag { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) :is(.tp-tag-in, .tp-sub-in) { border: 2px dashed var(--line); }
+:where(html[data-theme="zaklex"]) :is(.tp-tag-in:focus, .tp-sub-in:focus) { border-color: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tp-sub:hover { background: var(--surface-2); }
+:where(html[data-theme="zaklex"]) .tl-step i { width: 8px; height: 8px; background: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tl-step.done i { background: var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tl-step:not(:last-child) i::after { left: 3px; top: 8px; width: 2px; background: var(--line); }
+:where(html[data-theme="zaklex"]) .tl-total { background: none; box-shadow: inset 0 0 0 2px var(--line); }
+:where(html[data-theme="zaklex"]) .utoast { box-shadow: 4px 4px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .utoast-btn { background: none; box-shadow: inset 0 0 0 2px var(--zx-ink); }
+:where(html[data-theme="zaklex"]) .utoast-btn:hover { background: var(--zx-ink); color: var(--zx-paper); }
+
+/* ---------- generator: two posters ---------- */
+:where(html[data-theme="zaklex"]) .gen-card { position: relative; overflow: hidden; min-height: 280px; padding: 32px; border: 3px solid var(--zx-paper); box-shadow: 8px 8px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .gen-card:not(.gen-video) { background: var(--zx-red); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .gen-video { background: var(--zx-ink); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .gen-card:hover { transform: translate(-2px, -2px); border-color: var(--zx-paper); box-shadow: 10px 10px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .gen-card::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-size: 10px 10px; }
+:where(html[data-theme="zaklex"]) .gen-card:not(.gen-video)::before { background-image: radial-gradient(rgba(20, 17, 15, .55) 1.7px, transparent 2px); opacity: .2; }
+:where(html[data-theme="zaklex"]) .gen-video::before { background-image: radial-gradient(rgba(240, 227, 206, .3) 1.5px, transparent 1.8px); opacity: .28; }
+:where(html[data-theme="zaklex"]) .gen-card > * { position: relative; }
+:where(html[data-theme="zaklex"]) .gen-card:not(.gen-video) .gen-ico { background: var(--zx-ink); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .gen-video .gen-ico { background: none; color: var(--zx-cyan); box-shadow: inset 0 0 0 3px var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .gen-name { margin-top: auto; font-size: 56px; line-height: .9; letter-spacing: -.025em; }
+:where(html[data-theme="zaklex"]) .gen-card:not(.gen-video) .gen-name { color: var(--zx-paper); }
+/* Small text on red: on a deep red plate, as the brand book asks */
+:where(html[data-theme="zaklex"]) .gen-sub { color: var(--zx-paper); font-size: 15px; }
+:where(html[data-theme="zaklex"]) .gen-card:not(.gen-video) .gen-sub { background: var(--zx-deep); padding: 8px 12px; }
+:where(html[data-theme="zaklex"]) .gen-soon { padding: 4px 8px; }
+:where(html[data-theme="zaklex"]) .gen-card:not(.gen-video) .gen-soon { background: var(--zx-ink); color: var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .gen-video .gen-soon { background: none; color: var(--zx-cyan); box-shadow: inset 0 0 0 3px var(--zx-cyan); }
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html[data-theme="zaklex"]) :is(.up-ev.now, .cal-ev.now, .task.fresh, .trow.fresh) { animation: none; }
+}

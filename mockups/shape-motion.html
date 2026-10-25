@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snowball × Shape Motion</title>
+<!-- A mockup only: every section of the program redrawn in the SHAPE MOTION v0.8 style
+     (ink and paper, hard shadows, halftone, poster type). Not loaded by the app. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@400;700;900&family=Unbounded:wght@800&family=Onest:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root {
+    --ink: #14110F; --paper: #F0E3CE; --red: #E1332B; --deep: #8C1B14; --teal: #3E7D77;
+    --cyan: #17C7BC; --brown: #8A5F3F; --skin: #F2C79B; --clay: #A87A5F;
+    --head: 'Roboto Condensed', 'Arial Narrow', sans-serif; --logo: 'Unbounded', 'Arial Black', sans-serif;
+    --body: 'Onest', 'Manrope', system-ui, sans-serif; --mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  /* dark ("ink") tokens; the left panel is always dark */
+  html[data-theme="dark"] .sheet, .dk {
+    --bg: #14110F; --raise: #14110F; --raise2: rgba(240,227,206,.08); --fg: #F0E3CE; --line: #F0E3CE; --hair: rgba(240,227,206,.18);
+    --sh: #17C7BC; --muted: #A87A5F; --meta: #F2C79B; --hot: #E1332B; --acc: #17C7BC; --acc-text: #17C7BC;
+    --badge: #17C7BC; --badge-fg: #14110F; --dotc: rgba(240,227,206,.5); --page-dot: rgba(240,227,206,.07);
+    --c-static: #17C7BC; --c-video: #F2C79B; --c-system: #E1332B;
+    --k-task: #A87A5F; --k-meet: #17C7BC; --k-call: #F2C79B; --k-shoot: #E1332B; --k-edit: #F0E3CE;
+    --dim: rgba(20,17,15,.72);
+  }
+  /* light ("paper") tokens */
+  html[data-theme="light"] .sheet {
+    --bg: #F0E3CE; --raise: #F0E3CE; --raise2: rgba(20,17,15,.06); --fg: #14110F; --line: #14110F; --hair: rgba(20,17,15,.16);
+    --sh: #14110F; --muted: #8A5F3F; --meta: #8A5F3F; --hot: #8C1B14; --acc: #3E7D77; --acc-text: #14110F;
+    --badge: #14110F; --badge-fg: #F0E3CE; --dotc: rgba(20,17,15,.45); --page-dot: rgba(20,17,15,.07);
+    --c-static: #3E7D77; --c-video: #8A5F3F; --c-system: #8C1B14;
+    --k-task: #A87A5F; --k-meet: #3E7D77; --k-call: #8A5F3F; --k-shoot: #8C1B14; --k-edit: #14110F;
+    --dim: rgba(20,17,15,.55);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 120px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); }
+  button { font: inherit; color: inherit; }
+  svg.i { width: 18px; height: 18px; flex: none; }
+
+  /* ---------- building blocks ---------- */
+  .hd { font-family: var(--head); font-weight: 900; text-transform: uppercase; letter-spacing: -.025em; line-height: .9; }
+  .hd em { font-style: normal; color: var(--red); }
+  .lbl { font: 700 11px/1.3 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .tag { display: inline-flex; align-items: center; gap: 8px; font: 700 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; padding: 4px 8px; border: 3px solid var(--tc, currentColor); white-space: nowrap; }
+  /* small coloured text is hard to read: the colour goes to the frame or a square, the text stays --fg (cyan on dark is fine) */
+  .tag.acc { --tc: var(--acc); color: var(--acc-text); }
+  .tag.ct { --tc: var(--c); color: var(--fg); }
+  .lbl.acc { color: var(--acc-text); }
+  html[data-theme="light"] .lbl.acc::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 8px; background: var(--acc); }
+  .tag.solid { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .box { background: var(--raise); border: 3px solid var(--line); border-radius: 3px; box-shadow: 6px 6px 0 var(--sh); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; font: 700 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; border: 3px solid var(--line); border-radius: 0; background: var(--bg); color: var(--fg); box-shadow: 4px 4px 0 var(--sh); cursor: pointer; white-space: nowrap; }
+  .btn.pri { background: var(--fg); color: var(--bg); }
+  .btn:active { transform: translate(4px, 4px); box-shadow: none; }
+  .btn.flat { box-shadow: none; }
+  .btn.sm { height: 32px; padding: 0 12px; }
+  .btn.ic { width: 40px; padding: 0; }
+  .btn.sm.ic { width: 32px; }
+  .btn.on { background: var(--fg); color: var(--bg); }
+  .rule { width: 96px; height: 8px; background: var(--red); }
+  .sq { width: 8px; height: 8px; background: var(--c); flex: none; display: inline-block; }
+  .k-task .sq { background: transparent; border: 2px solid var(--fg); }
+  .inp { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 3px solid var(--line); background: var(--bg); font: 400 13px var(--mono); color: var(--muted); }
+  .k-task { --c: var(--k-task); } .k-meet { --c: var(--k-meet); } .k-call { --c: var(--k-call); } .k-shoot { --c: var(--k-shoot); } .k-edit { --c: var(--k-edit); }
+  .c-static { --c: var(--c-static); } .c-video { --c: var(--c-video); } .c-system { --c: var(--c-system); }
+  @keyframes now { 50% { box-shadow: inset 0 0 0 2px var(--c); } }
+  @keyframes blink { 50% { opacity: .2; } }
+
+  /* ---------- notes layer: yellow numbers, not part of the design ---------- */
+  :where([data-m]) { position: relative; }
+  [data-m]::after { content: attr(data-m); position: absolute; top: var(--mt, -10px); left: var(--ml, -10px); z-index: 60; width: 24px; height: 24px; border-radius: 50%; background: #FFD400; color: #14110F; border: 2px solid #14110F; font: 700 11px/20px var(--mono); letter-spacing: 0; text-align: center; pointer-events: none; text-transform: none; }
+  body.nomarks [data-m]::after { display: none; }
+
+  /* ---------- page around the mockups ---------- */
+  .bar { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 24px; background: var(--bg); border-bottom: 3px solid var(--line); }
+  .bar .logo { font: 800 15px var(--logo); text-transform: uppercase; letter-spacing: -.02em; margin-right: 16px; }
+  .bar .logo span { color: var(--red); }
+  .bar .sp { flex: 1; }
+  .bar a { text-decoration: none; color: var(--fg); }
+  .intro { max-width: 1328px; margin: 0 auto; padding: 64px 24px 0; }
+  .intro p { max-width: 760px; font-size: 16px; line-height: 1.5; color: var(--meta); margin: 16px 0 0; }
+  .sec { max-width: 1328px; margin: 0 auto; padding: 80px 24px 0; }
+  .sec:last-of-type { padding-bottom: 120px; }
+  .sec-h { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 32px; }
+  .sec-n { font: 900 72px/.8 var(--head); color: var(--red); }
+  .sec-h p { margin: 8px 0 0; font-size: 15px; color: var(--meta); max-width: 720px; line-height: 1.45; }
+  .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px 40px; margin-top: 48px; }
+  .note { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: start; }
+  .note .nb { width: 28px; height: 28px; border-radius: 50%; background: #FFD400; color: #14110F; border: 2px solid #14110F; font: 700 12px/24px var(--mono); text-align: center; }
+  .note b { font: 700 15px/1.3 var(--body); }
+  .note p { margin: 4px 0 8px; font-size: 14px; line-height: 1.45; color: var(--meta); }
+  .st-new { color: var(--muted); }
+
+  /* ---------- the program window ---------- */
+  .stage { width: 100%; }
+  .win { zoom: var(--z, 1); position: relative; width: 1280px; height: 800px; display: grid; grid-template-columns: 248px minmax(0, 1fr); overflow: hidden; border: 3px solid var(--line); background: var(--bg); color: var(--fg); font-family: var(--body); }
+
+  .side { display: flex; flex-direction: column; gap: 24px; padding: 16px; background: var(--bg); color: var(--fg); border-right: 3px solid var(--hair); }
+  .side-head { font: 800 16px var(--logo); text-transform: uppercase; letter-spacing: -.02em; padding: 4px 4px 0; }
+  .side-head span { color: var(--red); }
+  .icons { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .ni { position: relative; height: 32px; display: grid; place-items: center; border: 0; background: none; cursor: pointer; }
+  .ni:hover { background: var(--raise2); }
+  .ni.on { background: var(--fg); color: var(--bg); }
+  .bdg { position: absolute; top: -8px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; background: var(--badge); color: var(--badge-fg); font: 700 11px/16px var(--mono); }
+  .up { display: grid; gap: 2px; }
+  .up .day { margin: 12px 4px 4px; }
+  .up .day:first-of-type { margin-top: 8px; }
+  .ev { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px; font-size: 13px; }
+  .ev .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev .tm { font: 700 11px var(--mono); color: var(--muted); }
+  .ev.now { background: var(--raise); animation: now 1.6s steps(2) infinite; }
+  .ev.now .tm { color: var(--fg); }
+  .more { margin: 8px 8px 0; }
+  .tmr { border: 3px solid var(--line); padding: 8px 8px 0 12px; display: grid; gap: 8px; }
+  .tmr .row { display: flex; align-items: center; gap: 8px; }
+  .tmr .dg { font: 700 20px var(--mono); margin-right: auto; }
+  .tmr .ib { width: 24px; height: 24px; display: grid; place-items: center; border: 0; background: none; }
+  .tmr .ib:hover { background: var(--raise2); }
+  .tmr .bar2 { height: 4px; background: var(--hair); margin: 0 -8px 0 -12px; }
+  .tmr .bar2 i { display: block; height: 100%; width: 34%; background: var(--acc); }
+  .nv { display: flex; align-items: center; gap: 8px; padding: 8px; font: 700 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; border: 0; background: none; text-align: left; }
+  .nv:hover { background: var(--raise2); }
+  .prof { display: flex; gap: 8px; }
+  .me { flex: 1; display: flex; align-items: center; gap: 8px; padding: 4px 8px; border: 3px solid var(--hair); }
+  .med { width: 32px; height: 32px; border-radius: 50%; background: var(--red); border: 3px solid var(--paper); display: grid; place-items: center; font: 900 14px var(--head); color: var(--paper); flex: none; }
+  html[data-theme="light"] .mc .med, html[data-theme="light"] .menu .med { box-shadow: 0 0 0 3px var(--ink); }
+  .star { width: 48px; display: grid; place-items: center; border: 3px solid var(--ink); background: var(--red); color: var(--ink); box-shadow: 4px 4px 0 var(--sh); }
+  .star.on { transform: translate(4px, 4px); box-shadow: none; }
+
+  .mc { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 40px minmax(0, 1fr); min-width: 0; }
+  .tb { position: relative; display: flex; align-items: flex-end; padding-left: 8px; border-bottom: 3px solid var(--line); background: var(--bg); }
+  .tab { position: relative; z-index: 1; flex: 0 1 auto; display: flex; align-items: center; gap: 8px; width: auto; min-width: 104px; max-width: 200px; height: 32px; margin-bottom: -3px; padding: 0 8px 0 12px; font: 700 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); border: 3px solid transparent; border-bottom: 0; }
+  .tab .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab.on { flex-shrink: 0; height: 35px; color: var(--fg); border-color: var(--line); background: var(--bg); }
+  .tab .dot { width: 8px; height: 8px; background: var(--acc); flex: none; }
+  .tab .dot.blink { animation: blink 1s steps(2) infinite; }
+  .tab .x { display: grid; place-items: center; }
+  .tab .x svg { width: 12px; height: 12px; }
+  .plus { align-self: center; flex: none; width: 32px; height: 32px; display: grid; place-items: center; margin-left: 4px; border: 0; background: none; color: var(--muted); }
+  .wc { margin-left: auto; flex: none; align-self: stretch; display: flex; color: var(--muted); }
+  .wc span { width: 48px; display: grid; place-items: center; }
+  .wc svg { width: 14px; height: 14px; }
+  .ct { position: relative; overflow: hidden; padding: 32px; background-color: var(--bg); background-image: radial-gradient(var(--page-dot) 1.5px, transparent 1.8px); background-size: 10px 10px; }
+
+  /* home */
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+  .tile { padding: 24px; display: grid; }
+  .tile .num { font-size: 72px; margin: 12px 0 8px; }
+  .tile .ts { font-size: 13px; color: var(--meta); min-height: 18px; }
+  .tile .go { margin-top: 12px; color: var(--fg); }
+  .tl { position: relative; height: 96px; margin-top: 12px; }
+  .tl .hh { position: absolute; top: 0; font: 700 11px var(--mono); color: var(--muted); transform: translateX(-50%); }
+  .tl .tick { position: absolute; top: 24px; bottom: 0; width: 1px; background: var(--hair); }
+  .tle { position: absolute; top: 32px; height: 56px; padding: 4px 8px; overflow: hidden; background: var(--bg); border: 2px solid var(--hair); border-left: 8px solid var(--c); font-size: 12px; line-height: 1.3; }
+  .tle .lbl { font-size: 11px; display: block; letter-spacing: 0; }
+  .tle.now { animation: now 1.6s steps(2) infinite; }
+  .tln { position: absolute; top: 24px; bottom: 0; width: 3px; background: var(--red); z-index: 2; }
+  .tln::before { content: ""; position: absolute; top: -4px; left: -2px; width: 8px; height: 8px; background: var(--red); }
+  .rp { display: flex; align-items: center; gap: 12px; padding: 14px 16px; font-size: 14px; font-weight: 500; box-shadow: 4px 4px 0 var(--sh); }
+  .rp .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* prompts */
+  .tr { display: grid; grid-template-columns: 248px 112px minmax(0, 1fr) 128px; gap: 16px; padding: 16px; border-top: 3px solid var(--hair); align-items: start; }
+  .tr.h { border-top: 0; padding: 12px 16px; }
+  .tr.sel { background: var(--raise2); }
+  .tr .nm { font: 700 18px/1.05 var(--head); text-transform: uppercase; letter-spacing: -.01em; }
+  .tr .pt { font: 400 12px/1.6 var(--mono); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tr .acts { display: flex; gap: 4px; justify-content: flex-end; }
+  .ab { width: 32px; height: 32px; display: grid; place-items: center; border: 3px solid var(--hair); background: none; }
+  .ab:hover { border-color: var(--line); }
+  .ab svg { width: 16px; height: 16px; }
+  .plate { background: var(--deep); color: var(--paper); padding: 12px 16px; font-size: 14px; line-height: 1.45; }
+  .plate .lbl { color: var(--skin); display: block; margin-bottom: 4px; }
+  .panels { display: flex; gap: 24px; }
+  .pn { width: 112px; height: 72px; position: relative; border: 3px solid var(--line); box-shadow: 6px 6px 0 var(--sh); background: var(--bg); background-image: radial-gradient(var(--dotc) 1.4px, transparent 1.8px); background-size: 8px 8px; }
+  .pn span { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 8px; background: var(--line); color: var(--bg); font: 700 11px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* calendar */
+  .mg { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 3px solid var(--line); background: var(--raise); box-shadow: 6px 6px 0 var(--sh); }
+  .wd { padding: 8px; border-bottom: 3px solid var(--line); }
+  .dc { position: relative; height: 112px; padding: 8px; border-right: 3px solid var(--hair); border-bottom: 3px solid var(--hair); }
+  .dc:nth-child(7n) { border-right: 0; }
+  .dc:nth-last-child(-n+7) { border-bottom: 0; }
+  .dc .dn { font: 900 22px/1 var(--head); }
+  .dc.off .dn { color: var(--hot); }
+  .dc.out .dn { opacity: .35; }
+  .dc.b1 { background-image: radial-gradient(var(--dotc) 1px, transparent 1.4px); background-size: 8px 8px; }
+  .dc.b2 { background-image: radial-gradient(var(--dotc) 1.6px, transparent 2px); background-size: 8px 8px; }
+  .dc.b3 { background-image: radial-gradient(var(--dotc) 2.3px, transparent 2.7px); background-size: 8px 8px; }
+  .dc.today { background: var(--fg); color: var(--bg); }
+  .dc.today .dn { color: var(--bg); }
+  .dc .ks { position: absolute; left: 8px; bottom: 8px; display: flex; gap: 4px; }
+  .dc .ks i { width: 8px; height: 8px; background: var(--c); }
+  .dc.today .ks i { outline: 2px solid var(--bg); }
+  .dc .ks i.k-task { background: transparent; border: 2px solid var(--fg); }
+  .dc.today .ks i.k-task { border-color: var(--bg); }
+  .hrs { position: relative; }
+  .hr { display: grid; grid-template-columns: 48px 1fr; height: 40px; border-top: 3px solid var(--hair); }
+  .hr .lbl { padding-top: 8px; letter-spacing: 0; }
+  .de { position: absolute; left: 56px; right: 0; padding: 4px 8px; background: var(--bg); border: 2px solid var(--hair); border-left: 8px solid var(--c); font-size: 13px; line-height: 1.3; overflow: hidden; }
+  .de .lbl { font-size: 11px; color: var(--muted); margin-right: 8px; letter-spacing: 0; }
+  .de.now { animation: now 1.6s steps(2) infinite; }
+  .nowl { position: absolute; left: 48px; right: 0; height: 3px; background: var(--red); z-index: 3; }
+  .nowl::before { content: ""; position: absolute; left: -4px; top: -2px; width: 8px; height: 8px; background: var(--red); }
+
+  /* tasks */
+  .tbar { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border: 3px solid var(--line); background: var(--raise); }
+  .tbar .ph { flex: 1; font-size: 14px; color: var(--muted); }
+  .bd { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; align-items: start; }
+  .colh { display: flex; align-items: center; gap: 8px; padding-top: 8px; margin-bottom: 16px; border-top: 8px solid var(--c); }
+  .colh .n { font: 700 13px var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+  .colh .lbl { margin-right: auto; }
+  .card { display: grid; gap: 8px; padding: 12px; margin-bottom: 16px; background: var(--raise); border: 3px solid var(--line); box-shadow: 4px 4px 0 var(--sh); }
+  .card .top { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; font-weight: 500; line-height: 1.35; }
+  .ck { width: 16px; height: 16px; flex: none; border: 3px solid var(--line); display: grid; place-items: center; margin-top: 2px; }
+  .ck.on { background: var(--fg); color: var(--bg); }
+  .ck svg { width: 12px; height: 12px; }
+  .marks { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 24px; }
+  .mk { font: 700 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; padding: 4px 8px; border: 2px solid var(--tc, currentColor); color: var(--muted); }
+  .mk.hot { --tc: var(--hot); color: var(--fg); }
+  .mk.acc { --tc: var(--acc); color: var(--acc-text); }
+  .subbar { margin-left: 24px; height: 4px; background: var(--hair); }
+  .subbar i { display: block; height: 100%; background: var(--fg); }
+  .card.done { box-shadow: none; border-color: var(--hair); }
+  .card.done .top { color: var(--muted); }
+  .strike { position: relative; }
+  .strike::after { content: ""; position: absolute; left: -4px; right: -4px; top: 50%; height: 3px; background: var(--red); }
+  .nt { padding: 8px 12px; border: 3px dashed var(--hair); }
+  .toast { position: absolute; right: 32px; bottom: 32px; width: 336px; padding: 16px 16px 24px; background: var(--raise); border: 3px solid var(--line); box-shadow: 6px 6px 0 var(--sh); z-index: 5; }
+  .toast p { margin: 8px 0 12px; font-size: 14px; line-height: 1.4; }
+  .toast .tlft { position: absolute; left: 0; bottom: 0; height: 4px; width: 62%; background: var(--acc); }
+
+  /* LLM */
+  .llm { position: absolute; inset: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+  .hist { padding: 24px 16px; border-right: 3px solid var(--hair); display: grid; align-content: start; gap: 4px; }
+  .hi { display: grid; gap: 4px; padding: 8px; }
+  .hi .t { font-size: 13px; font-weight: 500; display: flex; gap: 8px; align-items: center; }
+  .hi .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hi.on { background: var(--fg); color: var(--bg); }
+  .hi.on .lbl { color: var(--bg); opacity: .7; }
+  .hi .dot { width: 8px; height: 8px; background: var(--acc); flex: none; }
+  .chat { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 24px; padding: 24px 32px 32px; min-width: 0; }
+  .msgs { display: flex; flex-direction: column; gap: 24px; overflow: hidden; margin: -12px -12px 0; padding: 12px 12px 0; }
+  .um { align-self: flex-end; max-width: 64%; background: var(--deep); color: var(--paper); padding: 12px 16px; font-size: 14px; line-height: 1.5; display: grid; gap: 12px; }
+  .um .pn { width: 160px; height: 96px; border-color: var(--paper); box-shadow: 6px 6px 0 rgba(20,17,15,.5); background-color: #14110F; --dotc: rgba(240,227,206,.4); }
+  .am { max-width: 86%; font-size: 14px; line-height: 1.6; }
+  .am p { margin: 0 0 12px; }
+  .code { border: 3px solid var(--line); background: var(--bg); }
+  .code .ch { display: flex; align-items: center; justify-content: space-between; padding: 4px 4px 4px 12px; border-bottom: 3px solid var(--hair); }
+  .code pre { margin: 0; padding: 12px; font: 400 12px/1.6 var(--mono); white-space: pre-wrap; }
+  .act { max-width: 520px; padding: 16px; background: var(--raise); border: 3px solid var(--line); box-shadow: 6px 6px 0 var(--sh); display: grid; gap: 8px; }
+  .cmp { border: 3px solid var(--line); background: var(--raise); padding: 12px 12px 12px 16px; display: grid; gap: 12px; }
+  .cmp .ph { font-size: 14px; color: var(--muted); }
+  .cmp .row { display: flex; align-items: center; gap: 8px; }
+  .send { width: 40px; height: 40px; margin-left: auto; display: grid; place-items: center; border: 3px solid var(--red); background: var(--red); color: var(--ink); }
+
+  /* generator */
+  .posters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; }
+  .pst { position: relative; height: 400px; padding: 32px; display: flex; flex-direction: column; gap: 16px; overflow: hidden; border: 3px solid var(--line); box-shadow: 8px 8px 0 var(--sh); }
+  .pst > * { position: relative; z-index: 1; }
+  .pst::before { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; background-size: 10px 10px; }
+  .pst::after { content: ""; position: absolute; inset: 0; z-index: 3; opacity: .06; mix-blend-mode: multiply; pointer-events: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>"); }
+  .pst.red { background: var(--red); color: var(--paper); }
+  html[data-theme="light"] .pst.ink { box-shadow: 3px 3px 0 var(--paper), 8px 8px 0 var(--ink); }
+  .pst.red::before { background-image: radial-gradient(rgba(20,17,15,.55) 1.7px, transparent 2px); opacity: .2; }
+  .pst.ink { background: #14110F; color: var(--paper); }
+  .pst.ink::before { background-image: radial-gradient(rgba(240,227,206,.3) 1.5px, transparent 1.8px); opacity: .28; }
+  .pst .fitbox { margin-top: auto; }
+  .fit { display: inline-block; white-space: nowrap; }
+  .off { position: relative; display: inline-block; }
+  .off i { position: absolute; left: 0; top: 0; font-style: normal; }
+  .off .a { transform: translate(-.022em, .018em); }
+  .off .b { transform: translate(.022em, -.014em); }
+  .off b { position: relative; font-weight: inherit; }
+  .pst .foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .pst .cap { font-size: 15px; line-height: 1.45; }
+  .ghost { height: 96px; border: 3px dashed var(--hair); display: grid; place-items: center; }
+
+  /* statistics */
+  .metrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .metrics > div { padding: 16px 24px; border-left: 3px solid var(--hair); }
+  .metrics > div:first-child { border-left: 0; }
+  .metrics .hd { font-size: 44px; margin-top: 8px; }
+  .heat { display: grid; grid-template-rows: repeat(7, 10px); grid-auto-flow: column; grid-auto-columns: 10px; gap: 2px; }
+  .hc { width: 10px; height: 10px; background: radial-gradient(circle, var(--hcol) var(--r), transparent calc(var(--r) + .6px)); }
+  .l0 { --r: 1.2px; --hcol: var(--hair); } .l1 { --r: 2px; --hcol: var(--muted); } .l2 { --r: 3px; --hcol: var(--fg); } .l3 { --r: 4.2px; --hcol: var(--fg); } .l4 { --r: 5px; --hcol: var(--acc); } .fut { background: none; }
+  .bars { display: grid; gap: 8px; }
+  .bars .r { display: grid; gap: 8px; }
+  .bars .r div { display: flex; justify-content: space-between; font-size: 13px; }
+  .bars .trk { height: 8px; background: var(--hair); }
+  .bars .trk i { display: block; height: 100%; background: var(--fg); }
+  .bars .r:first-child .trk i { background: var(--red); }
+
+  /* settings dialog and pop-ups */
+  .dimmer { position: absolute; inset: 0; z-index: 20; background: var(--dim); }
+  .modal { position: absolute; left: 184px; top: 72px; z-index: 21; width: 912px; height: 656px; display: grid; grid-template-columns: 220px minmax(0, 1fr); background: var(--bg); border: 3px solid var(--line); box-shadow: 10px 10px 0 var(--sh); }
+  .sdn { padding: 24px 12px; border-right: 3px solid var(--hair); display: grid; align-content: start; gap: 4px; }
+  .sdi { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font: 700 11px var(--mono); letter-spacing: .16em; text-transform: uppercase; }
+  .sdi.on { background: var(--fg); color: var(--bg); }
+  .sdi .dot { width: 8px; height: 8px; background: var(--acc); margin-left: auto; }
+  .sdc { position: relative; padding: 32px; overflow: hidden; }
+  .sdc .x { position: absolute; top: 16px; right: 16px; }
+  .kc { padding: 24px; margin-bottom: 32px; display: grid; gap: 16px; }
+  .kc .row { display: flex; align-items: center; gap: 12px; }
+  .kg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+  .menu { position: absolute; z-index: 30; width: 248px; padding: 8px; background: var(--raise); border: 3px solid var(--line); box-shadow: 6px 6px 0 var(--sh); }
+  .menu .mi { display: flex; align-items: center; gap: 8px; padding: 8px; font-size: 14px; }
+  .menu .mi:hover, .menu .mi.on { background: var(--fg); color: var(--bg); }
+  .menu .mi .r { margin-left: auto; display: flex; }
+  .menu hr { border: 0; border-top: 3px solid var(--hair); margin: 8px 0; }
+  .menu .mh { display: flex; align-items: center; gap: 8px; padding: 8px 8px 12px; }
+  .qa { position: absolute; z-index: 30; left: 548px; bottom: 24px; width: 480px; display: grid; grid-template-columns: minmax(0, 1fr); background: var(--bg); border: 3px solid var(--line); box-shadow: 8px 8px 0 var(--sh); }
+  .qa-h { display: flex; align-items: center; gap: 8px; padding: 12px 12px 12px 16px; border-bottom: 3px solid var(--line); }
+  .qa-l { padding: 16px; display: grid; gap: 16px; }
+  .qa-in { display: flex; gap: 8px; padding: 12px; border-top: 3px solid var(--hair); }
+  .qa-in .inp { flex: 1; min-width: 0; font-family: var(--body); font-size: 14px; }
+</style>
+</head>
+<body class="sheet">
+
+<div class="bar">
+  <span class="logo">Snowball<span>.</span></span>
+  <span class="lbl" style="margin-right:8px">Тема</span>
+  <button class="btn sm flat on" data-theme-btn="dark">Тёмная</button>
+  <button class="btn sm flat" data-theme-btn="light">Светлая</button>
+  <span class="lbl" style="margin:0 8px 0 16px">Номера</span>
+  <button class="btn sm flat on" id="marks-btn">Показаны</button>
+  <span class="sp"></span>
+  <nav id="toc" style="display:flex;gap:4px;flex-wrap:wrap"></nav>
+</div>
+
+<header class="intro">
+  <span class="tag acc">Макет · программа не меняется</span>
+  <h1 class="hd" style="font-size:96px;margin:24px 0 0">Snowball в стиле <em>Shape&nbsp;Motion</em></h1>
+  <div class="rule" style="margin-top:24px"></div>
+  <p>Все разделы программы версии 1.12.2, перерисованные по брендбуку SHAPE MOTION v0.8: тёмная «тушь» и кремовая «бумага», плакатные заголовки, жёсткие тени без размытия, полутоновая точка. Что умеет каждый экран, не меняется, меняется только вид. Жёлтые номера на экранах объясняются под каждым окном. Переключатель темы и номеров — в полоске сверху.</p>
+  <p>Тени по вашей просьбе: в тёмной теме циановые, в светлой — чёрные (циан на кремовом выглядит бледно, брендбук разрешает его только на тёмном). Левая панель тёмная в обеих темах.</p>
+</header>
+
+<main id="secs"></main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- icons ---------- */
+  var P = {
+    home: 'M4 11 12 4l8 7M6 9.5V20h12V9.5',
+    prompt: 'M5 3.5h14v17H5zM8.5 8h7M8.5 12h7M8.5 16h4',
+    cal: 'M3.5 5h17v15.5h-17zM3.5 10h17M8 3v4M16 3v4',
+    tasks: 'M4 4h6v16H4zM14 4h6v10h-6z',
+    chat: 'M4 5h16v11h-8l-5 4v-4H4z',
+    gen: 'M5 19 15 9M14 3.5v3M19.5 9h-3M17.5 5.5l-2 2M7 4v3M5.5 5.5h3',
+    stats: 'M5 20V11M12 20V5M19 20v-6M3 20h18',
+    star: 'M12 3l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z',
+    plus: 'M12 5v14M5 12h14', x: 'M6 6l12 12M18 6 6 18',
+    search: 'M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zM15.5 15.5 20 20',
+    clip: 'M15 7l-6.5 6.5a2 2 0 0 0 3 3L18 10a4 4 0 0 0-6-6l-7 7a6 6 0 0 0 8.5 8.5L19 14',
+    copy: 'M8 8h12v12H8zM4 16V4h12', send: 'M12 19V5M6 11l6-6 6 6',
+    down: 'm6 9 6 6 6-6', up: 'm6 15 6-6 6 6', right: 'm9 6 6 6-6 6', left: 'm15 6-6 6 6 6',
+    pause: 'M8 5v14M16 5v14', stop: 'M6 6h12v12H6z',
+    lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+    share: 'M12 4v11M7.5 8.5 12 4l4.5 4.5M5 20h14',
+    note: 'M5 5h14v10H9l-4 4z', min: 'M5 12h14', max: 'M5 5h14v14H5z',
+    check: 'm5 12.5 4.5 4.5L19 7.5', dots: 'M5 12h.01M12 12h.01M19 12h.01',
+    folder: 'M3 6h6l2 2h10v11H3z', refresh: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5',
+    user: 'M12 4.5a3.8 3.8 0 1 0 0 7.6 3.8 3.8 0 0 0 0-7.6zM4.5 20a7.5 7.5 0 0 1 15 0',
+    gear: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1',
+    sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2',
+    moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z',
+    monitor: 'M3 4.5h18v12H3zM9 20h6M12 16.5V20'
+  };
+  function ic(n, s) {
+    return '<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"' +
+      (s ? ' style="width:' + s + 'px;height:' + s + 'px"' : '') + ' aria-hidden="true"><path d="' + P[n] + '"/></svg>';
+  }
+
+  /* ---------- the window: left panel and tabs ---------- */
+  var TABS = [
+    { k: 'home', t: 'Главная' }, { k: 'prompts', t: 'Промты' }, { k: 'calendar', t: 'Календарь' },
+    { k: 'tasks', t: 'Задачи' }, { k: 'llm', t: 'LLM · Пролёт камеры', dot: 'blink' },
+    { k: 'llm2', t: 'LLM · Портрет 80-х', dot: 'on' }, { k: 'gen', t: 'Генератор' }, { k: 'stats', t: 'Статистика' }
+  ];
+  var NAV = [['home', 'home'], ['prompts', 'prompt'], ['calendar', 'cal', 2], ['tasks', 'tasks', 7], ['llm', 'chat', 1], ['gen', 'gen']];
+
+  function chrome(o) {
+    var M = function (n, extra) { return o.marks ? ' data-m="' + n + '"' + (extra ? ' style="' + extra + '"' : '') : ''; };
+    var act = o.act === 'llm2' ? 'llm' : o.act;
+    /* seven tabs fit at their minimum width; the generator tab replaces statistics when it is the open one */
+    var tabs = TABS.filter(function (t) { return o.act === 'gen' ? t.k !== 'stats' : t.k !== 'gen'; }).map(function (t) {
+      var on = t.k === o.act;
+      return '<div class="tab' + (on ? ' on' : '') + '">' +
+        (t.dot ? '<i class="dot' + (t.dot === 'blink' ? ' blink' : '') + '"></i>' : '') +
+        '<span class="t">' + t.t + '</span>' + (on ? '<span class="x">' + ic('x') + '</span>' : '') + '</div>';
+    }).join('');
+    var nav = NAV.map(function (n) {
+      return '<button class="ni' + (n[0] === act ? ' on' : '') + '" title="' + n[0] + '">' + ic(n[1]) +
+        (n[2] ? '<span class="bdg">' + n[2] + '</span>' : '') + '</button>';
+    }).join('');
+    return '<div class="win">' +
+      '<aside class="side dk"' + M(2) + '>' +
+        '<div class="side-head">Snowball<span>.</span></div>' +
+        '<div class="icons"' + M(3) + '>' + nav + '</div>' +
+        '<div class="up"' + M(4) + '>' +
+          '<div class="lbl">Ближайшие дела</div>' +
+          '<div class="lbl day">Сегодня</div>' +
+          '<div class="ev now k-call"><i class="sq"></i><span class="t">Дима, правки монтажа</span><span class="tm">сейчас</span></div>' +
+          '<div class="ev k-shoot"><i class="sq"></i><span class="t">Съёмка пэкшота</span><span class="tm">18:00</span></div>' +
+          '<div class="lbl day">Завтра</div>' +
+          '<div class="ev k-meet"><i class="sq"></i><span class="t">Планёрка</span><span class="tm">10:00</span></div>' +
+          '<div class="ev k-edit"><i class="sq"></i><span class="t">Монтаж рекламы кофе</span><span class="tm">13:00</span></div>' +
+          '<div class="lbl day">Ср, 28 октября</div>' +
+          '<div class="ev k-task"><i class="sq"></i><span class="t">Купить SD-карту</span><span class="tm">11:00</span></div>' +
+          '<div class="lbl more" style="color:var(--fg)">Все дела →</div>' +
+        '</div>' +
+        '<div style="margin-top:auto;display:grid;gap:8px">' +
+          '<div class="tmr"' + M(5) + '><div class="row"><span class="lbl">Фокус</span><span class="dg">24:55</span>' +
+            '<button class="ib">' + ic('pause', 16) + '</button><button class="ib">' + ic('stop', 16) + '</button></div>' +
+            '<div class="bar2"><i></i></div></div>' +
+          '<button class="nv">' + ic('stats') + 'Статистика</button>' +
+          '<div class="prof"' + M(6) + '><div class="me"><span class="med">Z</span><span class="lbl" style="color:var(--meta)">zaklex</span>' +
+            '<span style="margin-left:auto;color:var(--muted);display:flex">' + ic('up', 16) + '</span></div>' +
+            '<button class="star' + (o.starOn ? ' on' : '') + '" title="Маленькое окно ассистента">' + ic('star', 20) + '</button></div>' +
+        '</div>' +
+      '</aside>' +
+      '<div class="mc">' +
+        '<div class="tb">' + tabs + '<button class="plus"' + M(1, '--mt:2px;--ml:30px') + '>' + ic('plus') + '</button>' +
+          '<div class="wc"><span>' + ic('min') + '</span><span>' + ic('max') + '</span><span>' + ic('x') + '</span></div></div>' +
+        '<div class="ct">' + o.content + '</div>' +
+      '</div>' + (o.extras || '') +
+    '</div>';
+  }
+
+  /* ---------- screens ---------- */
+  function home(m, base) {
+    var M = function (n) { return m ? ' data-m="' + (base + n) + '"' : ''; };
+    var hours = '';
+    for (var h = 9; h <= 21; h++) {
+      var x = (h - 9) / 12 * 100;
+      hours += '<span class="hh" style="left:' + x + '%">' + (h < 10 ? '0' : '') + h + '</span><span class="tick" style="left:' + x + '%"></span>';
+    }
+    function ev(k, from, to, t, now) {
+      var l = (from - 9) / 12 * 100, w = (to - from) / 12 * 100;
+      return '<div class="tle k-' + k + (now ? ' now' : '') + '" style="left:' + l + '%;width:calc(' + w + '% - 4px)"><span class="lbl">' + t[0] + '</span>' + t[1] + '</div>';
+    }
+    function tile(l, n, s, extra) {
+      return '<div class="box tile"' + (extra || '') + '><div class="lbl">' + l + '</div><div class="hd num">' + n + '</div><div class="ts">' + s + '</div><div class="lbl go">Открыть →</div></div>';
+    }
+    function rp(c, t, d) { return '<div class="box rp ' + c + '"><i class="sq"></i><span class="t">' + t + '</span><span class="lbl">' + d + '</span></div>'; }
+    return '<span class="tag acc">Понедельник · 26 октября</span>' +
+      '<h1 class="hd" style="font-size:88px;margin:16px 0 0"' + M(1) + '>Добрый вечер, <em>zaklex</em></h1>' +
+      '<div class="rule" style="margin:24px 0 32px"></div>' +
+      '<div class="tiles"' + M(2) + '>' +
+
+        tile('Промтов в базе', '128', '+3 за неделю') + tile('Дел сегодня', '4', 'Дальше: 18:00 съёмка') +
+        tile('Задач не готово', '7', '2 срочные') + tile('Новых ответов', '1', 'LLM · Портрет 80-х') +
+      '</div>' +
+      '<div class="box" style="padding:24px;margin-top:32px"' + M(3) + '><div style="display:flex;justify-content:space-between"><span class="lbl" style="color:var(--fg)">Сегодня по часам</span><span class="lbl">4 дела · сейчас 15:20</span></div>' +
+        '<div class="tl">' + hours +
+          ev('meet', 10, 11, ['10:00', 'Планёрка']) + ev('edit', 12, 14, ['12:00–14:00', 'Монтаж ролика про нейросети']) +
+          ev('call', 15, 16, ['15:00', 'Дима, правки'], true) + ev('shoot', 18, 19.5, ['18:00', 'Съёмка пэкшота']) +
+          '<i class="tln" style="left:52.8%"></i>' +
+        '</div></div>' +
+      '<div style="margin-top:32px"' + M(4) + '><span class="lbl" style="color:var(--fg)">Последние промты</span>' +
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:12px">' +
+          rp('c-video', 'Пролёт камеры над городом', 'сегодня') + rp('c-static', 'Извлечение одежды', '21 окт') + rp('c-system', 'Роль: редактор промтов', '15 окт') +
+        '</div></div>';
+  }
+
+  function prompts(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    var acts = '<div class="acts"><button class="ab" title="Копировать">' + ic('copy') + '</button><button class="ab" title="Комментарий">' + ic('note') + '</button><button class="ab" title="Поделиться">' + ic('share') + '</button></div>';
+    var actsOpen = '<div class="acts"><button class="ab" title="Комментарий">' + ic('note') + '</button><button class="ab" title="Поделиться">' + ic('share') + '</button></div>';
+    function row(c, type, name, date, text, files, mark) {
+      return '<div class="tr"><div><div class="nm">' + name + '</div><div class="lbl" style="margin-top:8px">' + date + ' · ' + files + '</div></div>' +
+        '<div><span class="tag ct ' + c + '"' + (mark || '') + '>' + type + '</span></div>' +
+        '<div class="pt">' + text + '</div>' + acts + '</div>';
+    }
+    return '<div style="display:flex;align-items:flex-end;gap:24px;margin-bottom:24px">' +
+        '<div style="flex:1;min-width:0"' + M(1) + '><span class="tag acc">Система хранения</span>' +
+          '<h1 class="hd" style="font-size:64px;margin:16px 0 0">Мои <em>промты</em></h1>' +
+          '<div style="display:flex;align-items:center;gap:16px;margin-top:16px"><div class="rule"></div><span class="lbl" style="color:var(--meta)">128 промтов · 3 типа · 46 файлов</span></div></div>' +
+        '<button class="btn pri"' + M(2) + '>' + ic('plus', 16) + 'Добавить промт</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:16px;margin-bottom:24px"' + M(3) + '>' +
+        '<div class="inp" style="flex:1">' + ic('search') + 'Поиск по названию, тексту и комментарию</div>' +
+        '<button class="btn flat on">Все</button>' +
+        '<button class="btn flat c-static"><i class="sq"></i>Статика</button>' +
+        '<button class="btn flat c-video"><i class="sq"></i>Видео</button>' +
+        '<button class="btn flat c-system"><i class="sq"></i>Системные</button>' +
+      '</div>' +
+      '<div class="box" style="padding:0"' + M(4) + '>' +
+        '<div class="tr h"><span class="lbl">Название</span><span class="lbl">Тип</span><span class="lbl">Промт</span><span></span></div>' +
+        row('c-static', 'Статика', 'Извлечение одежды', 'Изменён 21 окт', 'Isolate the garment on a flat cream background, keep fabric folds and seams, hard studio light, no model, no mannequin, no shadows on the backdrop.', '2 файла', M(5)) +
+        '<div class="tr sel"><div><div class="nm">Пролёт камеры над городом</div><div class="lbl" style="margin-top:8px">Создан 18 окт · 3 файла</div></div>' +
+          '<div><span class="tag ct c-video">Видео</span></div>' +
+          '<div style="display:grid;gap:16px"><div class="pt" style="-webkit-line-clamp:3">Slow aerial dolly over a rainy city at dusk, wet asphalt reflections, 35mm film look, soft halation, steady forward motion, 8 seconds, no cuts, no neon signs.</div>' +
+            '<div class="plate"' + M(6) + '><span class="lbl">Комментарий</span>Kling держит 8 секунд, на 10 начинает плыть. Дождь лучше добавить отдельным слоем.</div>' +
+            '<div class="panels" style="padding-bottom:8px"' + M(7) + '><div class="pn"><span>ref_01.jpg</span></div><div class="pn"><span>ref_02.jpg</span></div><div class="pn"><span>result.mp4</span></div></div></div>' +
+          '<div style="display:grid;gap:8px;justify-items:end"' + M(8) + '><button class="btn sm pri">' + ic('copy', 14) + 'Копировать</button>' + actsOpen + '</div></div>' +
+        row('c-system', 'Системные', 'Роль: редактор промтов', 'Изменён 15 окт', 'Ты — редактор промтов для генерации видео. Сокращай лишнее, сохраняй структуру сцены, камеру и свет. Отвечай на русском, промт — на английском.', '0 файлов') +
+        row('c-static', 'Статика', 'Портрет в стиле 80-х', 'Создан 12 окт', '1980s retro anime cel illustration, bold ink outlines, flat background, halftone dots, muted warm palette, printed poster feel.', '1 файл') +
+      '</div>';
+  }
+
+  function calendar(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    var busy = { 1: 1, 2: 2, 5: 1, 6: 3, 7: 1, 9: 3, 12: 2, 13: 1, 14: 1, 15: 3, 16: 2, 19: 1, 20: 2, 21: 3, 22: 1, 23: 2, 26: 3, 27: 2, 28: 1, 29: 3, 30: 1 };
+    var kinds = ['task', 'meet', 'call', 'shoot', 'edit'];
+    var head = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map(function (d) {
+      return '<div class="wd lbl" style="color:var(--fg)">' + d + '</div>';
+    }).join('');
+    var cells = '';
+    var days = [[28, 1], [29, 1], [30, 1]];
+    for (var d = 1; d <= 31; d++) days.push([d, 0]);
+    days.push([1, 2]);
+    days.forEach(function (x, i) {
+      var n = x[0], out = x[1] !== 0, wk = i % 7 > 4, b = out ? 0 : (busy[n] || 0);
+      var cls = 'dc' + (out ? ' out' : '') + (wk ? ' off' : '') + (b ? ' b' + b : '') + (!out && n === 26 ? ' today' : '');
+      var mk = '';
+      if (m && !out && n === 21) mk = ' data-m="3"';
+      if (m && !out && n === 24) mk = ' data-m="4"';
+      if (m && !out && n === 26) mk = ' data-m="5"';
+      if (m && !out && n === 15) mk = ' data-m="6"';
+      var ks = '';
+      for (var j = 0; j < b + (b === 3 ? 1 : 0); j++) ks += '<i class="k-' + kinds[(n + j * 2) % 5] + '"></i>';
+      cells += '<div class="' + cls + '"' + mk + '><div class="dn">' + n + '</div>' + (ks ? '<div class="ks">' + ks + '</div>' : '') + '</div>';
+    });
+    var hrs = '';
+    for (var h = 9; h <= 20; h++) hrs += '<div class="hr"><span class="lbl">' + (h < 10 ? '0' : '') + h + ':00</span><span></span></div>';
+    function de(k, from, to, t, title, now) {
+      return '<div class="de k-' + k + (now ? ' now' : '') + '" style="top:' + ((from - 9) * 40 + 4) + 'px;height:' + ((to - from) * 40 - 8) + 'px"><span class="lbl">' + t + '</span>' + title + '</div>';
+    }
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:24px">' +
+        '<div style="display:flex;gap:8px"' + M(1) + '><button class="btn flat">Месяц' + ic('down', 14) + '</button><button class="btn flat">Сегодня</button>' +
+        '<button class="btn flat ic">' + ic('left') + '</button><button class="btn flat ic">' + ic('right') + '</button></div>' +
+        '<h1 class="hd" style="font-size:48px;margin:0 0 0 16px"' + M(2) + '>Октябрь 2026</h1>' +
+        '<button class="btn pri" style="margin-left:auto">' + ic('plus', 16) + 'Новое дело</button>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:32px;align-items:start">' +
+        '<div class="mg">' + head + cells + '</div>' +
+        '<div class="box" style="padding:24px 24px 16px"' + M(7) + '>' +
+          '<div style="display:flex;align-items:baseline;justify-content:space-between"><span class="hd" style="font-size:28px">Понедельник, 26</span><span class="lbl">4 дела</span></div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:12px;margin:12px 0 16px"' + M(8) + '>' +
+            ['task|Задача', 'meet|Встреча', 'call|Звонок', 'shoot|Съёмка', 'edit|Монтаж'].map(function (s) {
+              s = s.split('|'); return '<span class="lbl k-' + s[0] + '" style="display:flex;align-items:center;gap:8px;color:var(--fg)"><i class="sq"></i>' + s[1] + '</span>';
+            }).join('') + '</div>' +
+          '<div class="hrs">' + hrs +
+            de('meet', 10, 11, '10:00', 'Планёрка') + de('edit', 12, 14, '12:00–14:00', 'Монтаж ролика про нейросети') +
+            de('call', 15, 16, '15:00', 'Дима, правки монтажа', true) + de('shoot', 18, 19.5, '18:00', 'Съёмка пэкшота') +
+            '<i class="nowl" style="top:' + Math.round(6.33 * 40) + 'px"></i>' +
+          '</div></div>' +
+      '</div>';
+  }
+
+  function tasks(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    function card(t, marks, sub, extra, done) {
+      return '<div class="card' + (done ? ' done' : '') + '"' + (extra || '') + '><div class="top"><span class="ck' + (done ? ' on' : '') + '">' + (done ? ic('check') : '') + '</span>' +
+        '<span' + (done ? ' class="strike"' : '') + '>' + t + '</span></div>' +
+        (marks ? '<div class="marks">' + marks + '</div>' : '') + (sub ? '<div class="subbar"><i style="width:' + sub + '%"></i></div>' : '') + '</div>';
+    }
+    function col(c, n, cnt, side, cards, extra) {
+      return '<div><div class="colh" style="--c:' + c + '"' + (extra || '') + '><span class="n">' + n + '</span><span class="lbl">' + cnt + '</span>' + side + '</div>' + cards + '</div>';
+    }
+    var lock = '<span style="color:var(--muted);display:flex">' + ic('lock', 14) + '</span>';
+    var nt = '<div class="nt lbl">+ Новая задача</div>';
+    return '<div style="display:flex;align-items:center;gap:16px;margin-bottom:24px">' +
+        '<h1 class="hd" style="font-size:56px;margin:0">Задачи</h1><span class="tag acc"' + M(1) + '>Бета</span>' +
+        '<div style="margin-left:auto;display:flex"' + M(2) + '><button class="btn flat on">Доска</button><button class="btn flat" style="margin-left:-3px">Список</button></div>' +
+      '</div>' +
+      '<div class="tbar" style="margin-bottom:16px"' + M(3) + '>' + ic('star') + '<span class="ph">Скажите, что сделать: «добавь на пятницу монтаж тизера, срочно»</span><button class="send">' + ic('send', 20) + '</button></div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:32px"' + M(4) + '>' +
+        '<div class="inp" style="width:240px;height:32px">' + ic('search', 16) + 'Поиск</div>' +
+        '<button class="btn sm flat">#монтаж</button><button class="btn sm flat">#youtube</button>' +
+        '<button class="btn sm flat">Только срочные</button><button class="btn sm flat"><span class="ck"></span>Скрыть выполненные</button>' +
+      '</div>' +
+      '<div class="bd">' +
+        col('var(--hair)', 'Предстоит', '3', lock,
+          card('Сценарий ролика про нейросети', '<span class="mk hot">!! Срочно</span><span class="mk">#youtube</span><span class="mk hot">Сегодня</span><span class="mk">1/4</span>', 25, M(6)) +
+          card('Купить SD-карту', '<span class="mk acc">Завтра</span>') + nt) +
+        col('var(--acc)', 'В процессе', '2', lock,
+          card('Монтаж рекламы кофе', '<span class="mk hot">! Важно</span><span class="mk">#монтаж</span><span class="mk">3/5</span><span class="mk">Заметка</span>', 60) +
+          card('Правки по пэкшоту', '<span class="mk">28 окт</span>') + nt) +
+        col('var(--k-call)', 'Ревью', '1', '<span style="display:flex">' + ic('dots') + '</span>',
+          card('Цветокор сцены 3', '<span class="mk">#монтаж</span>') + nt, M(5)) +
+        col('var(--fg)', 'Готово', '2', lock,
+          card('Раскадровка тизера', '', 0, M(7), true) + card('Созвон с Димой', '', 0, '', true)) +
+      '</div>' +
+      '<div class="toast"' + M(8) + '><span class="lbl acc">Ассистент задач</span><p>Добавил «Купить SD-карту» на завтра в столбец «Предстоит».</p>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between"><span class="lbl">$0.0004</span><button class="btn sm">Отменить</button></div><i class="tlft"></i></div>';
+  }
+
+  function llm(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    function hi(t, d, on, dot) {
+      return '<div class="hi' + (on ? ' on' : '') + '"><span class="t">' + (dot ? '<i class="dot"></i>' : '') + '<span>' + t + '</span></span><span class="lbl">' + d + '</span></div>';
+    }
+    return '<div class="llm">' +
+      '<div class="hist"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"' + M(1) + '><span class="lbl" style="color:var(--fg)">История</span><button class="btn sm flat">' + ic('plus', 14) + 'Новый</button></div>' +
+        hi('Пролёт камеры над городом', 'Сегодня, 15:02', true) + hi('Портрет в стиле 80-х', 'Сегодня, 12:40', false, true) +
+        hi('Идеи для рекламы кофе', 'Вчера', false) + hi('Разбор промта Seedance', '24 окт', false) + hi('Как сократить промт', '21 окт', false) + hi('Свет для пэкшота', '19 окт', false) +
+      '</div>' +
+      '<div class="chat">' +
+        '<div style="display:flex;align-items:center;gap:16px"' + M(2) + '><span class="lbl acc">Отвечает GPT-6.1 Sol</span><span class="lbl">Осталось примерно $16.59</span></div>' +
+        '<div class="msgs">' +
+          '<div class="um"' + M(3) + '><div class="pn"><span>city_rain.jpg</span></div>Сделай промт для пролёта камеры над городом в дождь, как на этой картинке. 8 секунд.</div>' +
+          '<div class="am"' + M(4) + '><p>Вот промт. Плёночный вид оставил, неон убрал: с дождём он выглядит дёшево.</p>' +
+            '<div class="code"><div class="ch"><span class="lbl">Промт</span><button class="btn sm flat">' + ic('copy', 14) + 'Копировать</button></div>' +
+            '<pre>Slow aerial dolly over a rainy city at dusk, wet asphalt reflections, 35mm film look, soft halation, steady forward motion, 8 seconds, no cuts.</pre></div>' +
+            '<div class="lbl" style="margin-top:12px"' + M(6) + '>$0.0031 · GPT-6.1 Sol · Средне</div></div>' +
+          '<div class="act"' + M(5) + '><span class="lbl acc">Нужно ваше решение</span><span class="hd" style="font-size:22px">Создать промт «Пролёт камеры над городом»?</span>' +
+            '<span style="font-size:14px;color:var(--meta)">Тип: Видео. Текст — из ответа выше.</span>' +
+            '<div style="display:flex;gap:16px;margin-top:8px"><button class="btn pri">Создать</button><button class="btn flat">Отмена</button></div></div>' +
+        '</div>' +
+        '<div class="cmp"' + M(7) + '><span class="ph">Напишите сообщение…</span>' +
+          '<div class="row"><button class="btn sm flat ic">' + ic('clip', 16) + '</button><button class="btn sm flat">GPT-6.1 Sol · Средне' + ic('down', 14) + '</button>' +
+          '<span class="lbl">≈ $0.004 за ответ</span><button class="send">' + ic('send', 20) + '</button></div></div>' +
+      '</div></div>';
+  }
+
+  function gen(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    function off(word, a, b, main) {
+      return '<span class="off fit"><i class="a" style="color:' + a + '">' + word + '</i><i class="b" style="color:' + b + '">' + word + '</i><b style="color:' + main + '">' + word + '</b></span>';
+    }
+    var ghosts = '';
+    for (var i = 0; i < 6; i++) ghosts += '<div class="ghost lbl">Пусто</div>';
+    return '<div style="display:flex;align-items:flex-end;gap:24px;margin-bottom:32px"><div><h1 class="hd" style="font-size:56px;margin:0">Генератор</h1>' +
+        '<p style="margin:12px 0 0;font-size:15px;color:var(--meta)">Картинки и видео прямо из программы, по промтам из базы.</p></div></div>' +
+      '<div class="posters"' + M(1) + '>' +
+        '<div class="pst red"><span><span class="tag solid" style="--fg:var(--ink);--bg:var(--paper)">01 · Изображение</span></span>' +
+          '<div class="fitbox hd"' + M(2) + '>' + off('Изображение', 'var(--deep)', 'var(--ink)', 'var(--paper)') + '</div>' +
+          '<div class="foot"><div class="plate cap">Картинка по промту: Nano Banana, GPT Images, Seedream.</div><span class="tag solid" style="--fg:var(--ink);--bg:var(--paper)">Скоро</span></div></div>' +
+        '<div class="pst ink"><span><span class="tag" style="color:var(--cyan)">02 · Видео</span></span>' +
+          '<div class="fitbox hd">' + off('Видео', 'var(--red)', 'var(--teal)', 'var(--paper)') + '</div>' +
+          '<div class="foot"><div class="cap">Ролик по промту: Seedance, Kling, Runway.</div><span class="tag" style="color:var(--cyan)"' + M(3) + '>Скоро</span></div></div>' +
+      '</div>' +
+      '<div style="margin-top:40px"' + M(4) + '><span class="lbl" style="color:var(--fg)">Последние генерации</span>' +
+        '<div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-top:16px">' + ghosts + '</div></div>';
+  }
+
+  function stats(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    var seed = 7, rnd = function () { seed = seed * 16807 % 2147483647; return seed / 2147483647; };
+    var heat = '';
+    for (var i = 0; i < 53 * 7; i++) {
+      var r = rnd(), fut = i >= 53 * 7 - 6, early = i < 5 * 7;
+      var l = fut ? 'fut' : early ? 'l0' : r < .3 ? 'l0' : r < .55 ? 'l1' : r < .8 ? 'l2' : r < .95 ? 'l3' : 'l4';
+      heat += '<i class="hc ' + l + '"></i>';
+    }
+    var met = [['Промты', 128], ['Правки', 342], ['Файлы', 211], ['Копирования', 296], ['Дела и задачи', 252], ['Ассистент', 55]];
+    var bars = [['Правки', 27], ['Копирование промтов', 23], ['Дела и задачи', 20], ['Файлы', 16], ['Новые промты', 10], ['Ассистент', 4]];
+    return '<div style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:32px;align-items:end;margin-bottom:32px">' +
+        '<div style="display:flex;align-items:center;gap:24px"' + M(1) + '>' +
+          '<span class="med" style="width:112px;height:112px;border-width:5px;font-size:56px">Z</span>' +
+          '<div><span class="lbl">Ваша активность</span><div class="hd" style="font-size:56px;margin:8px 0">zaklex</div><span class="lbl" style="color:var(--meta)">С нами с 3 октября 2026</span>' +
+          '<div style="margin-top:16px"><button class="btn sm flat">Изменить профиль</button></div></div></div>' +
+        '<div style="text-align:right"' + M(2) + '><span class="lbl">Действий за год</span><div class="hd" style="font-size:144px;margin-top:8px">1 284</div>' +
+          '<span class="lbl acc">+212 за октябрь</span></div>' +
+      '</div>' +
+      '<div class="box metrics" style="margin-bottom:32px"' + M(3) + '>' + met.map(function (x) {
+        return '<div><span class="lbl">' + x[0] + '</span><div class="hd">' + x[1] + '</div></div>';
+      }).join('') + '</div>' +
+      '<div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:32px;align-items:start">' +
+        '<div class="box" style="padding:24px"' + M(4) + '><span class="lbl" style="color:var(--fg)">Активность за год</span>' +
+          '<div class="heat" style="margin:16px 0">' + heat + '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center"><span class="lbl">Пн, 19 октября · 9 действий</span>' +
+          '<span class="lbl" style="display:flex;align-items:center;gap:4px">Меньше <i class="hc l0"></i><i class="hc l1"></i><i class="hc l2"></i><i class="hc l3"></i><i class="hc l4"></i> Больше</span></div></div>' +
+        '<div class="box" style="padding:24px"' + M(5) + '><span class="lbl" style="color:var(--fg)">Чаще всего</span><div class="bars" style="margin-top:16px">' +
+          bars.map(function (b) { return '<div class="r"><div><span>' + b[0] + '</span><span class="lbl">' + b[1] + '%</span></div><div class="trk"><i style="width:' + (b[1] / 27 * 100) + '%"></i></div></div>'; }).join('') +
+        '</div></div>' +
+      '</div>';
+  }
+
+  function settingsModal(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    var nav = [['key', 'API-ключи', 1], ['star', 'Ассистент'], ['folder', 'Папка с данными'], ['copy', 'Резервная копия'], ['refresh', 'Обновление', 0, 1], ['dots', 'Горячие клавиши']];
+    P.key = 'M8 15a4 4 0 1 1 0-8 4 4 0 0 1 0 8zM11.5 11H21M18 11v3M15 11v2';
+    return '<div class="dimmer"></div><div class="modal"' + M(1) + '>' +
+      '<div class="sdn"' + M(2) + '><span class="lbl" style="padding:0 12px 12px">Настройки</span>' + nav.map(function (n) {
+        return '<div class="sdi' + (n[2] ? ' on' : '') + '">' + ic(n[0], 16) + n[1] + (n[3] ? '<i class="dot"></i>' : '') + '</div>';
+      }).join('') + '<span class="lbl" style="padding:24px 12px 0">Версия 1.12.2</span></div>' +
+      '<div class="sdc"><button class="btn sm flat ic x">' + ic('x', 16) + '</button>' +
+        '<h2 class="hd" style="font-size:48px;margin:0 0 8px">API-ключи</h2><p style="margin:0 0 32px;font-size:14px;color:var(--meta)">Ключ хранится зашифрованным только на этом компьютере.</p>' +
+        '<div class="box kc"><div class="row"><span class="hd" style="font-size:24px">ChatGPT · OpenAI</span><span class="tag acc" style="margin-left:auto"' + M(3) + '>Ключ подключён</span></div>' +
+          '<div class="kg"><div><span class="lbl">Потрачено за месяц</span><div class="hd" style="font-size:40px;margin-top:8px">$3.41</div></div>' +
+            '<div><span class="lbl">Пополнено</span><div class="inp" style="margin-top:8px;color:var(--fg)">$20.00</div></div>' +
+            '<div' + M(4) + '><span class="lbl acc">Осталось примерно</span><div class="hd" style="font-size:64px;margin-top:8px">$16.59</div></div></div>' +
+          '<div class="row"><button class="btn sm flat">Точный баланс на сайте</button><button class="btn sm flat">Удалить ключ</button></div></div>' +
+        '<div class="box kc" style="margin-bottom:0"><div class="row"><span class="hd" style="font-size:24px">Claude · Anthropic</span><span class="tag" style="color:var(--muted);margin-left:auto">Нет ключа</span></div>' +
+          '<div class="row"' + M(5) + '><div class="inp" style="flex:1">Вставьте ключ: sk-ant-…</div><button class="btn pri">Проверить ключ</button></div></div>' +
+      '</div></div>';
+  }
+
+  function popups(m) {
+    var M = function (n) { return m ? ' data-m="' + n + '"' : ''; };
+    function mi(icn, t, r, on) { return '<div class="mi' + (on ? ' on' : '') + '">' + ic(icn, 16) + t + (r ? '<span class="r">' + r + '</span>' : '') + '</div>'; }
+    return '<div class="menu" style="left:16px;bottom:80px"' + M(1) + '><div class="mh"><span class="med">Z</span><div><div style="font-weight:700">zaklex</div><span class="lbl">128 промтов</span></div></div>' +
+        mi('user', 'Изменить профиль') + mi('gear', 'Настройки') + '<hr>' + mi('sun', 'Тема', ic('right', 16), true) + mi('prompt', 'Промты', ic('right', 16)) + '</div>' +
+      '<div class="menu" style="left:276px;bottom:120px;width:232px"' + M(2) + '>' +
+        mi('monitor', 'Как в Windows') + mi('moon', 'Тушь · тёмная', ic('check', 16)) + mi('sun', 'Бумага · светлая') + '<hr>' + mi('max', 'Белая') + mi('max', 'Чёрная') + '</div>' +
+      '<div class="qa"' + M(3) + '><div class="qa-h">' + ic('star') + '<span class="lbl" style="color:var(--fg)">Ассистент</span><span class="lbl" style="white-space:nowrap">GPT-6 Luna · Быстро</span>' +
+          '<span style="margin-left:auto;display:flex;gap:4px"><button class="btn sm flat">Заново</button><button class="btn sm flat">Открыть в LLM</button></span></div>' +
+        '<div class="qa-l"><div class="um" style="max-width:80%">Поставь звонок Диме на завтра в 15:00</div>' +
+          '<div class="act" style="max-width:none"' + M(4) + '><span class="lbl acc">Добавить в календарь</span><span class="hd" style="font-size:20px">Завтра, 15:00 · Дима, правки монтажа</span>' +
+            '<span style="font-size:13px;color:var(--meta)">Звонок · напомню за час</span><div style="display:flex;gap:12px;margin-top:4px"><button class="btn sm pri">Добавить</button><button class="btn sm flat">Отмена</button></div></div></div>' +
+        '<div class="qa-in"><div class="inp">Что сделать?</div><button class="send" style="margin:0">' + ic('send', 18) + '</button></div></div>';
+  }
+
+  /* ---------- sections with notes ---------- */
+  var NEW = 'Новый вид', IDEA = 'Идея';
+  var SECS = [
+    { id: 'home', t: 'Главная', s: 'Приветствие, плитки разделов и общий вид окна: вкладки сверху и левая панель.',
+      html: function () { return chrome({ act: 'home', marks: true, content: home(true, 6) }); },
+      notes: [
+        ['Вкладки', 'Названия моноширинным шрифтом заглавными. Открытая вкладка в рамке и сливается со страницей. Точка у вкладки LLM — циановый квадрат, мигает, пока пишется ответ.', NEW],
+        ['Левая панель всегда тёмная', 'Тёмная и в светлой теме: как в брендбуке, где тёмного должно быть больше, а светлого меньше. Панель не спорит со страницей.', IDEA],
+        ['Ряд разделов', 'Квадратные кнопки без скруглений. Открытый раздел залит кремовым. Счётчики — циановые квадратики с цифрой.', NEW],
+        ['Ближайшие дела', 'Тип дела — цветной квадратик. Дело, которое идёт сейчас, мигает рамкой своего цвета, вместо времени — «сейчас».', NEW],
+        ['Таймер', 'Крупные цифры моноширинным, плоская полоска прошедшего времени, кнопки паузы и остановки.', NEW],
+        ['Профиль и звёздочка', 'Аватарка в фирменном медальоне: красный круг с кремовой обводкой. Кнопка маленького окна ассистента — красный квадрат в чёрной рамке с жёсткой тенью (красное не касается циановой тени).', NEW],
+        ['Приветствие', 'Плакатный заголовок. Ник — единственное красное слово на экране (правило брендбука: одно акцентное слово).', NEW],
+        ['Плитки с цифрой', 'Главное на плитке — число, поэтому оно самое крупное. Подпись и «Открыть →» — мелко.', NEW],
+        ['Сегодня по часам', 'Лента дня с делами и красной линией «сейчас». Это та самая «сводка дня», которая есть в планах.', IDEA],
+        ['Последние промты', 'Три промта, которые правили последними, — чтобы сразу продолжить работу.', IDEA]
+      ] },
+    { id: 'prompts', t: 'Промты', s: 'Таблица промтов, поиск и фильтр по типам. Вторая строка открыта.',
+      html: function () { return chrome({ act: 'prompts', content: prompts(true) }); },
+      notes: [
+        ['Заголовок и счётчик', 'Метка раздела, плакатный заголовок с одним красным словом, красная черта и сводка: сколько промтов, типов и файлов.', NEW],
+        ['Кнопка «Добавить промт»', 'Залитая кнопка с жёсткой тенью. При нажатии она «вдавливается» — тень пропадает. Так ведут себя все кнопки в макете.', NEW],
+        ['Поиск и фильтр', 'Поле в толстой рамке. Типы — кнопки-метки, выбранный залит.', NEW],
+        ['Таблица', 'Строки разделены толстыми линиями. Название — плакатным шрифтом, текст промта — моноширинным, как сейчас.', NEW],
+        ['Новые цвета типов', 'Зелёного и синего в брендбуке нет. Статика — бирюзовая (в тёмной — циан), Видео — коричневая (в тёмной — телесная), Системные — тёмно-красные (в тёмной — красные). Цвет — в рамке метки, сам текст обычный: мелкий цветной текст плохо читается.', IDEA],
+        ['Комментарий на плашке', 'Комментарий — на тёмно-красной плашке с кремовым текстом: так брендбук делает красные блоки с текстом. Его сразу видно и не спутать с промтом.', IDEA],
+        ['Файлы как «вклейки»', 'Прикреплённые файлы — превью в рамке с тенью, как отпечаток на бумаге. Подпись с именем снизу.', NEW],
+        ['Кнопки строки', '«Копировать», «Комментарий», «Поделиться». У открытой строки «Копировать» — одна большая кнопка (значок копирования убран), у остальных — значки.', NEW]
+      ] },
+    { id: 'calendar', t: 'Календарь', s: 'Вид «Месяц»: сетка слева, выбранный день по часам справа.',
+      html: function () { return chrome({ act: 'calendar', content: calendar(true) }); },
+      notes: [
+        ['Вид и стрелки', 'Те же кнопки: «Месяц ▾», «Сегодня», стрелки. Только плоские, в рамке.', NEW],
+        ['Название периода', 'Месяц и год плакатным шрифтом.', NEW],
+        ['Занятость полутоном', 'Вместо светло-зелёной заливки — полутоновая точка: чем больше дел, тем крупнее и гуще точки. Это главный приём брендбука, и зелёный больше не нужен.', IDEA],
+        ['Выходные', 'Крупные цифры выходных и праздников — красным, подписи дней недели в шапке — обычным цветом. У праздника, как сейчас, подпись под числом (в октябре праздников нет).', NEW],
+        ['Сегодня', 'Клетка «вывернута»: кремовая на тёмном (в светлой теме — тёмная на кремовом). Вместо кружка, потому что круг в брендбуке только у медальона.', IDEA],
+        ['Типы дел в клетке', 'Внизу клетки — квадратики типов дел этого дня. Видно не только «занято», но и чем.', IDEA],
+        ['День по часам', 'Дело — полоска цвета типа слева. Дело «сейчас» мигает рамкой, красная линия с квадратиком — текущее время.', NEW],
+        ['Цвета типов дел', 'Только из палитры брендбука: задача — полый квадрат (иначе в светлой теме её не отличить от звонка), встреча — циан (бирюза), звонок — телесный (коричневый), съёмка — красный, монтаж — кремовый (тёмный).', IDEA]
+      ] },
+    { id: 'tasks', t: 'Задачи', s: 'Доска со столбцами, полоса ассистента задач и уведомление после его ответа.',
+      html: function () { return chrome({ act: 'tasks', content: tasks(true) }); },
+      notes: [
+        ['Метка «Бета»', 'Обводка цианом рядом с заголовком.', NEW],
+        ['Доска / Список', 'Две кнопки вплотную, выбранная залита.', NEW],
+        ['Ассистент задач', 'Поле в рамке, звёздочка слева, кнопка отправки — красный квадрат, как во всех полях ввода программы.', NEW],
+        ['Фильтры', 'Поиск, теги, «Только срочные» и «Скрыть выполненные» — маленькие плоские кнопки.', NEW],
+        ['Столбцы', 'Над столбцом — толстая полоса его цвета. У «Предстоит» она нейтральная: работа ещё не начата. У основных столбцов замочек, у своего — «⋯».', NEW],
+        ['Карточка задачи', 'Квадратная галочка. Важность «!» и «!!» и прошедший срок — метки в красной рамке, теги и срок — в обычной, подзадачи — «1/4» и плоская полоска.', NEW],
+        ['Готовые зачёркнуты красным', 'Название перечёркнуто толстой красной чертой — приём «зачёркнутая цена» из брендбука. У готовых нет тени, они «отходят назад».', IDEA],
+        ['Уведомление ассистента', 'Рамка, жёсткая тень, цена и «Отменить». Полоса снизу показывает, сколько ещё уведомление будет видно.', NEW]
+      ] },
+    { id: 'llm', t: 'LLM', s: 'Разговор с ассистентом: история слева, лента и поле ввода справа.',
+      html: function () { return chrome({ act: 'llm', content: llm(true) }); },
+      notes: [
+        ['История', 'Открытый разговор «вывернут» (кремовый). У разговора с непрочитанным ответом — циановый квадратик.', NEW],
+        ['Кто отвечает', 'Модель цианом, рядом примерный остаток денег на счёте.', NEW],
+        ['Ваше сообщение', 'Тёмно-красная плашка с кремовым текстом — так брендбук делает красные блоки. Картинка — вклейка в рамке.', IDEA],
+        ['Ответ', 'Обычный текст прямо на странице, без пузыря. Промт — в блоке с рамкой и кнопкой «Копировать».', NEW],
+        ['Карточка действия', 'Рамка и жёсткая тень, подпись «Нужно ваше решение». Её сразу видно среди текста.', NEW],
+        ['Цена ответа', 'Моноширинным под ответом: цена, модель и уровень размышлений.', NEW],
+        ['Поле ввода', 'Скрепка, кнопка «Модель» меткой, оценка цены и отправка — красный квадрат со стрелкой.', NEW]
+      ] },
+    { id: 'gen', t: 'Генератор', s: 'Пока пример: две кнопки «Скоро».',
+      html: function () { return chrome({ act: 'gen', content: gen(true) }); },
+      notes: [
+        ['Плакаты вместо карточек', '«Изображение» — красный плакат с кремовым заголовком (рубрика «кейс»), «Видео» — тёмный (рубрика «разбор»). В светлой теме у тёмного плаката между ним и тенью — бумажный зазор. С полутоном и зерном, как обложки.', IDEA],
+        ['Слово подобрано по ширине', 'Размер слова не выбран, а вычислен: оно растягивается на всю ширину плаката (правило кегля из брендбука). Цветные «сдвинутые» копии под словом — фирменный приём с непопаданием краски.', IDEA],
+        ['Метка «Скоро»', 'На красном — тёмная залитая метка, на тёмном — обводка цианом.', NEW],
+        ['Последние генерации', 'Пустые рамки, куда потом лягут готовые картинки и видео.', IDEA]
+      ] },
+    { id: 'stats', t: 'Статистика', s: 'Профиль, главная цифра года, карта активности и чем вы чаще всего заняты.',
+      html: function () { return chrome({ act: 'stats', content: stats(true) }); },
+      notes: [
+        ['Медальон и ник', 'Большой медальон с кремовой обводкой 5 px (в светлой теме снаружи ещё чёрное кольцо), буква кремовая, ник плакатным шрифтом.', NEW],
+        ['Главная цифра', 'Действий за год — самое крупное на экране. Правило брендбука: самое крупное — то, ради чего экран.', IDEA],
+        ['Метрики', 'Шесть чисел в одной рамке, разделены толстыми линиями. В сумме — та самая главная цифра.', NEW],
+        ['Карта активности точками', 'Каждый день — точка: чем больше действий, тем крупнее точка, самые активные дни — циан. Вместо цветных квадратиков — полутон.', IDEA],
+        ['Чаще всего', 'Чем вы чаще всего заняты — плоские полосы. Самая длинная — красная, остальные кремовые.', NEW]
+      ] },
+    { id: 'settings', t: 'Настройки', s: 'Окно поверх программы, раздел «API-ключи».',
+      html: function () { return chrome({ act: 'home', content: home(false), extras: settingsModal(true) }); },
+      notes: [
+        ['Окно поверх', 'Программа затемнена тёплым чёрным, у окна толстая рамка и жёсткая тень.', NEW],
+        ['Разделы', 'Слева список, открытый раздел «вывернут». Точка у «Обновление» — есть новая версия.', NEW],
+        ['Ключ подключён', 'Метка с обводкой цианом. Нет ключа — серая метка.', NEW],
+        ['Остаток крупно', '«Осталось примерно» — самое крупное число в карточке, потраченное и положенное — мельче.', IDEA],
+        ['Поле ключа', 'Поле в рамке и залитая кнопка «Проверить ключ».', NEW]
+      ] },
+    { id: 'popups', t: 'Меню и маленькое окно', s: 'Меню профиля с подменю «Тема» и маленькое окно ассистента (на самом деле они не открыты одновременно).',
+      html: function () { return chrome({ act: 'home', content: home(false), extras: popups(true), starOn: true }); },
+      notes: [
+        ['Меню профиля', 'Плоское, рамка и жёсткая тень. Пункт под мышкой «выворачивается».', NEW],
+        ['Темы', 'Предложение: светлая и тёмная получают имена «Бумага» и «Тушь». Белую и чёрную стоит обсудить: в брендбуке чистого белого нет, их можно убрать или оставить как есть.', IDEA],
+        ['Маленькое окно ассистента', 'Шапка: модель меткой, «Заново» и «Открыть в LLM». Звёздочка внизу слева нажата.', NEW],
+        ['Карточка календаря', 'Такая же карточка действия с жёсткой тенью, как в LLM.', NEW]
+      ] }
+  ];
+
+  var secs = document.getElementById('secs'), toc = document.getElementById('toc');
+  secs.innerHTML = SECS.map(function (s, i) {
+    var n = (i < 9 ? '0' : '') + (i + 1);
+    return '<section class="sec" id="' + s.id + '"><div class="sec-h"><span class="sec-n">' + n + '</span><div><h2 class="hd" style="font-size:56px;margin:0">' + s.t + '</h2><p>' + s.s + '</p></div></div>' +
+      '<div class="stage">' + s.html() + '</div>' +
+      '<div class="legend">' + s.notes.map(function (x, j) {
+        return '<div class="note"><span class="nb">' + (j + 1) + '</span><div><b>' + x[0] + '</b><p>' + x[1] + '</p><span class="tag ' + (x[2] === IDEA ? 'acc' : 'st-new') + '">' + x[2] + '</span></div></div>';
+      }).join('') + '</div></section>';
+  }).join('');
+  toc.innerHTML = SECS.map(function (s) { return '<a class="btn sm flat" href="#' + s.id + '">' + s.t + '</a>'; }).join('');
+
+  /* ---------- poster words: the size is computed to fill the width ---------- */
+  function fitWords() {
+    document.querySelectorAll('.fit').forEach(function (el) {
+      var box = el.parentElement, lo = 20, hi = 260;
+      while (hi - lo > 1) {
+        var mid = (lo + hi) >> 1;
+        el.style.fontSize = mid + 'px';
+        if (el.scrollWidth <= box.clientWidth) lo = mid; else hi = mid;
+      }
+      el.style.fontSize = lo + 'px';
+    });
+  }
+  function zoom() {
+    var w = document.querySelector('.stage').clientWidth;
+    document.documentElement.style.setProperty('--z', Math.min(1, w / 1280));
+  }
+  document.documentElement.style.setProperty('--z', 1);
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(function () { fitWords(); zoom(); });
+  window.addEventListener('resize', zoom);
+
+  /* ---------- page controls ---------- */
+  document.querySelectorAll('[data-theme-btn]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.documentElement.dataset.theme = b.dataset.themeBtn;
+      document.querySelectorAll('[data-theme-btn]').forEach(function (x) { x.classList.toggle('on', x === b); });
+    });
+  });
+  var mb = document.getElementById('marks-btn');
+  mb.addEventListener('click', function () {
+    var off = document.body.classList.toggle('nomarks');
+    mb.textContent = off ? 'Скрыты' : 'Показаны';
+    mb.classList.toggle('on', !off);
+  });
+})();
+</script>
+</body>
+</html>
