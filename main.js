@@ -407,7 +407,7 @@ nativeTheme.on('updated', paintWindows);
 
 /* ---------- IPC ---------- */
 function ok(extra) {
-  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView() }, extra || {});
+  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView(), taskArchiveMode: store.archiveMode }, extra || {});
 }
 function fail(e) {
   const code = e && e.code;
@@ -432,7 +432,7 @@ function handle(name, fn) {
 }
 function syncOthers(r, except) {
   const data = { info: info() };
-  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, profile: r.profile, activity: r.activity });
+  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, taskArchiveMode: r.taskArchiveMode, profile: r.profile, activity: r.activity });
   if (r.chats) data.chats = r.chats;
   broadcast('sync', data, except);
 }
@@ -887,12 +887,29 @@ function taskLine(t) {
   if (t.tags && t.tags.length) more.push(t.tags.join(', '));
   return '«' + t.title + '» (' + more.join(', ') + ')';
 }
-// All columns and tasks for a model: what tasks_list returns.
+// All columns and the tasks on the board for a model: what tasks_list returns. The archive is searched separately.
 function tasksForModel() {
-  const list = store.tasksView().map((t) => ({ id: t.id, title: t.title, status: t.status, due: t.due, time: t.time, priority: t.priority, tags: t.tags, note: t.note,
+  const archived = store.tasks.filter((t) => t.archivedAt).length;
+  const day = (ms) => (ms ? dayKeyOf(new Date(ms)) : '');
+  const list = store.tasksView().filter((t) => !t.archivedAt).map((t) => ({ id: t.id, title: t.title, status: t.status, due: t.due, time: t.time, priority: t.priority, tags: t.tags, note: t.note,
+    created: day(t.createdAt), started: day(t.startedAt), done: day(t.doneAt),
     subtasks: t.subtasks.map((s) => ({ id: s.id, title: s.title, done: s.done })) }));
   const columns = store.columnsView().map((c) => ({ id: c.id, name: c.name }));
-  return JSON.stringify({ columns, tasks: list }) + (list.length ? '' : ' На доске задач пока ничего нет.');
+  return JSON.stringify({ columns, tasks: list }) + (list.length ? '' : ' На доске задач пока ничего нет.') +
+    (archived ? ' В архиве ещё ' + archived + ' выполненных задач: искать в нём — tasks_archive_search.' : '');
+}
+// Done tasks in the archive whose title, note, tags or subtasks contain the words (all of them if the query is empty).
+function archiveSearch(query) {
+  const words = String(query || '').toLowerCase().replace(/ё/g, 'е').split(/\s+/).filter(Boolean);
+  const hay = (t) => [t.title, t.note].concat(t.tags, t.subtasks.map((x) => x.title)).join(' ').toLowerCase().replace(/ё/g, 'е');
+  return store.tasks.filter((t) => t.archivedAt && words.every((w) => hay(t).includes(w)))
+    .sort((a, b) => b.doneAt - a.doneAt).slice(0, 30);
+}
+function archiveForModel(query) {
+  const found = archiveSearch(query).map((t) => ({ id: t.id, title: t.title, created: dayKeyOf(new Date(t.createdAt)),
+    started: t.startedAt ? dayKeyOf(new Date(t.startedAt)) : '', done: dayKeyOf(new Date(t.doneAt)), tags: t.tags, note: t.note,
+    subtasks: t.subtasks.map((x) => x.title) }));
+  return found.length ? JSON.stringify(found) : 'В архиве ничего такого нет.';
 }
 function stubTasks(text, t) {
   if (/(добав|созда|запиш|постав|закин)\S*\s.*задач/.test(t)) {
@@ -1092,8 +1109,13 @@ const TOOLS = [
   },
   {
     name: 'tasks_list',
-    description: 'Показывает все задачи с доски «Задачи»: id, название, столбец (todo, doing, done), срок, важность, теги, подзадачи и заметку.',
+    description: 'Показывает все задачи с доски «Задачи»: id, название, столбец (todo, doing, done), срок, важность, теги, подзадачи, заметку и даты — поставлена (created), начата (started), сделана (done). Архива выполненных задач здесь нет.',
     parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
+  },
+  {
+    name: 'tasks_archive_search',
+    description: 'Ищет в архиве выполненных задач по словам (название, заметка, теги, подзадачи); пустая строка — последние 30. Используй, только когда спрашивают про старые или выполненные задачи.',
+    parameters: { type: 'object', additionalProperties: false, required: ['query'], properties: { query: { type: 'string', description: 'Слова для поиска или пустая строка' } } }
   },
   {
     name: 'task_add',
@@ -1183,6 +1205,7 @@ function runTool(name, input) {
     return { output: after('Удалить из календаря: ' + eventLine(event)), action: { kind: 'calendar-delete', title: event.title, event } };
   }
   if (name === 'tasks_list') return { output: tasksForModel() };
+  if (name === 'tasks_archive_search') return { output: archiveForModel(a.query) };
   if (name === 'task_add') {
     const task = normalizeTask(Object.assign({ title: a.title, status: a.status, subtasks: (Array.isArray(a.subtasks) ? a.subtasks : []).map((s) => ({ title: s })) }, taskFields(a)));
     if (!task) return { output: 'Ошибка: нужно название задачи.', error: true };
@@ -1603,6 +1626,21 @@ handle('column-move', async (id, dir) => { await store.moveColumn(id, dir); retu
 // Returns what «Отменить» needs: the column, its place and the tasks that moved to «Предстоит».
 handle('column-delete', async (id) => { const removed = await store.deleteColumn(id); return ok({ removed }); });
 handle('column-restore', async (r) => { await store.restoreColumn(r); return ok(); });
+// The archive of done tasks: «Убрать в архив» (ids, or all of «Готово»), «Отменить» / «Вернуть на доску», the mode.
+handle('tasks-archive', async (ids) => { const archived = await store.archiveDone(Array.isArray(ids) ? ids : null); return ok({ archived }); });
+handle('tasks-unarchive', async (ids) => { await store.unarchive(Array.isArray(ids) ? ids : []); return ok(); });
+handle('tasks-archive-mode', async (mode) => { await store.setArchiveMode(mode); const archived = await store.autoArchive(); return ok({ archived }); });
+// Done tasks leave by themselves (store.archiveMode): a few seconds after the start and then every 5 minutes,
+// so it also happens after midnight while the program stays open. The windows get the fresh board and a hint.
+async function autoArchiveTasks() {
+  if (!store) return;
+  try {
+    const ids = await store.autoArchive();
+    if (!ids.length || !liveWins().length) return;
+    syncOthers(ok(), null);
+    broadcast('tasks-archived', ids.length);
+  } catch (e) { console.error('auto archive', e); }
+}
 
 /* ---------- the tasks assistant ---------- */
 // The bar above the board. Its own assistant that only knows tasks: always the cheapest model with quick thinking,
@@ -1615,12 +1653,15 @@ const TASKS_PROMPT = [
   'Из одного сообщения может получиться несколько задач: «смонтировать рилс завтра и позвонить Диме в пятницу» — это две задачи.',
   'Название — суть в 2–6 словах, с большой буквы, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали; даты считай от строки «Сейчас». Важность priority: 2 — срочно (срочно, горит, asap), 1 — важно, 0 — обычно, если ничего такого не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач в tasks_list: «смонтировать рилс» → «Монтаж», «начать вёрстку сайта» → «Сайт».',
   'Чтобы изменить, перенести, отметить или удалить задачу, сначала найди её id через tasks_list. «Сделал …», «готово …» — перенеси задачу в done. subtasks_add добавляет шаги внутри задачи («разбей … на шаги» — 3–6 конкретных шагов), subtask_done отмечает шаг.',
+  'Выполненные задачи уходят в архив: tasks_list его не показывает. «Найди в архиве …», «что я делал на прошлой неделе» — tasks_archive_search. «Убери выполненные в архив», «очисти готово» — tasks_archive_done.',
   'Если просят не про задачи (календарь, промты, вкладки), коротко скажи, что это умеет маленькое окно ассистента (звёздочка внизу слева) или раздел LLM.',
   'Ответ — одна-две короткие фразы по-русски без разметки: что сделано. Например: «Добавил 2 задачи: «Смонтировать рилс» на завтра, срочная; «Позвонить Диме» на пятницу.»'
 ].join('\n\n');
 const sameTool = (name, description) => Object.assign({}, TOOLS.find((t) => t.name === name), description ? { description } : {});
 const TASK_TOOLS = [
   sameTool('tasks_list'),
+  sameTool('tasks_archive_search'),
+  { name: 'tasks_archive_done', description: 'Убирает все задачи из «Готово» в архив.', parameters: { type: 'object', additionalProperties: false, required: [], properties: {} } },
   sameTool('task_add', 'Добавляет задачу на доску (сразу, без подтверждения).'),
   sameTool('task_update', 'Меняет задачу: название, столбец (done — сделано), срок, важность, теги, заметку. Передай все поля; то, что не меняется, — как было в tasks_list.'),
   { name: 'task_delete', description: 'Удаляет задачу.', parameters: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', description: 'id задачи из tasks_list' } } } },
@@ -1646,6 +1687,12 @@ async function loggedTask(log, id, fn) {
 async function runTaskTool(name, input, log) {
   const a = input && typeof input === 'object' ? input : {};
   if (name === 'tasks_list') return tasksForModel();
+  if (name === 'tasks_archive_search') return archiveForModel(a.query);
+  if (name === 'tasks_archive_done') {
+    const ids = store.tasks.filter((t) => t.status === 'done' && !t.archivedAt).map((t) => t.id);
+    for (const id of ids) await loggedTask(log, id, async () => { await store.archiveDone([id]); return store.findTask(id); });
+    return ids.length ? 'Убрано в архив: ' + ids.length + '.' : 'В «Готово» нечего убирать.';
+  }
   if (name === 'task_add') {
     const t = normalizeTask(Object.assign({ title: a.title, status: a.status, subtasks: (Array.isArray(a.subtasks) ? a.subtasks : []).map((s) => ({ title: s })) }, taskFields(a)));
     if (!t) return 'Ошибка: нужно название задачи.';
@@ -1802,6 +1849,16 @@ const STUB_NOT_FOUND = 'Не нашёл такую задачу. Напишит�
 async function stubTasksAssistant(text, log) {
   const low = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
   let t;
+  if (/в архиве|из архива/.test(low)) {
+    const q = text.replace(/^.*?(в архиве|из архива)\s*/i, '').replace(/[?.!]+$/, '');
+    const found = archiveSearch(q);
+    return found.length ? 'В архиве: ' + found.slice(0, 8).map((x) => '«' + x.title + '» (' + humanDay(dayKeyOf(new Date(x.doneAt))) + ')').join(', ') + '.' : 'В архиве такого нет.';
+  }
+  if (/в архив|очисти готово|убери (все )?(выполненные|готовые|сделанные)/.test(low)) {
+    const ids = store.tasks.filter((x) => x.status === 'done' && !x.archivedAt).map((x) => x.id);
+    for (const id of ids) await loggedTask(log, id, async () => { await store.archiveDone([id]); return store.findTask(id); });
+    return ids.length ? 'Убрал в архив ' + ids.length + ' ' + (ids.length === 1 ? 'задачу' : ids.length < 5 ? 'задачи' : 'задач') + ' из «Готово».' : 'В «Готово» нечего убирать.';
+  }
   if (/^\s*(что|какие|покажи|сколько)/.test(low) || /\?\s*$/.test(text)) {
     const today = dayKeyOf(new Date()), open = store.tasks.filter((x) => x.status !== 'done');
     const late = open.filter((x) => x.due && x.due < today);
@@ -2220,6 +2277,8 @@ if (!app.requestSingleInstanceLock()) {
     pendingArchive = archiveFromArgs(process.argv);
     createWindow();
     setupUpdates();
+    setTimeout(autoArchiveTasks, 5000);
+    setInterval(autoArchiveTasks, 5 * 60 * 1000);
     setInterval(checkReminders, 20 * 1000);
     setTimeout(checkReminders, 3000);
     restoreTimer();

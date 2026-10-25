@@ -81,6 +81,15 @@ contextBridge.exposeInMainWorld('vsApi', {
   columnMove: (id, dir) => ipcRenderer.invoke('column-move', id, dir),
   columnDelete: (id) => ipcRenderer.invoke('column-delete', id),
   columnRestore: (r) => ipcRenderer.invoke('column-restore', r),
+  tasksArchive: (ids) => ipcRenderer.invoke('tasks-archive', ids),
+  tasksUnarchive: (ids) => ipcRenderer.invoke('tasks-unarchive', ids),
+  tasksArchiveMode: (mode) => ipcRenderer.invoke('tasks-archive-mode', mode),
+  // Done tasks went to the archive by themselves: how many.
+  onTasksArchived: (fn) => {
+    const listener = (_e, n) => fn(n);
+    ipcRenderer.on('tasks-archived', listener);
+    return () => ipcRenderer.removeListener('tasks-archived', listener);
+  },
   tasksAssistant: (text) => ipcRenderer.invoke('tasks-assistant', text),
   tasksAssistantUndo: (undoId) => ipcRenderer.invoke('tasks-assistant-undo', undoId),
   calSave: (ev) => ipcRenderer.invoke('cal-save', ev),

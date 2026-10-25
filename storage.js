@@ -212,6 +212,7 @@ function normalizeColumn(c) {
   return { id: c.id, name, color: Math.max(0, Math.min(5, Math.round(num(c.color)))) };
 }
 const TASK_TAG_MAX = 30;
+const ARCHIVE_MODES = ['day', 'week', 'manual'];
 function normalizeTags(list) {
   const out = [];
   (Array.isArray(list) ? list : []).forEach((x) => {
@@ -245,6 +246,13 @@ function normalizeTask(t, fallbackTime) {
     tags: normalizeTags(t.tags),
     subtasks: normalizeSubtasks(t.subtasks),
     doneFrom: status === 'done' && t.doneFrom !== 'done' && isTaskStatus(t.doneFrom) ? t.doneFrom : '',
+    // When it was ticked off (tasks done in older versions get the time of their last change) and when it went
+    // to the archive. Both only for a task in «Готово»: taking it out of there clears them.
+    // The first time it left «Предстоит» for work (kept when it goes back; a task in work from an older version gets
+    // the time of its last change; one done straight from «Предстоит» has none).
+    startedAt: num(t.startedAt) || (status !== 'todo' && status !== 'done' ? num(t.updatedAt) || now : 0),
+    doneAt: status === 'done' ? num(t.doneAt) || num(t.updatedAt) || now : 0,
+    archivedAt: status === 'done' ? num(t.archivedAt) : 0,
     order: Number.isFinite(Number(t.order)) ? Number(t.order) : now,
     createdAt: num(t.createdAt) || now,
     updatedAt: num(t.updatedAt) || num(t.createdAt) || now
@@ -315,6 +323,7 @@ class Store {
     this.events = [];
     this.tasks = [];
     this.columns = [];       // the user's own task columns, in their order
+    this.archiveMode = 'day'; // done tasks go to the archive by themselves: 'day', 'week' or 'manual'
     this.queue = Promise.resolve();
   }
 
@@ -377,6 +386,7 @@ class Store {
     this.events = cal && Array.isArray(cal.events) ? cal.events.map((e) => normalizeEvent(e)).filter(Boolean) : [];
     const tasks = await readJson(this.tasksPath);
     this.columns = tasks && Array.isArray(tasks.columns) ? tasks.columns.map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX) : [];
+    this.archiveMode = tasks && ARCHIVE_MODES.includes(tasks.archiveMode) ? tasks.archiveMode : 'day';
     this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean) : [];
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
@@ -498,7 +508,7 @@ class Store {
     return this.tasks.slice().sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.order - b.order);
   }
   findTask(id) { return this.tasks.find((t) => t.id === id) || null; }
-  tasksFile() { return { format: 'snowball-tasks', version: 1, columns: this.columns, tasks: this.tasks }; }
+  tasksFile() { return { format: 'snowball-tasks', version: 1, columns: this.columns, archiveMode: this.archiveMode, tasks: this.tasks }; }
   writeTasks() { return writeJson(this.tasksPath, this.tasksFile()); }
 
   // The user's own columns: add, rename, move left (-1) or right (+1) among them, delete and bring back.
@@ -577,6 +587,8 @@ class Store {
         merged.order = col.length ? Math.max.apply(null, col.map((t) => t.order)) + 1 : now;
       }
       if (moved && merged.status === 'done' && input.doneFrom === undefined) merged.doneFrom = prev.status;
+      if ((!prev || moved) && merged.status === 'done' && input.doneAt === undefined) { merged.doneAt = now; merged.archivedAt = 0; }
+      if ((!prev || moved) && !['todo', 'done'].includes(merged.status || 'todo') && !num(merged.startedAt)) merged.startedAt = now;
       const task = this.fitColumn(normalizeTask(merged));
       if (!task) throw Object.assign(new Error('bad task'), { userMessage: 'Напишите, что нужно сделать.' });
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task;
@@ -591,6 +603,53 @@ class Store {
       });
       await this.bump('tasks', n);
       return task;
+    });
+  }
+
+  /* ---------- the archive of done tasks ---------- */
+  // Done tasks leave the board for the archive: by the «Убрать в архив» button, by the assistant, or by themselves
+  // (archiveMode 'day' — everything done before today; 'week' — done more than 7 days ago; 'manual' — never by itself).
+  // They stay in tasks.json with archivedAt. Not an action on the statistics page. Returns the ids that moved.
+  archiveDone(ids) {
+    return this.run(async () => {
+      const now = Date.now(), moved = [];
+      this.tasks.forEach((t) => {
+        if (t.status !== 'done' || t.archivedAt || (ids && !ids.includes(t.id))) return;
+        t.archivedAt = now;
+        moved.push(t.id);
+      });
+      if (moved.length) await this.writeTasks();
+      return moved;
+    });
+  }
+  // Back to «Готово» on the board («Отменить» after archiving, «Вернуть на доску»).
+  unarchive(ids) {
+    return this.run(async () => {
+      let n = 0;
+      this.tasks.forEach((t) => { if (t.archivedAt && ids.includes(t.id)) { t.archivedAt = 0; n++; } });
+      if (n) await this.writeTasks();
+      return n;
+    });
+  }
+  // The day a done task leaves by itself: before today, or before the day 6 days ago (more than a week).
+  archiveBefore() {
+    if (this.archiveMode === 'manual') return 0;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    if (this.archiveMode === 'week') d.setDate(d.getDate() - 6);
+    return d.getTime();
+  }
+  autoArchive() {
+    const before = this.archiveBefore();
+    if (!before) return Promise.resolve([]);
+    const ids = this.tasks.filter((t) => t.status === 'done' && !t.archivedAt && t.doneAt < before).map((t) => t.id);
+    return ids.length ? this.archiveDone(ids) : Promise.resolve([]);
+  }
+  setArchiveMode(mode) {
+    return this.run(async () => {
+      if (!ARCHIVE_MODES.includes(mode) || mode === this.archiveMode) return;
+      this.archiveMode = mode;
+      await this.writeTasks();
     });
   }
 

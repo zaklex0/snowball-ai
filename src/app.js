@@ -37,6 +37,7 @@
     events: [],           // calendar: { id, date "2026-11-03", from "15:00", to, title, kind, note, remind }
     tasks: [],            // tasks board: { id, title, status (a column id), note, due, time, priority, tags, subtasks, doneFrom, order }
     taskColumns: [],      // all task columns in order: { id, name, base? , color? }
+    taskArchiveMode: "day", // done tasks go to the archive by themselves: "day", "week" or "manual"
     query: "",
     type: "all",
     expanded: new Set(),
@@ -126,6 +127,7 @@
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
     dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
+    archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1.2"/><path d="M5 9v9.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/></svg>',
     stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>'
   };
 
@@ -278,6 +280,7 @@
     if (r.events) state.events = r.events;
     if (r.tasks) state.tasks = r.tasks;
     if (r.taskColumns) state.taskColumns = r.taskColumns;
+    if (r.taskArchiveMode) state.taskArchiveMode = r.taskArchiveMode;
   }
   // Every call returns { ok, prompts?, error? }. Fresh prompts replace the list.
   function call(promise) {
@@ -3313,7 +3316,7 @@
   // What is shown: board or list, search, tag, importance (1 — important and urgent, 2 — urgent only), done tasks hidden.
   var tf = { view: "board", q: "", tag: "", prio: 0, hideDone: false, doneOpen: false };
   try {
-    if (localStorage.getItem("tasksView") === "list") tf.view = "list";
+    if (["list", "archive"].indexOf(localStorage.getItem("tasksView")) !== -1) tf.view = localStorage.getItem("tasksView");
     tf.hideDone = localStorage.getItem("tasksHideDone") === "1";
   } catch (e) {}
   function findTask(id) { return state.tasks.find(function (t) { return t.id === id; }) || null; }
@@ -3373,19 +3376,22 @@
     });
   }
   function renderTasks() {
-    var all = state.tasks || [];
+    var everything = state.tasks || [];
+    var archived = everything.filter(function (t) { return t.archivedAt; });
+    var all = everything.filter(function (t) { return !t.archivedAt; });   // on the board
     var done = all.filter(function (t) { return t.status === "done"; }).length;
     var today = dayKey(new Date());
     var late = all.filter(function (t) { return t.status !== "done" && t.due && t.due < today; }).length;
-    els.tasksMeta.textContent = all.length ? all.length + " " + plural(all.length, "задача", "задачи", "задач") + (done ? ", готово " + done : "") + (late ? ", срок прошёл у " + late : "")
-      : "Пока задач нет: напишите ассистенту или добавьте первую в столбец «Предстоит»";
+    els.tasksMeta.textContent = (all.length ? all.length + " " + plural(all.length, "задача", "задачи", "задач") + (done ? ", готово " + done : "") + (late ? ", срок прошёл у " + late : "")
+      : "Пока задач нет: напишите ассистенту или добавьте первую в столбец «Предстоит»") + (archived.length ? ", в архиве " + archived.length : "");
     renderTbar();
     renderTaskFilters();
     var filtered = tf.q || tf.tag || tf.prio;
-    var shown = all.filter(taskVisible);
+    var shown = all.filter(function (t) { return taskVisible(t); });
     els.board.hidden = tf.view !== "board";
-    els.tlist.hidden = tf.view !== "list";
+    els.tlist.hidden = tf.view === "board";
     els.boardHint.hidden = tf.view !== "board";
+    if (tf.view === "archive") { renderTaskArchive(archived.filter(function (t) { return taskVisible(t, true); })); return; }
     if (tf.view === "list") { renderTaskList(shown); return; }
     var cols = taskCols().map(function (c, ci) {
       var list = shown.filter(function (t) { return t.status === c.id; });
@@ -3393,7 +3399,7 @@
         columnHead(c, ci, list.length),
         list.map(taskItem),
         !list.length && filtered ? h("p", { class: "tcol-empty", text: "Под фильтр ничего не подходит" }) : null,
-        addRow(c.id));
+        c.id === "done" ? archiveRow(done) : addRow(c.id));
       col.addEventListener("dragover", function (e) { if (!tb.dragId) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; col.classList.add("drop"); });
       col.addEventListener("dragleave", function (e) { if (!col.contains(e.relatedTarget)) col.classList.remove("drop"); });
       col.addEventListener("drop", function (e) {
@@ -3482,8 +3488,8 @@
   }
 
   /* ---------- search and filters ---------- */
-  function taskVisible(t) {
-    if (tf.hideDone && t.status === "done") return false;
+  function taskVisible(t, inArchive) {
+    if (tf.hideDone && t.status === "done" && !inArchive) return false;
     if (tf.tag && (t.tags || []).indexOf(tf.tag) === -1) return false;
     if (tf.prio && t.priority < tf.prio) return false;
     if (!tf.q) return true;
@@ -3507,14 +3513,12 @@
     els.tfTag.disabled = !tags.length;
     els.tfPrio.value = String(tf.prio);
     els.tfDone.setAttribute("aria-pressed", String(tf.hideDone));
+    els.tfDone.hidden = tf.view === "archive";
     els.tfReset.hidden = !(tf.q || tf.tag || tf.prio);
   }
   els.tview.addEventListener("click", function (e) {
     var b = e.target.closest("button[data-v]");
-    if (!b || b.dataset.v === tf.view) return;
-    tf.view = b.dataset.v;
-    try { localStorage.setItem("tasksView", tf.view); } catch (err) {}
-    renderTasks();
+    if (b) setTaskView(b.dataset.v);
   });
   els.tsearch.addEventListener("input", function () { tf.q = els.tsearch.value.trim(); renderTasks(); });
   els.tsearch.addEventListener("keydown", function (e) { if (e.key === "Escape" && els.tsearch.value) { e.stopPropagation(); els.tsearch.value = ""; tf.q = ""; renderTasks(); } });
@@ -3550,11 +3554,27 @@
     }
     var cols = taskCols(), custom = cols.filter(function (x) { return !x.base; }), at = custom.indexOf(c);
     var side;
-    if (c.base) side = h("span", { class: "tcol-lock", html: ICONS.lock, title: "Основной столбец: его нельзя удалить или переименовать" });
+    var item = function (iconName, label, fn, cls) {
+      return h("button", { type: "button", role: "menuitem", class: cls || "", onclick: function (e) { e.stopPropagation(); tb.colMenu = null; fn(); } }, icon(iconName), label);
+    };
+    if (c.id === "done") {
+      var doneLeft = (state.tasks || []).filter(function (t) { return t.status === "done" && !t.archivedAt; }).length;
+      side = h("div", { class: "tcol-menu" },
+        h("button", { type: "button", class: "tcol-more", html: ICONS.dots, title: "Архив выполненных задач", "aria-label": "Архив выполненных задач",
+          "aria-haspopup": "true", "aria-expanded": String(tb.colMenu === c.id),
+          onclick: function (e) { e.stopPropagation(); tb.colMenu = tb.colMenu === c.id ? null : c.id; renderTasks(); } }),
+        tb.colMenu === c.id ? h("div", { class: "tcol-pop", role: "menu" },
+          doneLeft ? item("archive", "Убрать в архив сейчас (" + doneLeft + ")", function () { archiveNow(); }) : null,
+          item("archive", "Открыть архив", function () { setTaskView("archive"); }),
+          h("p", { class: "tcol-pop-h", text: "Убирать в архив само" }),
+          ARCHIVE_MODES.map(function (m) {
+            var on = state.taskArchiveMode === m.id;
+            return h("button", { type: "button", role: "menuitemradio", "aria-checked": String(on), class: on ? "on" : "", title: m.hint,
+              onclick: function (e) { e.stopPropagation(); tb.colMenu = null; setArchiveMode(m.id); } },
+              h("span", { class: "ico", html: on ? ICONS.check : "", "aria-hidden": "true" }), h("span", null, m.name, h("small", { text: m.hint })));
+          })) : null);
+    } else if (c.base) side = h("span", { class: "tcol-lock", html: ICONS.lock, title: "Основной столбец: его нельзя удалить или переименовать" });
     else {
-      var item = function (iconName, label, fn, cls) {
-        return h("button", { type: "button", role: "menuitem", class: cls || "", onclick: function (e) { e.stopPropagation(); tb.colMenu = null; fn(); } }, icon(iconName), label);
-      };
       side = h("div", { class: "tcol-menu" },
         h("button", { type: "button", class: "tcol-more", html: ICONS.dots, title: "Действия со столбцом", "aria-label": "Действия со столбцом «" + c.name + "»",
           "aria-haspopup": "true", "aria-expanded": String(tb.colMenu === c.id),
@@ -3567,6 +3587,77 @@
     }
     return h("div", { class: "tcol-h" }, h("span", { class: "tcol-name" }, h("i", { "aria-hidden": "true" }), c.name), h("span", { class: "tcol-n", text: String(count) }), side);
   }
+  /* ---------- the archive of done tasks ---------- */
+  // Done tasks leave the board: by «Убрать в архив» at the bottom of «Готово», by the assistant, or by themselves
+  // (main.js, state.taskArchiveMode). In the «Архив» view they are grouped by the day they were done; a click opens
+  // the panel with «Вернуть на доску»; taking the tick off sends a task back to work.
+  var ARCHIVE_MODES = [
+    { id: "day", name: "Каждый день", hint: "утром — всё, что сделано до сегодняшнего дня" },
+    { id: "week", name: "Через неделю", hint: "то, что сделано больше 7 дней назад" },
+    { id: "manual", name: "Только вручную", hint: "кнопкой «Убрать в архив»" }
+  ];
+  function setTaskView(v) {
+    if (tf.view === v) return;
+    tf.view = v;
+    try { localStorage.setItem("tasksView", v); } catch (err) {}
+    renderTasks();
+  }
+  function archiveRow(n) {
+    if (!n) return null;
+    var mode = ARCHIVE_MODES.find(function (m) { return m.id === state.taskArchiveMode; }) || ARCHIVE_MODES[0];
+    return h("button", { type: "button", class: "task-add tarch-btn", title: "Выполненные уйдут в «Архив» (кнопка рядом с «Доска / Список»). Само убирается: " + mode.name.toLowerCase() + " — " + mode.hint,
+      onclick: function () { archiveNow(); } }, icon("archive"), "Убрать в архив (" + n + ")");
+  }
+  function archiveNow() {
+    call(api.tasksArchive(null)).then(function (r) {
+      if (!r) return;
+      render();
+      var ids = r.archived || [];
+      if (!ids.length) return;
+      undoToast(ids.length + " " + plural(ids.length, "задача убрана", "задачи убраны", "задач убрано") + " в архив", function () {
+        call(api.tasksUnarchive(ids)).then(function (x) { if (x) render(); });
+      });
+    });
+  }
+  function setArchiveMode(mode) {
+    call(api.tasksArchiveMode(mode)).then(function (r) {
+      if (!r) return;
+      render();
+      var n = (r.archived || []).length;
+      var m = ARCHIVE_MODES.find(function (x) { return x.id === mode; });
+      toast(m.name + (mode === "manual" ? ": сами задачи больше не уберутся" : ": " + m.hint) + (n ? ". Убрано в архив: " + n : ""), true);
+    });
+  }
+  api.onTasksArchived(function (n) {
+    if (state.page === "tasks") toast("Выполненные задачи убраны в архив: " + n + ". Они в «Архиве» рядом с «Доска / Список».", true);
+  });
+  // By the day a task was done: today, yesterday, the last 7 days, then by month, newest first.
+  function archiveGroup(t) {
+    var d = new Date(t.doneAt || t.updatedAt), now = new Date();
+    var start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (d.getTime() >= start) return "Сегодня";
+    if (d.getTime() >= start - 864e5) return "Вчера";
+    if (d.getTime() >= start - 6 * 864e5) return "На этой неделе";
+    return MONTHS_NOM[d.getMonth()] + (d.getFullYear() !== now.getFullYear() ? " " + d.getFullYear() : "");
+  }
+  function renderTaskArchive(shown) {
+    var mode = ARCHIVE_MODES.find(function (m) { return m.id === state.taskArchiveMode; }) || ARCHIVE_MODES[0];
+    var kids = [h("p", { class: "tarch-info" }, icon("archive"),
+      h("span", { text: "Сюда уходят выполненные задачи: кнопкой «Убрать в архив» внизу столбца «Готово» или сами — " + mode.name.toLowerCase() +
+        (mode.id === "manual" ? "" : " (" + mode.hint + ")") + ". Поменять — в меню «⋯» у «Готово». Нажмите на задачу, чтобы открыть её или вернуть на доску." }))];
+    var groups = [];
+    shown.slice().sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); }).forEach(function (t) {
+      var g = archiveGroup(t), last = groups[groups.length - 1];
+      if (!last || last.name !== g) groups.push(last = { name: g, items: [] });
+      last.items.push(t);
+    });
+    groups.forEach(function (g) {
+      kids.push(h("section", { class: "tgroup" }, h("h3", { class: "tgroup-h" }, g.name, h("span", { text: String(g.items.length) })), g.items.map(function (t) { return taskRow(t, true); })));
+    });
+    if (!shown.length) kids.push(h("p", { class: "tlist-empty", text: tf.q || tf.tag || tf.prio ? "В архиве под фильтр ничего не подходит." : "Архив пока пуст." }));
+    els.tlist.replaceChildren.apply(els.tlist, kids);
+  }
+
   function removeColumn(c) {
     call(api.columnDelete(c.id)).then(function (r) {
       if (!r) return;
@@ -3620,8 +3711,8 @@
     var now = new Date();
     return Math.round((new Date(t.due + "T00:00") - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
   }
-  function taskRow(t) {
-    var d = t.due ? dueInfo(t) : null;
+  function taskRow(t, inArchive) {
+    var d = t.due && !inArchive ? dueInfo(t) : null;
     var cls = "trow " + colClass(t.status) + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
     var el = h("div", { class: cls, tabindex: "0", "data-id": t.id, onclick: function () { openTask(t.id); },
       onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); } },
@@ -3629,7 +3720,8 @@
       h("div", { class: "trow-main" }, h("span", { class: "task-t", text: t.title }), taskMarks(t, true)),
       h("div", { class: "trow-side" },
         d ? h("span", { class: "tmark due" + (d.late ? " late" : d.today ? " today" : "") }, icon("calendar"), d.text) : null,
-        h("span", { class: "trow-col" }, h("i", { "aria-hidden": "true" }), colName(t.status))));
+        inArchive ? h("span", { class: "trow-col trow-when", title: "Поставлена " + fmtStamp(t.createdAt) + (t.startedAt ? "\nНачата " + fmtStamp(t.startedAt) : "") + "\nСделана " + fmtStamp(t.doneAt) }, "сделана " + fmtDay(new Date(t.doneAt)))
+          : h("span", { class: "trow-col" }, h("i", { "aria-hidden": "true" }), colName(t.status))));
     return el;
   }
   function renderTaskList(shown) {
@@ -3654,6 +3746,39 @@
         tf.doneOpen ? done.map(taskRow) : null));
     }
     els.tlist.replaceChildren.apply(els.tlist, kids);
+  }
+
+  /* The timeline of a task: set → started → done → in the archive, with how long each step took and the whole way. */
+  // "меньше часа", "5 ч", "2 дня"
+  function fmtSpan(ms) {
+    if (ms < 3600e3) return "меньше часа";
+    if (ms < 864e5) { var hrs = Math.round(ms / 3600e3); return hrs + " ч"; }
+    var days = Math.round(ms / 864e5);
+    return days + " " + plural(days, "день", "дня", "дней");
+  }
+  function fmtStamp(ms) {
+    var d = new Date(ms), now = new Date(), time = d.getHours() + ":" + pad2(d.getMinutes());
+    if (dayKey(d) === dayKey(now)) return "сегодня, " + time;
+    if (dayKey(d) === dayKey(addDays(now, -1))) return "вчера, " + time;
+    return fmtDay(d, d.getFullYear() !== now.getFullYear()) + ", " + time;
+  }
+  function taskTimeline(t) {
+    var steps = [{ name: "Поставлена", at: t.createdAt }];
+    if (t.startedAt) steps.push({ name: "Начата", at: t.startedAt });
+    if (t.status === "done" && t.doneAt) steps.push({ name: "Сделана", at: t.doneAt, done: true });
+    if (t.archivedAt) steps.push({ name: "В архиве", at: t.archivedAt });
+    var rows = steps.map(function (s, i) {
+      var prev = steps[i - 1];
+      return h("li", { class: "tl-step" + (s.done ? " done" : "") }, h("i", { "aria-hidden": "true" }),
+        h("span", { class: "tl-name", text: s.name }),
+        h("span", { class: "tl-at", title: new Date(s.at).toLocaleString("ru-RU"), text: fmtStamp(s.at) }),
+        prev && s.at >= prev.at ? h("span", { class: "tl-gap", text: "через " + fmtSpan(s.at - prev.at) }) : null);
+    });
+    var total = null;
+    if (t.status === "done" && t.doneAt) total = "От постановки до готовности — " + fmtSpan(Math.max(0, t.doneAt - t.createdAt)) + (t.startedAt && t.doneAt >= t.startedAt ? ", в работе — " + fmtSpan(t.doneAt - t.startedAt) : "");
+    else if (t.startedAt) total = "В работе уже " + fmtSpan(Math.max(0, Date.now() - t.startedAt));
+    else total = "Ещё не начата: ждёт " + fmtSpan(Math.max(0, Date.now() - t.createdAt));
+    return h("div", { class: "tp-block" }, h("div", { class: "tp-block-h" }, "Хронология"), h("ol", { class: "tl" }, rows), h("p", { class: "tl-total", text: total }));
   }
 
   /* The whole task: a panel on the right over the board, like in Notion. Every change is saved at once.
@@ -3762,9 +3887,11 @@
               h("button", { type: "button", class: "tp-sub-del", html: ICONS.x, title: "Удалить подзадачу", "aria-label": "Удалить подзадачу «" + s.title + "»",
                 onclick: function () { savePanel(t.id, { subtasks: subs.filter(function (x) { return x.id !== s.id; }) }); } }));
           })), subIn),
-        h("div", { class: "tp-block" }, h("div", { class: "tp-block-h" }, "Заметка"), note)),
+        h("div", { class: "tp-block" }, h("div", { class: "tp-block-h" }, "Заметка"), note),
+        taskTimeline(t)),
       h("div", { class: "tp-foot" },
-        h("span", { class: "tp-when", title: new Date(edited ? t.updatedAt : t.createdAt).toLocaleString("ru-RU") }, (edited ? "Изменена " : "Создана ") + fmtWhen(edited ? t.updatedAt : t.createdAt)),
+        h("span", { class: "tp-when", title: new Date(t.updatedAt).toLocaleString("ru-RU") }, edited ? "Изменена " + fmtWhen(t.updatedAt) : ""),
+        t.archivedAt ? h("button", { type: "button", class: "btn-mini", title: "Задача вернётся в «Готово» на доске", onclick: function () { savePanel(t.id, { archivedAt: 0 }); } }, icon("left"), h("span", { class: "lbl", text: "Вернуть на доску" })) : null,
         h("button", { type: "button", class: "btn-mini tp-del", onclick: function () { removeTask(t); } }, icon("trash"), h("span", { class: "lbl", text: "Удалить" }))));
     fit();
     if (tb.focusSub) { tb.focusSub = false; var si = p.querySelector(".tp-sub-in"); if (si) si.focus(); }
