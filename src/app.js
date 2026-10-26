@@ -3867,14 +3867,22 @@
       onchange: function () { savePanel(t.id, { time: this.value }); } });
 
     var tagIn = h("input", { type: "text", class: "tp-tag-in", placeholder: "+ тег", maxlength: "30", list: "tp-tag-list", "aria-label": "Новый тег" });
-    tagIn.addEventListener("keydown", function (e) {
-      if (e.key !== "Enter") return;
-      e.preventDefault();
+    // A tag is added by Enter, by picking it from the list (that only fills the field, without Enter) or by leaving
+    // the field with something typed in it. The same tag twice (in any letter case) is not added.
+    var addTag = function () {
       var v = tagIn.value.trim();
+      tagIn.value = "";
       if (!v) return;
       v = v.charAt(0).toUpperCase() + v.slice(1);
+      if (t.tags.some(function (g) { return g.toLowerCase() === v.toLowerCase(); })) return;
       savePanel(t.id, { tags: t.tags.concat([v]) });
+    };
+    tagIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addTag(); } });
+    tagIn.addEventListener("input", function (e) {
+      // Picked from the list: the browser puts the whole word in at once and says it is not typing.
+      if (!e.inputType || e.inputType === "insertReplacementText") addTag();
     });
+    tagIn.addEventListener("change", addTag);
     var known = TASK_TAGS.slice();
     state.tasks.forEach(function (x) { x.tags.forEach(function (g) { if (known.indexOf(g) === -1) known.push(g); }); });
 
@@ -3936,6 +3944,14 @@
   }
   document.addEventListener("keydown", function (e) {
     if (e.key === "Escape" && !els.tpanel.hidden && !document.querySelector("dialog[open]") && els.qa.hidden) { e.preventDefault(); closeTask(); }
+  });
+  // A click anywhere in the work area closes the panel too. Not a click on another task (that opens it instead),
+  // on the panel itself, on notifications, menus, dialogs or the small assistant window.
+  document.addEventListener("mousedown", function (e) {
+    if (els.tpanel.hidden || e.button !== 0) return;
+    var keep = ".tpanel, .task, .trow, .utoast, .tnotes, .toast, .menu, .tcol-pop, dialog, #qa, .qa-btn";
+    if (e.target.closest && e.target.closest(keep)) return;
+    closeTask();
   });
 
   // Deleting happens at once; for 7 seconds «Отменить» at the bottom brings the task back exactly as it was.
