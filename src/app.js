@@ -1861,8 +1861,10 @@
     renderUpdates();
     // Just updated: tell once what changed.
     if (r.whatsNew && upd.currentNotes) {
-      var g = guideByVersion(r.whatsNew);
-      showBanner("Snowball.ai обновлена до версии " + r.whatsNew + "." + (g ? " Новое: раздел «" + g.title + "». Посмотрите по картинкам, как им пользоваться." : " Посмотрите, что нового и как этим пользоваться."), {
+      var g = guideByVersion(r.whatsNew, r.whatsNewFrom), gNew = g && guideFresh(g.version, r.whatsNew, r.whatsNewFrom);
+      showBanner("Snowball.ai обновлена до версии " + r.whatsNew + "." + (!g ? " Посмотрите, что нового и как этим пользоваться."
+        : gNew ? " Новое: раздел «" + g.title + "». Посмотрите по картинкам, как им пользоваться."
+        : " В разделе «" + g.title + "» много нового. Посмотрите по картинкам, что изменилось."), {
         label: g ? "Как пользоваться" : "Что нового", close: "Понятно",
         onclick: function () { els.banner.hidden = true; if (g) openGuide(g); else openUpdates(true); },
         label2: g ? "Что нового" : null, onclick2: function () { els.banner.hidden = true; openUpdates(true); }
@@ -4847,7 +4849,14 @@
     for (var i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); }
     return 0;
   }
-  function guideByVersion(v) { return GUIDES.find(function (g) { return g.version === v; }) || null; }
+  // A guide is new in `version` (its section appeared) or, with `updated`, re-shot for the version where the section
+  // changed a lot. After an update from `from` to `v` the banner offers a guide that became new or changed in between
+  // (a skipped version counts too): a new section first, else a changed one.
+  function guideFresh(x, v, from) { return !!x && verCmp(x, v) <= 0 && (!from || verCmp(x, from) > 0); }
+  function guideByVersion(v, from) {
+    return GUIDES.find(function (g) { return guideFresh(g.version, v, from); }) || GUIDES.find(function (g) { return guideFresh(g.updated, v, from); }) || null;
+  }
+  function guideVer(g) { return g.updated ? "Обновлено в " + g.updated : "Новое в " + g.version; }
   function guideOfSection(section) { return GUIDES.find(function (g) { return g.section === section; }) || null; }
   // The number of the first point of a frame: points are numbered through the whole step.
   function guideStart(step, fi) { var n = 1; for (var i = 0; i < fi; i++) n += step.frames[i].points.length; return n; }
@@ -4916,7 +4925,7 @@
     var pic = h("div", { class: "gd-pic" }, guideShot(g, frame, null, n0));
     var hover = function (n) { pic.replaceChildren(guideShot(g, frame, n, n0)); };
     gd.dlg.replaceChildren(
-      h("div", { class: "gd-head-row" }, h("h2", { text: "Как пользоваться: " + g.title }), h("span", { class: "gd-ver", text: "Новое в " + g.version }),
+      h("div", { class: "gd-head-row" }, h("h2", { text: "Как пользоваться: " + g.title }), h("span", { class: "gd-ver", text: guideVer(g) }),
         h("button", { type: "button", class: "gd-x", title: "Закрыть (Esc)", "aria-label": "Закрыть", html: ICONS.x, onclick: function () { gd.dlg.close(); } })),
       h("div", { class: "gd-body" }, pic,
         h("div", { class: "gd-side" }, h("h3", { text: (gd.step + 1) + ". " + step.title }), h("p", { class: "gd-lead", text: step.lead }),
@@ -4951,7 +4960,7 @@
     guidesPageFor = key;
     box.replaceChildren.apply(box, list.map(function (g, gi) {
       var det = h("details", { class: "gd-page", open: gi === 0 ? "open" : null },
-        h("summary", null, "Как пользоваться: " + g.title, h("span", { class: "gd-ver", text: g.version })));
+        h("summary", null, "Как пользоваться: " + g.title, h("span", { class: "gd-ver", text: g.updated ? "обновлено в " + g.updated : g.version })));
       var fill = function () {
         if (det.dataset.filled) return;
         det.dataset.filled = "1";

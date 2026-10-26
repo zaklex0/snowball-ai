@@ -337,6 +337,7 @@ let updateNotes = '';     // what is new in the found version, as simple Markdow
 let updateSize = 0;       // size of the installer, bytes (from latest.yml)
 let lastProgress = { transferred: 0, total: 0 };
 let whatsNew = null;      // this version was just installed over an older one: tell about it once
+let whatsNewFrom = '';    // …over this one (empty for versions before 1.8.3): guides changed in between are offered
 
 // CHANGELOG.md goes inside the program: "## 1.8.3" starts the part about that version.
 function changelogFor(version) {
@@ -369,7 +370,7 @@ function setupUpdates() {
   const prev = settings.lastVersion;
   if (prev !== app.getVersion()) {
     // Versions before 1.8.3 did not remember themselves; a settings file with a window size means an update.
-    if (prev || settings.bounds) whatsNew = app.getVersion();
+    if (prev || settings.bounds) { whatsNew = app.getVersion(); whatsNewFrom = prev || ''; }
     settings.lastVersion = app.getVersion();
     saveSettings();
   }
@@ -566,7 +567,7 @@ handle('set-tabs', async (tabs) => {
 
 handle('update-state', async () => {
   const current = app.getVersion();
-  const state = { ok: true, packaged: !!updater, current, currentNotes: changelogFor(current), whatsNew };
+  const state = { ok: true, packaged: !!updater, current, currentNotes: changelogFor(current), whatsNew, whatsNewFrom };
   whatsNew = null;
   if (updateReady) Object.assign(state, { status: 'ready', version: updateReady, notes: updateNotes, size: updateSize, total: lastProgress.total });
   else if (downloading) Object.assign(state, { status: 'progress', version: updateFound, notes: updateNotes, size: updateSize, percent: Math.max(0, lastPercent), transferred: lastProgress.transferred, total: lastProgress.total });

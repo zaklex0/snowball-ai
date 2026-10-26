@@ -5,7 +5,8 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
-  { version: "1.15.0", section: "transcribe", title: "Транскрибация", steps: [
+  // updated: the version where the section changed a lot and the screenshots were re-shot (three modes, «!», the price).
+  { version: "1.15.0", updated: "1.15.3", section: "transcribe", title: "Транскрибация", steps: [
     { title: "Где найти", lead: "Новый раздел открывается тремя способами.", frames: [{ shot: "01-where", points: [
       { box: "icon", at: [150, 300], label: "Иконка раздела", text: "Звуковая волна в ряду иконок слева, между LLM и Генератором. Один клик — и раздел открыт." },
       { box: "menuItem", at: [1090, 560], label: "Меню «+»", text: "Кнопка «+» справа от вкладок открывает меню новой вкладки: там есть «Транскрибация»." },
