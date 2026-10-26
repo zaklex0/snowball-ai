@@ -251,7 +251,8 @@
 :where(html[data-theme="zaklex"]) .qa { border: 3px solid var(--zx-paper); box-shadow: 8px 8px 0 var(--zx-cyan); }
 :where(html[data-theme="zaklex"]) :is(.qa-head, .qa-form) { border-color: var(--zx-paper); border-width: 3px; }
 :where(html[data-theme="zaklex"]) .qa-mark { background: var(--zx-red); color: var(--zx-ink); }
-:where(html[data-theme="zaklex"]) .qa-model { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .16em; font-size: 11px; }
+/* Caps with tracking are wide: the model name may take a second line instead of being cut */
+:where(html[data-theme="zaklex"]) .qa-model { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: .16em; font-size: 11px; white-space: normal; }
 
 /* ---------- settings ---------- */
 :where(html[data-theme="zaklex"]) .sd-head { border-bottom: 3px solid var(--zx-paper); }
