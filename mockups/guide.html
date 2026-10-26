@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет инструкции к обновлению — Snowball.ai</title>
+<!-- A mockup only: how a picture guide «Как пользоваться» could come with every update. Example: 1.15.0, «Транскрибация».
+     Two ways to show it: A — a step-by-step window right after the update; B — a page in «Настройки» → «Обновление».
+     The screenshots are the ones the program ships (src/guides/1.15.0, taken by tools/guide-shots/run.js on a demo video), and the
+     frames and arrows point to boxes measured on them. Numbered marks match the explanations on the right. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<style>
+  :root {
+    --bg: #FCEEE4; --titlebar: #F9E3D4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7;
+    --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --accent-ink: #3F251C; --accent-strong: #BF603D;
+    --ok-bg: #DCEBD1; --ok-ink: #3B5934; --mark: #E0532F; --label-bg: #3A241C; --label-ink: #FFF4EC;
+    --shadow: 0 1px 0 rgba(120, 72, 52, .05), 0 22px 44px -28px rgba(150, 85, 55, .38);
+    --pop-shadow: 0 20px 50px -14px rgba(80, 40, 25, .45);
+    --font-display: "Unbounded", "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Golos Text", "Segoe UI", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #251B17; --titlebar: #2C201B; --surface: #30241E; --surface-2: #3A2C25; --line: #4A372E;
+      --ink: #F5E6DC; --ink-soft: #C3A596; --accent: #F2A982; --accent-ink: #2B1C16; --accent-strong: #F7BE9E;
+      --ok-bg: #2F4430; --ok-ink: #CFE6C4; --mark: #FF7A55; --label-bg: #FFF4EC; --label-ink: #2B1C16;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  [hidden] { display: none !important; }
+  .pg { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; padding: 18px; align-items: start; }
+  @media (max-width: 1300px) { .pg { grid-template-columns: minmax(0, 1fr); } }
+
+  .switch { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .switch button { padding: 8px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 14px; }
+  .switch button.on { border-color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 18%, var(--surface)); font-weight: 600; }
+
+  /* the program window behind: a real screenshot, dimmed when a window is open over it */
+  .stage { position: relative; aspect-ratio: 1280 / 820; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #000; }
+  .stage > img.bgshot { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .stage .dim { position: absolute; inset: 0; background: rgba(30, 18, 12, .55); }
+  .banner { position: absolute; left: 21%; right: 3%; top: 6.5%; display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px;
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent-strong); box-shadow: var(--pop-shadow); font-size: 14px; }
+  .banner p { margin: 0; flex: 1; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .btn.pri { border-color: transparent; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.ghost { background: none; border-color: transparent; color: var(--ink-soft); }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  /* Variant A: the step-by-step window */
+  .tour { position: absolute; inset: 3% 3%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; border-radius: 18px; background: var(--surface); box-shadow: var(--pop-shadow); overflow: hidden; }
+  .tour-h { display: flex; align-items: center; gap: 12px; padding: 12px 16px 10px 20px; border-bottom: 1px solid var(--line); }
+  .tour-h h2 { margin: 0; font: 500 17px/1.2 var(--font-display); }
+  .tour-h .ver { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--ok-bg); color: var(--ok-ink); }
+  .tour-h .x { margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); font-size: 18px; }
+  .tour-b { display: grid; grid-template-columns: minmax(0, 1fr) 300px; min-height: 0; }
+  .tour-pic { position: relative; padding: 14px; background: var(--surface-2); display: grid; align-content: center; min-height: 0; overflow: auto; }
+  .tour-txt { padding: 16px 18px; overflow: auto; border-left: 1px solid var(--line); }
+  .tour-txt h3 { margin: 0 0 4px; font-size: 17px; }
+  .tour-txt .lead { margin: 0 0 12px; color: var(--ink-soft); font-size: 13.5px; }
+  .tour-f { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); }
+  .dots { display: flex; gap: 5px; margin-right: auto; }
+  .dots button { width: 9px; height: 9px; padding: 0; border: 0; border-radius: 50%; background: var(--line); }
+  .dots button.on { background: var(--accent-strong); width: 22px; border-radius: 9px; }
+  .count { font-size: 13px; color: var(--ink-soft); }
+
+  /* a screenshot with frames, arrows and short labels over it */
+  .shot { position: relative; width: 100%; aspect-ratio: 1280 / 820; border-radius: 10px; overflow: hidden; box-shadow: 0 6px 24px -10px rgba(0, 0, 0, .35); background: #fff; }
+  .shot img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .shot svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .shot .frame { fill: color-mix(in srgb, var(--mark) 8%, transparent); stroke: var(--mark); stroke-width: 3; }
+  .shot .frame.faded { stroke-opacity: .35; fill: none; }
+  .shot .arrow { fill: none; stroke: var(--mark); stroke-width: 2.4; }
+  .shot .arrow.faded { stroke-opacity: .3; }
+  .shot .lbl { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 4px; border-radius: 999px;
+    background: var(--label-bg); color: var(--label-ink); font-size: clamp(9px, 1.05vw, 13px); font-weight: 600; white-space: nowrap; box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .5); pointer-events: auto; cursor: default; }
+  .shot .lbl b { display: grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--mark); color: #fff; font-size: .9em; }
+  .shot .lbl.faded { opacity: .45; }
+  .frames { display: flex; gap: 6px; margin: 0 0 10px; }
+  .frames button { padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 12.5px; }
+  .frames button.on { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
+  .pts { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  .pts li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; padding: 8px 9px; border-radius: 11px; font-size: 13.5px; line-height: 1.45; cursor: default; }
+  .pts li:hover, .pts li.on { background: var(--surface-2); }
+  .pts li > b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font-size: 12px; }
+  .pts li strong { display: block; font-size: 14px; }
+
+  /* Variant B: a page in «Настройки» → «Обновление» */
+  .sd { position: absolute; inset: 3% 4%; display: grid; grid-template-rows: auto minmax(0, 1fr); border-radius: 18px; background: var(--surface); box-shadow: var(--pop-shadow); overflow: hidden; }
+  .sd-h { display: flex; align-items: center; padding: 12px 16px 12px 20px; border-bottom: 1px solid var(--line); }
+  .sd-h h2 { margin: 0; font: 500 17px/1.2 var(--font-display); }
+  .sd-h .x { margin-left: auto; width: 32px; height: 32px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); font-size: 18px; }
+  .sd-body { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 0; }
+  .sd-nav { padding: 12px 8px; border-right: 1px solid var(--line); background: var(--bg); display: grid; gap: 2px; align-content: start; font-size: 13.5px; }
+  .sd-nav span { padding: 8px 11px; border-radius: 9px; color: var(--ink-soft); }
+  .sd-nav span.on { background: var(--surface-2); color: var(--ink); font-weight: 600; }
+  .sd-main { overflow: auto; padding: 18px 22px 30px; }
+  .sd-main h3 { margin: 0 0 4px; font-size: 17px; }
+  .upd-line { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 14px; margin-bottom: 18px; }
+  .article { display: grid; gap: 22px; }
+  .article .intro { margin: 0; color: var(--ink-soft); font-size: 14px; }
+  .toc { display: flex; flex-wrap: wrap; gap: 6px; }
+  .toc a { padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink); font-size: 12.5px; text-decoration: none; }
+  .sec h4 { margin: 0 0 8px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .sec h4 i { font-style: normal; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 13px; }
+  .sec .row { display: grid; grid-template-columns: minmax(0, 1fr) 250px; gap: 14px; align-items: start; }
+  @media (max-width: 1500px) { .sec .row { grid-template-columns: minmax(0, 1fr); } }
+  .sec .pts li { padding: 4px 6px; }
+
+  /* numbered marks of the mockup itself and the explanations on the right */
+  .frames, .dots, .sec, .btn { position: relative; }
+  .tour > .nb, .sd > .nb { top: 10px; right: 56px; }
+  .banner > .nb { top: -9px; right: -9px; }
+  .tour-pic > .nb { top: 6px; right: 6px; }
+  .nb { position: absolute; top: -9px; right: -9px; z-index: 9; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 999px;
+    background: #2D6BC4; color: #fff; font: 700 12px/1 var(--font-body); box-shadow: 0 0 0 2px var(--bg); cursor: help; }
+  .no-marks .nb { display: none; }
+  .hl { animation: hl 1.6s ease-out; }
+  @keyframes hl { 0%, 60% { box-shadow: 0 0 0 4px #2D6BC4; border-radius: 12px; } 100% { box-shadow: 0 0 0 4px transparent; } }
+  .lg { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; display: grid; gap: 10px; align-content: start; }
+  .lg-top { padding: 16px 18px; border-radius: 16px; border: 1px dashed var(--ink-soft); background: var(--surface); font-size: 13.5px; color: var(--ink-soft); }
+  .lg-top h2 { margin: 0 0 6px; font: 500 19px/1.2 var(--font-display); color: var(--ink); }
+  .lg-top p { margin: 0 0 8px; }
+  .lg-top label { display: flex; gap: 8px; color: var(--ink); cursor: pointer; }
+  .lg-it { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-size: 13.5px; cursor: pointer; }
+  .lg-it:hover, .lg-it.hl2 { border-color: #2D6BC4; }
+  .lg-it > b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: #2D6BC4; color: #fff; font-size: 12px; }
+  .lg-it h3 { margin: 0 0 3px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lg-it p { margin: 0; color: var(--ink-soft); }
+  .lg-it p + p { margin-top: 5px; }
+  .tg { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; }
+  .tg-new { background: var(--ok-bg); color: var(--ok-ink); }
+  .tg-ask { background: color-mix(in srgb, #2D6BC4 20%, var(--surface)); color: var(--ink); }
+  .tg-part { background: color-mix(in srgb, #D9982A 24%, var(--surface)); color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="pg">
+  <div>
+    <div class="switch" id="switch"></div>
+    <div class="stage" id="stage"></div>
+  </div>
+  <aside class="lg" id="lg"></aside>
+</div>
+
+<script src="../src/guides/1.15.0/boxes.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    for (var k in attrs || {}) {
+      var v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === "text") el.textContent = v; else if (k === "html") el.innerHTML = v;
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+    }
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) { if (c == null || c === false) return; if (Array.isArray(c)) c.forEach(function (x) { add(el, x); }); else el.append(c.nodeType ? c : document.createTextNode(String(c))); }
+  var SVG = "http://www.w3.org/2000/svg";
+  function s(tag, attrs) { var el = document.createElementNS(SVG, tag); for (var k in attrs) el.setAttribute(k, attrs[k]); return el; }
+
+  // Boxes of the buttons on each screenshot, measured by tools/guide-shots/run.js (in pixels of 1280 × 820).
+  var BOX = window.GUIDE_BOXES["1.15.0"];
+
+  // The guide of 1.15.0. A step has one or more frames (a button and what it opens); every frame has points:
+  // a box on the screenshot, a short label put at `at` with a thin arrow to the box, and the longer text on the side.
+  var GUIDE = { version: "1.15.0", title: "Транскрибация", steps: [
+    { title: "Где найти", lead: "Новый раздел открывается тремя способами.", frames: [{ shot: "01-where", points: [
+      { box: "icon", at: [110, 300], label: "Иконка раздела", text: "Звуковая волна в ряду иконок слева, между LLM и Генератором. Один клик — и раздел открыт." },
+      { box: "menuItem", at: [1090, 560], label: "Меню «+»", text: "Кнопка «+» справа от вкладок открывает меню новой вкладки: там есть «Транскрибация»." },
+      { box: "homeTile", at: [390, 600], label: "Плитка на «Главной»", text: "На «Главной» — плитка с тем, сколько расшифровок уже в истории." }] }] },
+    { title: "Загрузите файл", lead: "Подойдёт видео или звук: mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. До 2 ГБ, длина любая.", frames: [{ shot: "02-empty", points: [
+      { box: "drop", at: [380, 500], label: "Перетащите сюда", text: "Перетащите файл из Проводника прямо на страницу — рамка подсветится." },
+      { box: "pick", at: [760, 500], label: "Или выберите", text: "Или нажмите «Выбрать файл…» и найдите его на компьютере." },
+      { box: "hist", at: [1110, 480], label: "История", text: "Справа — все прошлые расшифровки. Пока их нет, здесь пусто." }] }] },
+    { title: "Запустите расшифровку", lead: "Ключ ChatGPT берётся из «Настроек», вводить его здесь не нужно.", frames: [{ shot: "03-file", points: [
+      { box: "model", at: [480, 420], label: "Модель", text: "По умолчанию — самая точная по нашим проверкам. Менять не обязательно." },
+      { box: "go", at: [880, 420], label: "Расшифровать", text: "Нажмите — и начнётся работа. Минута ролика стоит примерно треть цента." },
+      { box: "remove", at: [1050, 150], label: "Другой файл", text: "«Убрать» — если выбрали не тот файл." }] }] },
+    { title: "Пока идёт работа", lead: "Можно уйти в другой раздел — расшифровка продолжится.", frames: [{ shot: "04-busy", points: [
+      { box: "bar", at: [620, 420], label: "Ход работы", text: "Полоса и надпись: сколько кусков речи нашлось и сколько уже готово." },
+      { box: "dot", at: [760, 85], label: "Точка на вкладке", text: "Мигает, пока идёт работа, — видно из любого раздела." },
+      { box: "stop", at: [330, 420], label: "Остановить", text: "Если передумали — расшифровка остановится, потрачены будут доли цента." }] }] },
+    { title: "Смотрите с субтитрами", lead: "Сверху — ваш ролик с субтитрами прямо на кадре.", frames: [{ shot: "05-result", points: [
+      { box: "sub", at: [1100, 560], label: "Субтитры", text: "Так субтитры встанут в монтаже — можно сразу проверить, вовремя ли." },
+      { box: "strip", at: [1100, 620], label: "Фразы на полоске", text: "Каждый штрих — фраза. Клик по полоске перематывает ролик." },
+      { box: "tabs", at: [400, 700], label: "Три вкладки", text: "«Текст», «Тайминги» и «Кратко» — дальше о каждой." }] }] },
+    { title: "Текст и что с ним делать", lead: "Весь текст целиком. Его можно поправить прямо в поле.", frames: [{ shot: "06-text", points: [
+      { box: "text", at: [1090, 430], label: "Можно править", text: "Исправьте слово, которое расслышалось неверно, — правка попадёт и в тайминги, и в субтитры." },
+      { box: "srt", at: [440, 790], label: "Субтитры .srt", text: "Сохраняет файл субтитров рядом с роликом. Перетащите его на таймлайн в Premiere, After Effects, DaVinci или CapCut." },
+      { box: "prompt", at: [700, 790], label: "В промт", text: "Новый промт «Видео»: текст — расшифровка, комментарий — тайминги. Останется дописать, что сгенерировать." },
+      { box: "llm", at: [950, 790], label: "Спросить в LLM", text: "Новый разговор, где уже вставлены текст и тайминги: «напиши промпт для анимации под каждую фразу»." }] }] },
+    { title: "Тайминги", lead: "Каждая фраза со временем начала и конца — время стоит на паузах голоса.", frames: [{ shot: "07-cues", points: [
+      { box: "fmt", at: [1100, 430], label: "Как копировать", text: "Списком — как в монтажном листе, или «[0:12–0:15] текст» — так удобнее вставлять в промт." },
+      { box: "copy", at: [1100, 490], label: "Копировать", text: "Копирует все тайминги в выбранном виде." },
+      { box: "cue", at: [1100, 560], label: "Клик по фразе", text: "Перематывает ролик на эту фразу; та, что звучит, подсвечена." }] }] },
+    { title: "Кратко", lead: "Пара предложений о главном — по кнопке, чтобы не платить, когда не нужно.", frames: [
+      { name: "1. Нажмите", shot: "08-sum-empty", points: [
+        { box: "make", at: [620, 660], label: "Сделать кратко", text: "Нажмите — через несколько секунд появится краткое содержание." }] },
+      { name: "2. Что получится", shot: "09-sum", points: [
+        { box: "brief", at: [1100, 400], label: "Кратко", text: "О чём ролик, в 2–4 предложениях." },
+        { box: "points", at: [1100, 480], label: "Главные мысли", text: "Список по пунктам — удобно для описания ролика." },
+        { box: "again", at: [620, 640], label: "Заново", text: "Если не понравилось — можно сделать ещё раз." }] }] },
+    { title: "История и поиск", lead: "Все расшифровки остаются в истории.", frames: [{ shot: "10-search", points: [
+      { box: "search", at: [760, 255], label: "Поиск", text: "Ищет и по названию файла, и по тексту внутри." },
+      { box: "item", at: [760, 335], label: "Открыть", text: "Клик открывает расшифровку целиком." },
+      { box: "del", at: [1110, 430], label: "Удалить", text: "Крестик удаляет; несколько секунд внизу видна кнопка «Отменить»." }] }] }
+  ] };
+
+  // Draws a screenshot with frames around the boxes, thin arrows from the labels and the labels themselves.
+  // active: the number of the point to stress (the others get pale), or null.
+  function shotEl(frame, active, startN) {
+    var box = h("div", { class: "shot" }, h("img", { src: "../src/guides/1.15.0/" + frame.shot + ".webp", alt: "Снимок программы" }));
+    var svg = s("svg", { viewBox: "0 0 1280 820", preserveAspectRatio: "none" });
+    var defs = s("defs", {}), mk = s("marker", { id: "ah", viewBox: "0 0 10 10", refX: "8.5", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+    mk.append(s("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--mark)" }));
+    defs.append(mk); svg.append(defs);
+    frame.points.forEach(function (p, i) {
+      var b = BOX[frame.shot][p.box], n = startN + i, dim = active != null && active !== n;
+      if (!b) return;
+      var pad = 5, x = b[0] - pad, y = b[1] - pad, w = b[2] + pad * 2, hh = b[3] + pad * 2;
+      svg.append(s("rect", { x: x, y: y, width: w, height: hh, rx: 9, class: "frame" + (dim ? " faded" : "") }));
+      // The arrow goes from the label to the nearest point of the frame, with a slight bend.
+      var tx = Math.max(x, Math.min(p.at[0], x + w)), ty = Math.max(y, Math.min(p.at[1], y + hh));
+      if (tx === p.at[0] && ty === p.at[1]) ty = y + hh;
+      var mx = (p.at[0] + tx) / 2 + (ty - p.at[1]) * 0.15, my = (p.at[1] + ty) / 2 - (tx - p.at[0]) * 0.15;
+      svg.append(s("path", { d: "M" + p.at[0] + "," + p.at[1] + " Q" + mx + "," + my + " " + tx + "," + ty, class: "arrow" + (dim ? " faded" : ""), "marker-end": "url(#ah)" }));
+      var lbl = h("span", { class: "lbl" + (dim ? " faded" : ""), "data-n": String(n) }, h("b", { text: String(n) }), p.label);
+      lbl.style.left = (p.at[0] / 12.8) + "%"; lbl.style.top = (p.at[1] / 8.2) + "%";
+      box.append(lbl);
+    });
+    box.insertBefore(svg, box.children[1]);
+    return box;
+  }
+  function pointsList(frame, startN, onHover) {
+    return h("ol", { class: "pts" }, frame.points.map(function (p, i) {
+      return h("li", { onmouseenter: function () { onHover(startN + i); }, onmouseleave: function () { onHover(null); } },
+        h("b", { text: String(startN + i) }), h("span", null, h("strong", { text: p.label }), p.text));
+    }));
+  }
+
+  /* ---------- the stage: the window of the program and what is over it ---------- */
+  var st = { mode: "banner", step: 0, frame: 0, active: null };
+  var MODES = [["banner", "0. После обновления"], ["tour", "Вариант А: окно по шагам"], ["page", "Вариант Б: в «Настройках»"]];
+  function renderSwitch() {
+    $("switch").replaceChildren.apply($("switch"), MODES.map(function (m) {
+      return h("button", { type: "button", class: st.mode === m[0] ? "on" : "", onclick: function () { st.mode = m[0]; st.active = null; render(); } }, m[1]);
+    }));
+  }
+  function render() {
+    renderSwitch();
+    var stage = $("stage");
+    stage.replaceChildren(h("img", { class: "bgshot", src: "../src/guides/1.15.0/" + (st.mode === "banner" ? "01-where" : "05-result") + ".webp", alt: "" }));
+    if (st.mode === "banner") {
+      stage.append(h("div", { class: "banner", "data-mark": "1" },
+        h("p", null, h("b", { text: "Snowball.ai обновлена до 1.15.0. " }), "Новое: раздел «Транскрибация» — текст, тайминги и субтитры из видео."),
+        h("button", { type: "button", class: "btn pri", onclick: function () { st.mode = "tour"; st.step = 0; st.frame = 0; render(); } }, "Как пользоваться"),
+        h("button", { type: "button", class: "btn ghost", onclick: function () { st.mode = "page"; render(); } }, "Что нового"),
+        h("button", { type: "button", class: "btn ghost" }, "Не сейчас")));
+    } else if (st.mode === "tour") {
+      stage.append(h("div", { class: "dim" }), renderTour());
+    } else {
+      stage.append(h("div", { class: "dim" }), renderPage());
+    }
+    marks(stage);
+  }
+
+  // Variant A: one step at a time — a big screenshot on the left, what to press on the right.
+  function startOf(step, fi) { var n = 1; for (var i = 0; i < fi; i++) n += step.frames[i].points.length; return n; }
+  function renderTour() {
+    var step = GUIDE.steps[st.step], frame = step.frames[st.frame], n0 = startOf(step, st.frame);
+    var last = st.step === GUIDE.steps.length - 1;
+    var pic = h("div", { class: "tour-pic", "data-mark": "3" }, shotEl(frame, st.active, n0));
+    var txt = h("div", { class: "tour-txt" },
+      h("h3", { text: (st.step + 1) + ". " + step.title }), h("p", { class: "lead", text: step.lead }),
+      step.frames.length > 1 ? h("div", { class: "frames", "data-mark": "4" }, step.frames.map(function (f, i) {
+        return h("button", { type: "button", class: i === st.frame ? "on" : "", onclick: function () { st.frame = i; st.active = null; render(); } }, f.name);
+      })) : null,
+      pointsList(frame, n0, function (n) { st.active = n; var p = $("stage").querySelector(".tour-pic"); p.replaceChildren(shotEl(frame, n, n0)); }));
+    var go = function (d) {
+      var s2 = st.step, f2 = st.frame + d;
+      if (f2 < 0) { s2--; f2 = s2 >= 0 ? GUIDE.steps[s2].frames.length - 1 : 0; }
+      else if (f2 >= step.frames.length) { s2++; f2 = 0; }
+      if (s2 < 0 || s2 >= GUIDE.steps.length) return;
+      st.step = s2; st.frame = f2; st.active = null; render();
+    };
+    return h("div", { class: "tour", "data-mark": "2" },
+      h("div", { class: "tour-h" }, h("h2", { text: "Как пользоваться: " + GUIDE.title }), h("span", { class: "ver", text: "Новое в " + GUIDE.version }),
+        h("button", { type: "button", class: "x", text: "✕", title: "Закрыть", onclick: function () { st.mode = "banner"; render(); } })),
+      h("div", { class: "tour-b" }, pic, txt),
+      h("div", { class: "tour-f" },
+        h("div", { class: "dots", "data-mark": "5" }, GUIDE.steps.map(function (x, i) {
+          return h("button", { type: "button", class: i === st.step ? "on" : "", title: (i + 1) + ". " + x.title, onclick: function () { st.step = i; st.frame = 0; st.active = null; render(); } });
+        })),
+        h("span", { class: "count", text: "Шаг " + (st.step + 1) + " из " + GUIDE.steps.length }),
+        h("button", { type: "button", class: "btn", disabled: st.step === 0 && st.frame === 0 ? "disabled" : null, onclick: function () { go(-1); } }, "Назад"),
+        last && st.frame === step.frames.length - 1 ? h("button", { type: "button", class: "btn pri", "data-mark": "6", onclick: function () { st.mode = "banner"; render(); } }, "Открыть «Транскрибацию»")
+          : h("button", { type: "button", class: "btn pri", onclick: function () { go(1); } }, "Дальше")));
+  }
+
+  // Variant B: everything on one long page in «Настройки» → «Обновление», next to the list of changes.
+  function renderPage() {
+    var art = h("div", { class: "article" },
+      h("p", { class: "intro", text: "Все шаги на одной странице: листайте вниз. Цифры на картинках совпадают с пунктами справа от них." }),
+      h("div", { class: "toc" }, GUIDE.steps.map(function (x, i) { return h("a", { href: "#g" + i, onclick: function (e) { e.preventDefault(); $("g" + i).scrollIntoView({ behavior: "smooth", block: "start" }); } }, (i + 1) + ". " + x.title); })));
+    GUIDE.steps.forEach(function (step, si) {
+      var sec = h("section", { class: "sec", id: "g" + si, "data-mark": si === 7 ? "4" : null }, h("h4", null, h("i", { text: String(si + 1) }), step.title));
+      step.frames.forEach(function (f, fi) {
+        var n0 = startOf(step, fi), pic = h("div", null, shotEl(f, null, n0));
+        add(sec, [step.frames.length > 1 ? h("p", { class: "intro", text: f.name }) : null,
+          h("div", { class: "row" }, pic, pointsList(f, n0, function (n) { pic.replaceChildren(shotEl(f, n, n0)); }))]);
+      });
+      art.append(sec);
+    });
+    return h("div", { class: "sd", "data-mark": "7" },
+      h("div", { class: "sd-h" }, h("h2", { text: "Настройки" }), h("button", { type: "button", class: "x", text: "✕", onclick: function () { st.mode = "banner"; render(); } })),
+      h("div", { class: "sd-body" },
+        h("div", { class: "sd-nav" }, ["ChatGPT и Claude", "Ассистент", "Папка с данными", "Резервная копия", "Обновление", "Горячие клавиши"].map(function (x) { return h("span", { class: x === "Обновление" ? "on" : "", text: x }); })),
+        h("div", { class: "sd-main" },
+          h("h3", { text: "Обновление" }),
+          h("div", { class: "upd-line" }, "✓ У вас последняя версия — 1.15.0", h("span", { style: "flex:1" }), h("button", { type: "button", class: "btn" }, "Проверить обновления")),
+          h("h3", { text: "Как пользоваться: Транскрибация" }), art)));
+  }
+
+  /* ---------- the explanations on the right ---------- */
+  var NOTES = [
+    { n: 1, tag: "new", mode: "banner", h: "Сразу после обновления", p: "Баннер, который уже есть («Snowball.ai обновлена до …»), получит кнопку «Как пользоваться». Она открывает инструкцию к этой версии. «Что нового» — как сейчас, текстом.",
+      more: "Инструкция появляется только у обновлений, где есть что показать: новый раздел, новая кнопка. Исправления ошибок — без картинок." },
+    { n: 2, tag: "ask", mode: "tour", h: "Вариант А: окно по шагам", p: "Поверх программы — окно: слева большой скриншот, справа что нажимать. Один шаг за раз: «Назад», «Дальше», точки внизу. Удобно, чтобы пройти первый раз и ничего не пропустить.",
+      more: "Минус: чтобы найти что-то одно, надо листать шаги." },
+    { n: 3, tag: "new", mode: "tour", h: "Рамки, стрелки и подписи", p: "Новая кнопка обведена рамкой, к ней тонкая стрелка от короткой подписи с номером. Справа тот же номер — подробно. Наведите мышь на пункт справа — его рамка станет яркой, остальные побледнеют.",
+      more: "Скриншоты настоящие: их снимает программа сама, перед выпуском, в тестовом профиле. Рамки ставятся по точным местам кнопок, поэтому не съезжают." },
+    { n: 4, tag: "new", mode: "tour", step: 7, h: "Кнопка и то, что она открывает", p: "Если кнопка что-то раскрывает, у шага два кадра: «1. Нажмите» и «2. Что получится» — как у «Кратко». Так же будут показаны меню: сначала кнопка, потом открытое меню со стрелками к пунктам.",
+      more: "В шаге «Где найти» уже показано открытое меню «+»." },
+    { n: 5, tag: "new", mode: "tour", h: "Точки — все шаги", p: "Точки внизу — все шаги инструкции; наведите — видно название, нажмите — сразу туда." },
+    { n: 6, tag: "new", mode: "tour", step: 8, h: "Последний шаг ведёт в раздел", p: "На последнем шаге вместо «Дальше» — «Открыть «Транскрибацию»»: сразу попробовать." },
+    { n: 7, tag: "ask", mode: "page", h: "Вариант Б: страница в «Настройках»", p: "В «Настройки» → «Обновление» под списком изменений — та же инструкция одной длинной страницей: сверху оглавление, ниже все шаги подряд, у каждого скриншот и пункты рядом.",
+      more: "Удобно вернуться и найти одно место. Можно сделать оба: А — сразу после обновления, Б — чтобы перечитать потом." },
+    { n: 8, tag: "part", h: "Где лежат картинки", p: "Кладём в установщик вместе с программой: 11 скриншотов этой инструкции весят 0,6 МБ, работают без интернета. Старые инструкции можно не хранить — только последних версий.",
+      more: "Так же сможем открыть инструкцию из самого раздела: маленькая кнопка «?» рядом с заголовком «Транскрибация» — для того, кто зашёл туда впервые." },
+    { n: 9, tag: "part", h: "Тема оформления", p: "Скриншоты сняты в светлой теме. Можно снимать отдельный набор под тёмную и «Zaklex», но это втрое больше картинок — предлагаю начать со светлой." }
+  ];
+  var TAG = { "new": ["Новое", "tg-new"], ask: ["Выбрать", "tg-ask"], part: ["Обсудить", "tg-part"] };
+  function renderLegend() {
+    var lg = $("lg"), cb = h("input", { type: "checkbox", checked: "checked", onchange: function () { document.body.classList.toggle("no-marks", !this.checked); } });
+    lg.append(h("div", { class: "lg-top" },
+      h("h2", { text: "Что на макете" }),
+      h("p", { text: "Как к каждому обновлению может прилагаться инструкция по картинкам. Пример — «Транскрибация» из 1.15.0, на настоящих скриншотах программы." }),
+      h("p", { text: "Кнопки над окном: 0 — что видно сразу после обновления, А и Б — два варианта самой инструкции. Синие цифры — пояснения к макету, красные — это уже сама инструкция." }),
+      h("label", null, cb, "Показывать синие цифры")));
+    NOTES.forEach(function (it) {
+      var tg = TAG[it.tag];
+      lg.append(h("div", { class: "lg-it", id: "lg-" + it.n, onclick: function () { show(it); } },
+        h("b", { text: String(it.n) }),
+        h("div", null, h("h3", null, it.h, h("span", { class: "tg " + tg[1], text: tg[0] })), h("p", { text: it.p }), it.more ? h("p", { text: it.more }) : null)));
+    });
+  }
+  function show(it) {
+    if (it.mode) st.mode = it.mode;
+    if (it.step != null) { st.step = it.step; st.frame = 0; }
+    st.active = null; render();
+    setTimeout(function () {
+      var el = document.querySelector('[data-mark="' + it.n + '"]');
+      if (el) { el.scrollIntoView({ block: "nearest", behavior: "smooth" }); el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl"); }
+    }, 100);
+  }
+  function marks(root) {
+    Array.prototype.forEach.call(root.querySelectorAll("[data-mark]"), function (el) {
+      if (el.querySelector(":scope > .nb")) return;
+      var n = el.getAttribute("data-mark");
+      el.append(h("span", { class: "nb", text: n, onclick: function (e) {
+        e.stopPropagation(); var it = $("lg-" + n); if (!it) return;
+        it.scrollIntoView({ block: "center", behavior: "smooth" }); it.classList.remove("hl2"); void it.offsetWidth; it.classList.add("hl2");
+      } }));
+    });
+  }
+
+  renderLegend();
+  render();
+})();
+</script>
+</body>
+</html>

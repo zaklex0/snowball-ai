@@ -10,3 +10,6 @@ desktop.ini
 
 # Журналы ошибок npm
 *.log
+
+# Пробный ролик для скриншотов инструкций: делается заново командой tools/guide-shots/make-demo.ps1
+tools/guide-shots/demo/

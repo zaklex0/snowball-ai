@@ -1687,3 +1687,73 @@ h1 .brand { color: var(--accent-strong); }
 .tr-del svg { width: 12px; height: 12px; }
 .tr-run { position: absolute; right: 12px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--accent-strong); animation: blink 1s steps(2, start) infinite; }
 .tr-empty { margin: 0; padding: 4px 10px; font-size: 13px; color: var(--ink-soft); }
+.tr-help svg { width: 17px; height: 17px; }
+
+/* Guides «Как пользоваться»: a real screenshot with frames, thin arrows and numbered labels; the text on the side.
+   The marks keep one colour in every theme, so they read the same on the light screenshots. */
+:root { --gd-mark: #E0532F; --gd-label-bg: #3A241C; --gd-label-ink: #FFF4EC; }
+.gd-shot { position: relative; width: 100%; aspect-ratio: 1280 / 820; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 6px 24px -10px rgba(0, 0, 0, .35); user-select: none; container-type: inline-size; }
+.gd-shot img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.gd-shot svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.gd-frame { fill: color-mix(in srgb, var(--gd-mark) 8%, transparent); stroke: var(--gd-mark); stroke-width: 3; }
+.gd-frame.pale { fill: none; stroke-opacity: .35; }
+.gd-arrow { fill: none; stroke: var(--gd-mark); stroke-width: 2.4; }
+.gd-arrow.pale { stroke-opacity: .3; }
+.gd-head { fill: var(--gd-mark); }
+.gd-lbl {
+  position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 4px; border-radius: 999px;
+  background: var(--gd-label-bg); color: var(--gd-label-ink); font-size: clamp(8px, 1.45cqw, 14px); font-weight: 600;   /* grows with the screenshot, so labels sit the same at any size */ white-space: nowrap; box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .5);
+}
+.gd-lbl b { display: grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--gd-mark); color: #fff; font-size: .9em; }
+.gd-lbl.pale { opacity: .45; }
+.gd-pts { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.gd-pts li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 9px; padding: 8px 9px; border-radius: 11px; font-size: 13.5px; line-height: 1.45; }
+.gd-pts li:hover { background: var(--surface-2); }
+.gd-pts li > b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--gd-mark); color: #fff; font-size: 12px; }
+.gd-pts li strong { display: block; font-size: 14px; }
+.gd-ver { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--ok-bg); color: var(--ok-ink); }
+.gd-lead { margin: 0 0 10px; color: var(--ink-soft); font-size: 13.5px; }
+
+/* the window, one step at a time */
+.guide-dlg {
+  width: min(1180px, calc(100vw - 48px)); max-width: none; height: min(760px, calc(100vh - 48px)); max-height: none; padding: 0;
+  border: 0; border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: var(--pop-shadow); overflow: hidden;
+}
+.guide-dlg[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.guide-dlg::backdrop { background: rgba(30, 18, 12, .55); }
+.gd-head-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px 10px 20px; border-bottom: 1px solid var(--line); }
+.gd-head-row h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 17px; letter-spacing: -0.01em; }
+.gd-x { margin-left: auto; display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
+.gd-x:hover { background: var(--surface-2); color: var(--ink); }
+.gd-x svg { width: 14px; height: 14px; }
+.gd-body { display: grid; grid-template-columns: minmax(0, 1fr) 310px; min-height: 0; }
+.gd-pic { display: grid; align-content: center; padding: 14px; background: var(--surface-2); overflow: auto; min-height: 0; }
+.gd-side { padding: 16px 18px; overflow: auto; border-left: 1px solid var(--line); }
+.gd-side h3 { margin: 0 0 4px; font-size: 17px; }
+.gd-frames { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.gd-frames button { padding: 5px 11px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; }
+.gd-frames button[aria-pressed="true"] { background: var(--accent); border-color: transparent; color: var(--accent-ink); font-weight: 600; }
+.gd-foot { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.gd-dots { display: flex; gap: 5px; margin-right: auto; }
+.gd-dots button { width: 9px; height: 9px; padding: 0; border: 0; border-radius: 50%; background: var(--line); transition: width .15s; }
+.gd-dots button.on { width: 22px; border-radius: 9px; background: var(--accent-strong); }
+.gd-count { font-size: 13px; color: var(--ink-soft); }
+@media (max-width: 900px) { .gd-body { grid-template-columns: minmax(0, 1fr); } .gd-side { border-left: 0; border-top: 1px solid var(--line); } }
+
+/* the page in «Настройки» → «Обновление» */
+.upd-guides { display: grid; gap: 10px; margin-top: 4px; }
+.gd-page { border: 1px solid var(--line); border-radius: 14px; padding: 0 14px; }
+.gd-page > summary { display: flex; align-items: center; gap: 10px; padding: 12px 0; cursor: pointer; font-weight: 600; }
+.gd-page[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.gd-page-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 10px; }
+.gd-page-top .tr-hint { margin: 0; }
+.gd-toc { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.gd-toc button { padding: 4px 10px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 12.5px; }
+.gd-toc button:hover { background: color-mix(in srgb, var(--accent) 30%, var(--surface-2)); }
+.gd-sec { margin-bottom: 26px; scroll-margin-top: 10px; }
+.gd-sec h4 { margin: 0 0 4px; display: flex; align-items: center; gap: 8px; font-size: 15.5px; }
+.gd-sec h4 i { font-style: normal; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 13px; }
+.gd-frame-name { margin: 8px 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-soft); }
+.gd-row { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; align-items: start; }
+.gd-row .gd-pts li { padding: 4px 6px; }
+@media (max-width: 1100px) { .gd-row { grid-template-columns: minmax(0, 1fr); } }

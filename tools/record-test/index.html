@@ -457,7 +457,7 @@
   }
 
   // Words that the same model heard in the whole track but not in the pieces: a quick way to see what the cutting lost.
-  // Small differences in spelling («E60» and «Е60») also show up here, so the list needs a look by eye.
+  // Small differences in spelling (Latin «C» and Russian «С») also show up here, so the list needs a look by eye.
   function words(text) { return (text.toLowerCase().replace(/ё/g, 'е').match(/[a-zа-я0-9]{2,}/g) || []); }
   function lostWords(whole, part) {
     var left = {};

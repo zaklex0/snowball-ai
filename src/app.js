@@ -62,7 +62,7 @@
   var els = {
     titlebar: $("titlebar"), scroller: $("scroller"),
     meta: $("meta"), addBtn: $("add-btn"), menuBtn: $("menu-btn"), menu: $("menu"),
-    banner: $("banner"), bannerText: $("banner-text"), bannerAction: $("banner-action"), bannerClose: $("banner-close"),
+    banner: $("banner"), bannerText: $("banner-text"), bannerAction: $("banner-action"), bannerAction2: $("banner-action2"), bannerClose: $("banner-close"),
     editorSlot: $("editor-slot"), editor: $("editor"), editorTitle: $("editor-title"),
     fTitle: $("f-title"), fCat: $("f-cat"), fText: $("f-text"), fComment: $("f-comment"), fFiles: $("f-files"),
     saveBtn: $("save-btn"), cancelBtn: $("cancel-btn"), formMsg: $("form-msg"),
@@ -272,6 +272,10 @@
     els.bannerAction.hidden = !(action && action.label);
     els.bannerAction.textContent = (action && action.label) || "";
     els.bannerAction.onclick = (action && action.onclick) || null;
+    // action.label2: a second button, for example «Как пользоваться» next to «Что нового»
+    els.bannerAction2.hidden = !(action && action.label2);
+    els.bannerAction2.textContent = (action && action.label2) || "";
+    els.bannerAction2.onclick = (action && action.onclick2) || null;
     els.bannerClose.textContent = (action && action.close) || "Понятно";
     bannerOnClose = (action && action.onclose) || null;
     els.banner.hidden = false;
@@ -1771,6 +1775,7 @@
     els.updCurrent.hidden = !upd.currentNotes;
     els.updCurrentTitle.textContent = "Что нового в вашей версии " + upd.current;
     els.updCurrentBody.replaceChildren.apply(els.updCurrentBody, upd.currentNotes ? richText(upd.currentNotes) : []);
+    renderGuidesPage();
   }
   function checkForUpdates() {
     upd.status = "checking";
@@ -1854,9 +1859,11 @@
     renderUpdates();
     // Just updated: tell once what changed.
     if (r.whatsNew && upd.currentNotes) {
-      showBanner("Snowball.ai обновлена до версии " + r.whatsNew + ". Посмотрите, что нового и как этим пользоваться.", {
-        label: "Что нового", close: "Понятно",
-        onclick: function () { els.banner.hidden = true; openUpdates(true); }
+      var g = guideByVersion(r.whatsNew);
+      showBanner("Snowball.ai обновлена до версии " + r.whatsNew + "." + (g ? " Новое: раздел «" + g.title + "». Посмотрите по картинкам, как им пользоваться." : " Посмотрите, что нового и как этим пользоваться."), {
+        label: g ? "Как пользоваться" : "Что нового", close: "Понятно",
+        onclick: function () { els.banner.hidden = true; if (g) openGuide(g); else openUpdates(true); },
+        label2: g ? "Что нового" : null, onclick2: function () { els.banner.hidden = true; openUpdates(true); }
       });
     }
   }, function () {});
@@ -4622,6 +4629,148 @@
   function refreshTranscripts() { api.transcriptList().then(function (r) { if (r && r.ok) { tr.list = r.transcripts; if (state.page === "transcribe" || state.page === "home") render(); } }, function () {}); }
   refreshTranscripts();
 
+  /* ---------- guides «Как пользоваться» ----------
+     Every update with something new to show brings a guide (src/guides/guides.js): steps with real screenshots,
+     frames around the new buttons, thin arrows from short labels and the text on the side. It opens as a window step by
+     step (right after the update from the banner, and by «Как пользоваться» in the section — data-guide) and as a page
+     in «Настройки» → «Обновление». Screenshots and boxes: tools/guide-shots/run.js. */
+  var GUIDES = (window.GUIDES || []).slice().sort(function (a, b) { return verCmp(b.version, a.version); });
+  var GUIDE_BOXES = window.GUIDE_BOXES || {};
+  function verCmp(a, b) {
+    var x = String(a).split(".").map(Number), y = String(b).split(".").map(Number);
+    for (var i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0); }
+    return 0;
+  }
+  function guideByVersion(v) { return GUIDES.find(function (g) { return g.version === v; }) || null; }
+  function guideOfSection(section) { return GUIDES.find(function (g) { return g.section === section; }) || null; }
+  // The number of the first point of a frame: points are numbered through the whole step.
+  function guideStart(step, fi) { var n = 1; for (var i = 0; i < fi; i++) n += step.frames[i].points.length; return n; }
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) { var el = document.createElementNS(SVGNS, tag); Object.keys(attrs).forEach(function (k) { el.setAttribute(k, attrs[k]); }); return el; }
+  // A screenshot with frames around the boxes, a thin bent arrow from every label to its frame, and the labels.
+  // active: the number of the point to stress (the others go pale), or null.
+  function guideShot(g, frame, active, n0) {
+    var boxes = (GUIDE_BOXES[g.version] || {})[frame.shot] || {};
+    var wrap = h("div", { class: "gd-shot" }, h("img", { src: "guides/" + g.version + "/" + frame.shot + ".webp", alt: "", draggable: "false" }));
+    var svg = svgEl("svg", { viewBox: "0 0 1280 820", preserveAspectRatio: "none", "aria-hidden": "true" });
+    var marker = svgEl("marker", { id: "gd-ah", viewBox: "0 0 10 10", refX: "8.5", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+    marker.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", class: "gd-head" }));
+    var defs = svgEl("defs", {}); defs.append(marker); svg.append(defs);
+    frame.points.forEach(function (p, i) {
+      var b = boxes[p.box], n = n0 + i, pale = active != null && active !== n;
+      if (!b) return;
+      var x = b[0] - 5, y = b[1] - 5, w = b[2] + 10, hh = b[3] + 10;
+      svg.append(svgEl("rect", { x: x, y: y, width: w, height: hh, rx: 9, class: "gd-frame" + (pale ? " pale" : "") }));
+      var tx = Math.max(x, Math.min(p.at[0], x + w)), ty = Math.max(y, Math.min(p.at[1], y + hh));
+      if (tx === p.at[0] && ty === p.at[1]) ty = y + hh;
+      var mx = (p.at[0] + tx) / 2 + (ty - p.at[1]) * 0.15, my = (p.at[1] + ty) / 2 - (tx - p.at[0]) * 0.15;
+      svg.append(svgEl("path", { d: "M" + p.at[0] + "," + p.at[1] + " Q" + mx + "," + my + " " + tx + "," + ty, class: "gd-arrow" + (pale ? " pale" : ""), "marker-end": "url(#gd-ah)" }));
+      var lbl = h("span", { class: "gd-lbl" + (pale ? " pale" : "") }, h("b", { text: String(n) }), p.label);
+      lbl.style.left = (p.at[0] / 12.8) + "%";
+      lbl.style.top = (p.at[1] / 8.2) + "%";
+      wrap.append(lbl);
+    });
+    wrap.insertBefore(svg, wrap.children[1]);
+    return wrap;
+  }
+  // The numbered points of a frame; hovering one stresses its frame on the screenshot.
+  function guidePoints(frame, n0, onHover) {
+    return h("ol", { class: "gd-pts" }, frame.points.map(function (p, i) {
+      return h("li", { onmouseenter: function () { onHover(n0 + i); }, onmouseleave: function () { onHover(null); } },
+        h("b", { text: String(n0 + i), "aria-hidden": "true" }), h("span", null, h("strong", { text: p.label }), p.text));
+    }));
+  }
+
+  // The window, one step at a time.
+  var gd = { guide: null, step: 0, frame: 0, dlg: null };
+  function openGuide(g, step) {
+    if (!g) return;
+    gd.guide = g; gd.step = step || 0; gd.frame = 0;
+    if (!gd.dlg) {
+      gd.dlg = h("dialog", { class: "guide-dlg", "aria-label": "Как пользоваться" });
+      gd.dlg.addEventListener("click", function (e) { if (e.target === gd.dlg) gd.dlg.close(); });
+      gd.dlg.addEventListener("keydown", function (e) {
+        if (e.key === "ArrowRight") { e.preventDefault(); guideGo(1); } else if (e.key === "ArrowLeft") { e.preventDefault(); guideGo(-1); }
+      });
+      document.body.append(gd.dlg);
+    }
+    renderGuide();
+    if (!gd.dlg.open) gd.dlg.showModal();
+  }
+  function guideGo(d) {
+    var g = gd.guide, step = g.steps[gd.step], s = gd.step, f = gd.frame + d;
+    if (f < 0) { s--; f = s >= 0 ? g.steps[s].frames.length - 1 : 0; }
+    else if (f >= step.frames.length) { s++; f = 0; }
+    if (s < 0 || s >= g.steps.length) return;
+    gd.step = s; gd.frame = f; renderGuide();
+  }
+  function renderGuide() {
+    var g = gd.guide, step = g.steps[gd.step], frame = step.frames[gd.frame], n0 = guideStart(step, gd.frame);
+    var last = gd.step === g.steps.length - 1 && gd.frame === step.frames.length - 1, first = gd.step === 0 && gd.frame === 0;
+    var pic = h("div", { class: "gd-pic" }, guideShot(g, frame, null, n0));
+    var hover = function (n) { pic.replaceChildren(guideShot(g, frame, n, n0)); };
+    gd.dlg.replaceChildren(
+      h("div", { class: "gd-head-row" }, h("h2", { text: "Как пользоваться: " + g.title }), h("span", { class: "gd-ver", text: "Новое в " + g.version }),
+        h("button", { type: "button", class: "gd-x", title: "Закрыть (Esc)", "aria-label": "Закрыть", html: ICONS.x, onclick: function () { gd.dlg.close(); } })),
+      h("div", { class: "gd-body" }, pic,
+        h("div", { class: "gd-side" }, h("h3", { text: (gd.step + 1) + ". " + step.title }), h("p", { class: "gd-lead", text: step.lead }),
+          step.frames.length > 1 ? h("div", { class: "gd-frames" }, step.frames.map(function (f, i) {
+            return h("button", { type: "button", "aria-pressed": String(i === gd.frame), onclick: function () { gd.frame = i; renderGuide(); } }, f.name);
+          })) : null,
+          guidePoints(frame, n0, hover))),
+      h("div", { class: "gd-foot" },
+        h("div", { class: "gd-dots" }, g.steps.map(function (x, i) {
+          return h("button", { type: "button", class: i === gd.step ? "on" : "", title: (i + 1) + ". " + x.title, "aria-label": "Шаг " + (i + 1) + ": " + x.title,
+            onclick: function () { gd.step = i; gd.frame = 0; renderGuide(); } });
+        })),
+        h("span", { class: "gd-count", text: "Шаг " + (gd.step + 1) + " из " + g.steps.length }),
+        h("button", { type: "button", class: "btn btn-ghost", disabled: first ? "disabled" : null, onclick: function () { guideGo(-1); } }, "Назад"),
+        last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () { gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close(); setPage(g.section); } }, "Открыть раздел «" + g.title + "»")
+          : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
+  }
+  Array.prototype.forEach.call(document.querySelectorAll("[data-guide]"), function (b) {
+    var g = guideOfSection(b.dataset.guide);
+    if (!g) { b.hidden = true; return; }
+    b.addEventListener("click", function () { openGuide(g); });
+  });
+
+  // The page in «Настройки» → «Обновление»: the guides of this version and the earlier ones, each folded until opened
+  // (the newest one is open); a screenshot is drawn only when its guide is unfolded.
+  var guidesPageFor = null;
+  function renderGuidesPage() {
+    var box = $("upd-guides"), cur = upd.current || "";
+    var list = GUIDES.filter(function (g) { return !cur || verCmp(g.version, cur) <= 0; });
+    var key = list.map(function (g) { return g.version; }).join(",");
+    if (!box || guidesPageFor === key) return;
+    guidesPageFor = key;
+    box.replaceChildren.apply(box, list.map(function (g, gi) {
+      var det = h("details", { class: "gd-page", open: gi === 0 ? "open" : null },
+        h("summary", null, "Как пользоваться: " + g.title, h("span", { class: "gd-ver", text: g.version })));
+      var fill = function () {
+        if (det.dataset.filled) return;
+        det.dataset.filled = "1";
+        det.append(
+          h("div", { class: "gd-page-top" }, h("p", { class: "tr-hint", text: "Все шаги на одной странице. Цифры на картинках совпадают с пунктами рядом с ними." }),
+            h("button", { type: "button", class: "btn-mini", onclick: function () { openGuide(g); } }, "Открыть по шагам")),
+          h("div", { class: "gd-toc" }, g.steps.map(function (s, si) {
+            return h("button", { type: "button", onclick: function () { var t = det.querySelector('[data-step="' + si + '"]'); if (t) t.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" }); } }, (si + 1) + ". " + s.title);
+          })));
+        g.steps.forEach(function (s, si) {
+          var sec = h("section", { class: "gd-sec", "data-step": String(si) }, h("h4", null, h("i", { text: String(si + 1) }), s.title), h("p", { class: "gd-lead", text: s.lead }));
+          s.frames.forEach(function (f, fi) {
+            var n0 = guideStart(s, fi), pic = h("div", { class: "gd-sec-pic" }, guideShot(g, f, null, n0));
+            if (s.frames.length > 1) sec.append(h("p", { class: "gd-frame-name", text: f.name }));
+            sec.append(h("div", { class: "gd-row" }, pic, guidePoints(f, n0, function (n) { pic.replaceChildren(guideShot(g, f, n, n0)); })));
+          });
+          det.append(sec);
+        });
+      };
+      if (gi === 0) fill();
+      det.addEventListener("toggle", function () { if (det.open) fill(); });
+      return det;
+    }));
+  }
+
   /* ---------- events ---------- */
   buildCategoryPicker();
   els.addBtn.addEventListener("click", function () { openEditor(null); });
@@ -4643,7 +4792,7 @@
   els.fTitle.addEventListener("input", function () { if (els.formMsg.textContent) setMsg(""); });
   els.search.addEventListener("input", function () { state.query = els.search.value; render(); });
   document.addEventListener("keydown", function (e) {
-    if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open) return;
+    if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open || document.querySelector("dialog.guide-dlg[open]")) return;
     var mod = e.ctrlKey || e.metaKey;
     // Tabs like in a browser, and the small assistant window.
     if (isSolo() && mod && !e.shiftKey && !e.altKey && e.code === "KeyW") { e.preventDefault(); window.close(); return; }

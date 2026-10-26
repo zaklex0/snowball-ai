@@ -139,6 +139,7 @@
         <div class="banner" id="banner" role="status" hidden>
           <p id="banner-text"></p>
           <button type="button" class="btn-mini" id="banner-action" hidden></button>
+          <button type="button" class="btn-mini" id="banner-action2" hidden></button>
           <button type="button" class="link-btn" id="banner-close">Понятно</button>
         </div>
 
@@ -269,6 +270,12 @@
               <p class="eyebrow">Текст из аудио и видео</p>
               <h1 id="transcribe-title">Транскрибация</h1>
               <p class="meta">Для озвучки, роликов и записей: текст, тайминги по фразам и субтитры для монтажа.</p>
+            </div>
+            <div class="top-actions">
+              <button type="button" class="btn btn-ghost tr-help" data-guide="transcribe" title="Пошаговая инструкция с картинками">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.7M12 16.9h.01"/></svg>
+                Как пользоваться
+              </button>
             </div>
           </header>
           <div class="tr-layout">
@@ -615,6 +622,7 @@
               <summary id="upd-current-title">Что нового в вашей версии</summary>
               <div class="rt" id="upd-current-body"></div>
             </details>
+            <div class="upd-guides" id="upd-guides"></div>
             <p class="files-hint">Программа сама проверяет обновления при запуске и раз в 4 часа, но ничего не скачивает без вашей кнопки. <a href="https://github.com/zaklex0/snowball-ai/releases" target="_blank" rel="noopener">Все версии на GitHub</a></p>
           </section>
       </div>
@@ -732,6 +740,8 @@
 <div class="utoast" id="utoast" role="status" aria-live="polite" hidden><span id="utoast-text"></span><button type="button" class="utoast-btn" id="utoast-undo">Отменить</button></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<script src="guides/guides.js"></script>
+<script src="guides/1.15.0/boxes.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
