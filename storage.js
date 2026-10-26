@@ -10,6 +10,7 @@
 //   <dir>/Файлы чатов/<chatId>/ — pictures attached to messages in LLM conversations
 //   <dir>/calendar.json         — things planned in the calendar
 //   <dir>/tasks.json            — the tasks board: to do, in progress, done
+//   <dir>/Транскрибации/<id>.json — text and timings of an audio or video file (the file itself is not copied)
 // This module only uses Node's fs/path, so it can be tested without Electron.
 
 const fs = require('fs');
@@ -30,10 +31,12 @@ const ACTIVITY_FILE = 'activity.json';
 const CHATS_FILE = 'chats.json';
 const CALENDAR_FILE = 'calendar.json';
 const TASKS_FILE = 'tasks.json';
+const TRANSCRIPTS_DIR = 'Транскрибации';
 // What counts as an action on the statistics page. Deleting and importing do not count.
 // calendar: a new or changed event; assistant: a message sent to the assistant;
-// tasks: a new task, one moved to another column, a new subtask or a subtask ticked off.
-const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks'];
+// tasks: a new task, one moved to another column, a new subtask or a subtask ticked off;
+// transcribe: a file turned into text, its short summary, its text or timings copied, subtitles or text saved to a file.
+const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks', 'transcribe'];
 const NAME_MAX = 32;
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
@@ -302,6 +305,49 @@ function normalizeChat(c) {
   return { id: c.id, title: str(c.title, 120).trim() || 'Без названия', createdAt: num(c.createdAt) || now, updatedAt: num(c.updatedAt) || now, messages };
 }
 
+// A transcription: the text of a file, its phrases with times (cues, in seconds) and the pauses of the voice
+// (the subtitles are built from them again after the text is corrected). summary: null or { brief, points }.
+const TRANSCRIPT_CUES_MAX = 20000;
+const TRANSCRIPT_PAUSES_MAX = 50000;
+function sec(v) { return Math.max(0, Math.round(num(v) * 1000) / 1000); }
+function normalizeTranscript(t) {
+  if (!t || typeof t !== 'object' || !ID_RE.test(str(t.id))) return null;
+  const cues = (Array.isArray(t.cues) ? t.cues : []).slice(0, TRANSCRIPT_CUES_MAX).map((c) => {
+    if (!c || typeof c !== 'object') return null;
+    const text = str(c.text, 5000).trim();
+    if (!text) return null;
+    const start = sec(c.start);
+    return { start, end: Math.max(start, sec(c.end)), text };
+  }).filter(Boolean);
+  const pauses = (Array.isArray(t.pauses) ? t.pauses : []).slice(0, TRANSCRIPT_PAUSES_MAX)
+    .filter((p) => Array.isArray(p) && p.length === 2).map((p) => [sec(p[0]), sec(p[1])]).filter((p) => p[1] > p[0]);
+  let summary = null;
+  if (t.summary && typeof t.summary === 'object' && str(t.summary.brief).trim()) {
+    summary = { brief: str(t.summary.brief, 5000).trim(), points: (Array.isArray(t.summary.points) ? t.summary.points : []).map((x) => str(x, 500).trim()).filter(Boolean).slice(0, 20) };
+  }
+  const now = Date.now();
+  return {
+    id: t.id, name: str(t.name, 300).trim() || 'файл', source: str(t.source, 2000), kind: t.kind === 'audio' ? 'audio' : 'video',
+    size: Math.max(0, Math.round(num(t.size))), duration: sec(t.duration), model: str(t.model, 60),
+    createdAt: num(t.createdAt) || now, updatedAt: num(t.updatedAt) || now,
+    text: str(t.text, 2000000).trim() || cues.map((c) => c.text).join(' '), cues, pauses, summary,
+    usd: Math.max(0, num(t.usd)), sent: sec(t.sent), pieces: Math.max(0, Math.round(num(t.pieces)))
+  };
+}
+
+// All transcriptions in the folder; a damaged file is skipped, not deleted.
+async function readTranscripts(dir) {
+  let names = [];
+  try { names = await fsp.readdir(dir); } catch (e) { return []; }
+  const out = [];
+  for (const name of names) {
+    if (!/\.json$/i.test(name)) continue;
+    const t = normalizeTranscript(await readJson(path.join(dir, name)));
+    if (t && name === t.id + '.json') out.push(t);
+  }
+  return out;
+}
+
 async function uniqueTarget(dir, name) {
   const ext = path.extname(name);
   const stem = name.slice(0, name.length - ext.length);
@@ -324,6 +370,7 @@ class Store {
     this.tasks = [];
     this.columns = [];       // the user's own task columns, in their order
     this.archiveMode = 'day'; // done tasks go to the archive by themselves: 'day', 'week' or 'manual'
+    this.transcripts = [];   // «Транскрибация»: one file per transcription in Транскрибации/
     this.queue = Promise.resolve();
   }
 
@@ -357,6 +404,11 @@ class Store {
     const file = this.chatImagePath(chatId, stored);
     if (file && await exists(file)) { try { await this.trash(file); } catch (e) { await fsp.rm(file, { force: true }); } }
   }
+  get transcriptsRoot() { return path.join(this.dir, TRANSCRIPTS_DIR); }
+  transcriptPath(id) {
+    if (!ID_RE.test(str(id))) throw new Error('bad id');
+    return path.join(this.transcriptsRoot, id + '.json');
+  }
   get calendarPath() { return path.join(this.dir, CALENDAR_FILE); }
   get tasksPath() { return path.join(this.dir, TASKS_FILE); }
   promptDir(id) {
@@ -388,6 +440,7 @@ class Store {
     this.columns = tasks && Array.isArray(tasks.columns) ? tasks.columns.map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX) : [];
     this.archiveMode = tasks && ARCHIVE_MODES.includes(tasks.archiveMode) ? tasks.archiveMode : 'day';
     this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean) : [];
+    this.transcripts = await readTranscripts(this.transcriptsRoot);
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
     this.activity = this.backfillActivity();
@@ -425,6 +478,7 @@ class Store {
 
   recordCopy() { return this.run(() => this.bump('copied', 1)); }
   recordAssistant() { return this.run(() => this.bump('assistant', 1)); }
+  recordTranscribe() { return this.run(() => this.bump('transcribe', 1)); }
 
   activityView() { return { since: this.activity.since, days: this.activity.days }; }
 
@@ -706,6 +760,49 @@ class Store {
     });
   }
 
+  /* ---------- «Транскрибация» ---------- */
+  // Newest first, without the timings: enough for the history list. first: the beginning of the text.
+  transcriptList() {
+    return this.transcripts.slice().sort((a, b) => b.createdAt - a.createdAt).map((t) => ({
+      id: t.id, name: t.name, kind: t.kind, duration: t.duration, createdAt: t.createdAt, summary: !!t.summary,
+      first: t.text.slice(0, 160), words: t.text.slice(0, 4000)
+    }));
+  }
+  getTranscript(id) { return this.transcripts.find((t) => t.id === id) || null; }
+  // A new transcription (counted in the statistics) or the same one with corrected text, timings or a summary.
+  saveTranscript(input) {
+    return this.run(async () => {
+      const prev = this.getTranscript(input && input.id);
+      const t = normalizeTranscript(Object.assign({}, prev || {}, input, prev ? { createdAt: prev.createdAt } : {}, { updatedAt: Date.now() }));
+      if (!t) return null;
+      await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+      await writeJson(this.transcriptPath(t.id), Object.assign({ format: 'snowball-transcript', version: 1 }, t));
+      if (prev) this.transcripts[this.transcripts.indexOf(prev)] = t;
+      else { this.transcripts.push(t); await this.bump('transcribe', 1); }
+      return t;
+    });
+  }
+  // Gone at once; the window keeps a copy for «Отменить» (putTranscript), which does not count in the statistics.
+  deleteTranscript(id) {
+    return this.run(async () => {
+      const t = this.getTranscript(id);
+      if (!t) return null;
+      this.transcripts = this.transcripts.filter((x) => x !== t);
+      try { await this.trash(this.transcriptPath(id)); } catch (e) { await fsp.rm(this.transcriptPath(id), { force: true }); }
+      return t;
+    });
+  }
+  putTranscript(input) {
+    return this.run(async () => {
+      const t = normalizeTranscript(input);
+      if (!t || this.getTranscript(t.id)) return null;
+      await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+      await writeJson(this.transcriptPath(t.id), Object.assign({ format: 'snowball-transcript', version: 1 }, t));
+      this.transcripts.push(t);
+      return t;
+    });
+  }
+
   async initData(seed) {
     await fsp.mkdir(this.dir, { recursive: true });
     let raw = null;
@@ -951,9 +1048,11 @@ class Store {
       entries.push({ name: ACTIVITY_FILE, data: JSON.stringify(this.activity, null, 2) });
       entries.push({ name: PROFILE_FILE, data: JSON.stringify(this.profile, null, 2) });
       if (this.profile.avatarAt && fs.existsSync(this.avatarPath)) entries.push({ name: AVATAR_FILE, file: this.avatarPath });
+      this.transcripts.forEach((t) => entries.push({ name: 'transcripts/' + t.id + '.json', data: JSON.stringify(Object.assign({ format: 'snowball-transcript', version: 1 }, t)) }));
       counts.chats = this.chats.length;
       counts.events = this.events.length;
       counts.tasks = this.tasks.length;
+      counts.transcripts = this.transcripts.length;
     }
     return { entries, counts };
   }
@@ -963,7 +1062,7 @@ class Store {
   // 'share': prompts from someone else get new ids and today's date; one with the same title and text as here is skipped.
   mergeFrom(dir, kind) {
     return this.run(async () => {
-      const res = { prompts: 0, files: 0, skipped: 0, chats: 0, events: 0, tasks: 0 };
+      const res = { prompts: 0, files: 0, skipped: 0, chats: 0, events: 0, tasks: 0, transcripts: 0 };
       let incoming = [];
       try { incoming = parseData(await fsp.readFile(path.join(dir, 'prompts.json'), 'utf8')).prompts; } catch (e) { incoming = []; }
       const sig = (p) => p.title.trim().toLowerCase() + '\u0000' + p.text.trim();
@@ -1029,6 +1128,14 @@ class Store {
         res.tasks++;
       });
       if (res.tasks || newColumns) await this.writeTasks();
+      // Transcriptions come by id, like chats; the ones already here stay as they are.
+      for (const t of await readTranscripts(path.join(dir, 'transcripts'))) {
+        if (this.getTranscript(t.id)) continue;
+        await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+        await writeJson(this.transcriptPath(t.id), Object.assign({ format: 'snowball-transcript', version: 1 }, t));
+        this.transcripts.push(t);
+        res.transcripts++;
+      }
       // Statistics: for each day and kind the larger number, so restoring the same backup twice does not double it.
       const act = await readJson(path.join(dir, ACTIVITY_FILE));
       if (act) {
@@ -1057,7 +1164,7 @@ class Store {
   }
 }
 
-// Copies the data (prompts.json, profile, statistics, chats, calendar, tasks and the files folder) into another folder.
+// Copies the data (prompts.json, profile, statistics, chats, calendar, tasks, transcriptions and the files folders) into another folder.
 async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
   await fsp.copyFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
@@ -1068,6 +1175,8 @@ async function copyDataTo(fromDir, toDir) {
   if (await exists(files)) await fsp.cp(files, path.join(toDir, FILES_DIR), { recursive: true, force: false, errorOnExist: false });
   const chatFiles = path.join(fromDir, CHAT_FILES_DIR);
   if (await exists(chatFiles)) await fsp.cp(chatFiles, path.join(toDir, CHAT_FILES_DIR), { recursive: true, force: false, errorOnExist: false });
+  const transcripts = path.join(fromDir, TRANSCRIPTS_DIR);
+  if (await exists(transcripts)) await fsp.cp(transcripts, path.join(toDir, TRANSCRIPTS_DIR), { recursive: true, force: false, errorOnExist: false });
 }
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }

@@ -5,6 +5,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const Anthropic = require('@anthropic-ai/sdk').default;
 const OpenAI = require('openai').default;
+const { toFile } = require('openai');
 const os = require('os');
 const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, sanitizeName } = require('./storage');
 const { writeZip, extractZip } = require('./archive');
@@ -19,7 +20,7 @@ const SIDEBAR_WIDTH = 236;   // .side in styles.css; a window with one moved tab
 // "zaklex" is a dark theme in the SHAPE MOTION style (src/theme-zaklex.css).
 const THEMES = ['system', 'light', 'dark', 'white', 'black', 'zaklex'];
 // What a tab on top of the window can show. LLM ("assistant") tabs may be open many times, one conversation each.
-const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'generator', 'stats'];
+const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'transcribe', 'generator', 'stats'];
 
 // Prompts a fresh install starts with (only when the data folder has no prompts.json yet).
 // Empty for now; example prompts for each type can go here later.
@@ -422,7 +423,8 @@ function fail(e) {
 }
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
-const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir']);
+const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir',
+  'media-pick', 'media-info', 'media-read', 'transcribe-piece', 'transcript-list', 'transcript-get']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
@@ -436,6 +438,7 @@ function syncOthers(r, except) {
   const data = { info: info() };
   if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, taskArchiveMode: r.taskArchiveMode, profile: r.profile, activity: r.activity });
   if (r.chats) data.chats = r.chats;
+  if (r.transcripts) data.transcripts = r.transcripts;
   broadcast('sync', data, except);
 }
 function info() {
@@ -694,7 +697,7 @@ async function openArchive(file) {
     if (kind === 'backup') {
       const when = m.createdAt ? new Date(m.createdAt).toLocaleString('ru-RU') : 'неизвестно когда';
       message = 'Восстановить данные из резервной копии?';
-      detail = 'Копия от ' + when + ': промтов ' + (c.prompts || 0) + ', файлов ' + (c.files || 0) + ', разговоров ' + (c.chats || 0) + ', дел в календаре ' + (c.events || 0) + '.\n\n' +
+      detail = 'Копия от ' + when + ': промтов ' + (c.prompts || 0) + ', файлов ' + (c.files || 0) + ', разговоров ' + (c.chats || 0) + ', дел в календаре ' + (c.events || 0) + (c.transcripts ? ', расшифровок ' + c.transcripts : '') + '.\n\n' +
         'Из того, что уже есть в программе, ничего не удалится и не изменится: добавится только недостающее. Тема и выбор модели станут как в копии.\n\n' +
         'Ключей ChatGPT и Claude в копии нет: если нужно, введите их заново в «Настройках».';
     } else {
@@ -871,8 +874,8 @@ function stubCalendar(text, t) {
 }
 
 // "открой календарь и генератор" → the tabs to open.
-const TAB_WORDS = [['home', /главн|домашн/], ['prompts', /промт/], ['calendar', /календар/], ['tasks', /задач|туду|to-?do|доск/], ['assistant', /\bllm\b|ллм|чат|разговор/], ['generator', /генератор|генерац|изображ|картинк|видео/], ['stats', /статистик/]];
-const TAB_NAMES = { home: 'Главная', prompts: 'Промты', calendar: 'Календарь', tasks: 'Задачи', assistant: 'LLM', generator: 'Генератор', stats: 'Статистика' };
+const TAB_WORDS = [['home', /главн|домашн/], ['prompts', /промт/], ['calendar', /календар/], ['tasks', /задач|туду|to-?do|доск/], ['assistant', /\bllm\b|ллм|чат|разговор/], ['transcribe', /транскриб|расшифров/], ['generator', /генератор|генерац|изображ|картинк|видео/], ['stats', /статистик/]];
+const TAB_NAMES = { home: 'Главная', prompts: 'Промты', calendar: 'Календарь', tasks: 'Задачи', assistant: 'LLM', transcribe: 'Транскрибация', generator: 'Генератор', stats: 'Статистика' };
 // The name of a column: «Предстоит», «В процессе», «Готово» or one of the user's own.
 const columnName = (id) => (store.columnsView().find((c) => c.id === id) || { name: 'Предстоит' }).name;
 const PRIORITY_NAMES = ['обычная', 'важная', 'срочная'];
@@ -1049,7 +1052,7 @@ const SYSTEM_PROMPT = [
   'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
   'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
-  'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
+  'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, transcribe — «Транскрибация» (текст, тайминги и субтитры из аудио и видео), generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
 
@@ -1152,7 +1155,7 @@ const TOOLS = [
     description: 'Сразу открывает вкладки программы вверху окна. Если такая вкладка уже открыта, переключается на неё; llm каждый раз открывает новый разговор.',
     parameters: {
       type: 'object', additionalProperties: false, required: ['tabs'],
-      properties: { tabs: { type: 'array', items: { type: 'string', enum: ['home', 'prompts', 'calendar', 'tasks', 'llm', 'generator', 'stats'] }, description: 'Какие вкладки открыть, по порядку' } }
+      properties: { tabs: { type: 'array', items: { type: 'string', enum: ['home', 'prompts', 'calendar', 'tasks', 'llm', 'transcribe', 'generator', 'stats'] }, description: 'Какие вкладки открыть, по порядку' } }
     }
   },
   {
@@ -1608,6 +1611,143 @@ handle('chat-image-open', async (chatId, stored) => {
   if (!file || !fs.existsSync(file)) return { ok: false, error: 'Этой картинки уже нет.' };
   const err = await shell.openPath(file);
   return err ? { ok: false, error: 'Не получилось открыть картинку.' } : { ok: true };
+});
+
+/* «Транскрибация»: text, timings and subtitles of an audio or video file.
+   The window reads the file, takes the sound out (WebAudio, no extra programs), cuts it at pauses of the voice and sends
+   the pieces here one by one (transcribe-piece); OpenAI turns each into text with the user's ChatGPT key. Only the pieces
+   with speech are sent, so the 25 MB limit of OpenAI does not matter and a long video works too.
+   Transcription is priced by minutes of sound; these are estimates, the spending counts them like answers of the assistant. */
+const TRANSCRIBE_MODELS = { 'gpt-4o-mini-transcribe': 0.003, 'gpt-transcribe': 0.0045, 'gpt-4o-transcribe': 0.006 };
+const MEDIA_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', '3gp', 'mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac'];
+const AUDIO_ONLY = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac'];
+const MEDIA_MAX = 2 * 1024 * 1024 * 1024;   // the window holds the whole file while it takes the sound out
+const mediaAllowed = new Set();   // only files the user picked or dropped can be read
+function mediaInfo(file) {
+  file = String(file || '');
+  const ext = path.extname(file).slice(1).toLowerCase();
+  if (!file || !MEDIA_EXT.includes(ext)) return { ok: false, error: 'Этот файл не подходит: нужно аудио или видео (' + MEDIA_EXT.join(', ') + ').' };
+  let st;
+  try { st = fs.statSync(file); } catch (e) { return { ok: false, error: 'Файл не открылся: возможно, его переместили или удалили.' }; }
+  if (!st.isFile()) return { ok: false, error: 'Это папка, а нужен файл.' };
+  if (st.size > MEDIA_MAX) return { ok: false, error: 'Файл больше 2 ГБ. Сохраните из него только звук (например, в mp3) и расшифруйте его.' };
+  mediaAllowed.add(file);
+  const { pathToFileURL } = require('url');
+  return { ok: true, file, name: path.basename(file), size: st.size, kind: AUDIO_ONLY.includes(ext) ? 'audio' : 'video', url: pathToFileURL(file).href };
+}
+handle('media-pick', async function () {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
+    title: 'Аудио или видео для расшифровки', properties: ['openFile'], filters: [{ name: 'Аудио и видео', extensions: MEDIA_EXT }]
+  });
+  if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
+  return mediaInfo(r.filePaths[0]);
+});
+handle('media-info', async (file) => mediaInfo(file));
+handle('media-read', async (file) => {
+  if (!mediaAllowed.has(String(file))) return { ok: false, error: 'Выберите файл ещё раз.' };
+  const buf = await fsp.readFile(file);
+  return { ok: true, data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) };
+});
+// One piece of speech (a 16 kHz WAV made by the window) → text. prompt: what was said just before, so a short piece
+// keeps its meaning (only the text: an instruction there gets copied into the answer on an almost silent piece).
+handle('transcribe-piece', async (wav, prompt, model, seconds) => {
+  if (!keys.openai) return { ok: false, error: 'Для расшифровки нужен ключ ChatGPT: «Настройки» → «API-ключи».', noKey: true };
+  if (!wav || !(wav.byteLength > 44) || wav.byteLength > 24 * 1024 * 1024) return { ok: false, error: 'Кусок звука не подошёл.' };
+  const id = TRANSCRIBE_MODELS[model] ? model : 'gpt-4o-mini-transcribe';
+  const client = new OpenAI({ apiKey: keys.openai, maxRetries: 2, timeout: 5 * 60 * 1000 });
+  const body = { file: await toFile(Buffer.from(wav), 'piece.wav', { type: 'audio/wav' }), model: id, response_format: 'json', language: 'ru' };
+  if (prompt) body.prompt = String(prompt).slice(-800);
+  try {
+    const r = await client.audio.transcriptions.create(body);
+    const usd = Math.max(0, Number(seconds) || 0) / 60 * TRANSCRIBE_MODELS[id];
+    if (usd > 0) { const sp = spendOf('openai'); sp.monthUsd += usd; sp.sinceUsd += usd; saveSettings(); }
+    return { ok: true, text: String(r.text || '').trim(), usd };
+  } catch (e) {
+    // Only the code goes to the log: the text of a service error may contain a piece of the key.
+    console.error('transcribe', e && e.status, e && (e.code || e.type));
+    return { ok: false, error: modelError(e) || 'OpenAI не расшифровал кусок. Попробуйте ещё раз.' };
+  }
+});
+handle('transcript-list', async () => ({ ok: true, transcripts: store.transcriptList() }));
+handle('transcript-get', async (id) => {
+  const t = store.getTranscript(id);
+  return t ? { ok: true, transcript: t } : { ok: false, error: 'Этой расшифровки уже нет.' };
+});
+handle('transcript-save', async (t) => {
+  const saved = await store.saveTranscript(t);
+  if (!saved) return { ok: false, error: 'Не получилось сохранить расшифровку.' };
+  return ok({ transcript: saved, transcripts: store.transcriptList() });
+});
+handle('transcript-delete', async (id) => {
+  const gone = await store.deleteTranscript(id);
+  return ok({ removed: gone, transcripts: store.transcriptList() });
+});
+handle('transcript-restore', async (t) => { await store.putTranscript(t); return ok({ transcripts: store.transcriptList() }); });
+
+// «Кратко»: a couple of sentences about the main thing and the main points. Made only on request.
+const TRANSCRIPT_SUMMARY_PROMPT = [
+  'Тебе дают расшифровку аудио или видео: озвучку ролика, урок, запись разговора. Сделай краткое содержание для программы Snowball.ai.',
+  'brief — 2–4 простых предложения: о чём это и чем заканчивается. points — 3–6 главных мыслей, каждая коротко, в одну строку.',
+  'Расшифровку делала программа распознавания речи, в ней бывают ошибки в словах и названиях: исправляй очевидные по смыслу, но ничего не придумывай.',
+  'Пиши по-русски, просто и без канцелярита.'
+].join('\n');
+const TRANSCRIPT_SUMMARY_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['brief', 'points'],
+  properties: { brief: { type: 'string' }, points: { type: 'array', items: { type: 'string' } } }
+};
+handle('transcript-summary', async (id) => {
+  const t = store.getTranscript(id);
+  if (!t) return { ok: false, error: 'Этой расшифровки уже нет.' };
+  if (!keys.openai) return { ok: false, error: 'Для краткого содержания нужен ключ ChatGPT: «Настройки» → «API-ключи».' };
+  const model = modelById('gpt-6.1-sol');
+  const client = new OpenAI({ apiKey: keys.openai });
+  const controller = new AbortController();
+  try {
+    const r = await client.responses.create({
+      model: model.id, instructions: TRANSCRIPT_SUMMARY_PROMPT, input: 'Файл: «' + t.name + '».\n\n' + t.text.slice(0, 400000),
+      reasoning: { effort: 'low' }, max_output_tokens: 8000, store: false,
+      text: { format: { type: 'json_schema', name: 'summary', strict: true, schema: TRANSCRIPT_SUMMARY_SCHEMA } }
+    }, { signal: controller.signal });
+    recordSpend(model, openaiUsage(r), controller.signal);
+    if (r.status === 'incomplete') return { ok: false, error: 'Ответ оборвался. Попробуйте ещё раз.' };
+    let summary;
+    try { summary = JSON.parse(r.output_text || ''); } catch (e) { return { ok: false, error: 'Модель ответила не так, как нужно. Попробуйте ещё раз.' }; }
+    const saved = await store.saveTranscript({ id: t.id, summary });
+    await store.recordTranscribe();
+    return ok({ transcript: saved, transcripts: store.transcriptList(), cost: runCost.get(controller.signal) || 0, info: info() });
+  } catch (e) {
+    console.error('transcript summary', e && e.status, e && (e.code || e.type));
+    return { ok: false, error: modelError(e) || 'Краткое содержание не получилось. Попробуйте ещё раз.' };
+  }
+});
+// Text or timings copied: counts in the statistics like copying a prompt.
+handle('transcript-copy', async (text) => {
+  clipboard.writeText(String(text || ''));
+  await store.recordTranscribe();
+  return ok();
+});
+// Subtitles (.srt) or text (.txt) into a file the user chooses; by default next to the original file.
+handle('transcript-export', async function (id, kind, content) {
+  const t = store.getTranscript(id);
+  if (!t) return { ok: false, error: 'Этой расшифровки уже нет.' };
+  const ext = kind === 'srt' ? 'srt' : 'txt';
+  const stem = path.parse(t.name).name || 'расшифровка';
+  const near = t.source && fs.existsSync(path.dirname(t.source)) ? path.dirname(t.source) : app.getPath('documents');
+  const r = await dialog.showSaveDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
+    title: ext === 'srt' ? 'Сохранить субтитры' : 'Сохранить текст', defaultPath: path.join(near, stem + '.' + ext),
+    filters: [ext === 'srt' ? { name: 'Субтитры', extensions: ['srt'] } : { name: 'Текст', extensions: ['txt'] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: true, canceled: true };
+  // A BOM so that old Windows programs read Russian letters right; editors for subtitles understand it too.
+  await fsp.writeFile(r.filePath, '﻿' + String(content || '').replace(/\r?\n/g, '\r\n'), 'utf8');
+  await store.recordTranscribe();
+  return ok({ path: r.filePath });
+});
+handle('transcript-show-source', async (id) => {
+  const t = store.getTranscript(id);
+  if (!t || !t.source || !fs.existsSync(t.source)) return { ok: false, error: 'Исходного файла на месте уже нет.' };
+  shell.showItemInFolder(t.source);
+  return { ok: true };
 });
 
 handle('assistant-stop', async (id) => {

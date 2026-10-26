@@ -13,13 +13,14 @@
   var VIDEO_EXT = ["mp4", "webm", "mov", "m4v", "ogv", "mkv"];
   var AUDIO_EXT = ["mp3", "wav", "ogg", "m4a", "flac", "aac", "opus"];
   // Kinds of actions counted on the statistics page (storage.js counts them).
-  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks"];
+  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks", "transcribe"];
   // How the statistics page groups them in "Что вы чаще всего делаете".
   var USE_GROUPS = [
     { name: "Промты: новые и правки", keys: ["created", "edited"], icon: "pencil" },
     { name: "Календарь", keys: ["calendar"], icon: "calendar" },
     { name: "Задачи", keys: ["tasks"], icon: "tasks" },
     { name: "Ассистент", keys: ["assistant"], icon: "spark" },
+    { name: "Транскрибация", keys: ["transcribe"], icon: "wave" },
     { name: "Копирование промтов", keys: ["copied"], icon: "copy" },
     { name: "Файлы к промтам", keys: ["files"], icon: "clip" }
   ];
@@ -49,6 +50,14 @@
     dropRowId: null
   };
 
+  // «Транскрибация»: list — the history (newest first, without timings); file — the picked file before it is transcribed;
+  // open — the transcription on the screen (with cues and pauses); view — "text", "cues" or "sum".
+  var tr = {
+    list: [], q: "", file: null, open: null, view: "text", fmt: "plain", busy: false, stop: false,
+    prog: 0, progText: "", error: "", sumBusy: false, model: "gpt-4o-mini-transcribe", subs: null
+  };
+  try { tr.model = localStorage.getItem("trModel") || tr.model; tr.fmt = localStorage.getItem("trFmt") || tr.fmt; } catch (e) { /* defaults */ }
+
   var $ = function (id) { return document.getElementById(id); };
   var els = {
     titlebar: $("titlebar"), scroller: $("scroller"),
@@ -65,8 +74,9 @@
     badges: Array.prototype.slice.call(document.querySelectorAll(".nav-badge[data-badge]")), homeGrid: $("home-grid"), homeTitle: $("home-title"), homeDate: $("home-date"),
     views: {
       prompts: $("view-prompts"), generator: $("view-generator"), calendar: $("view-calendar"), assistant: $("view-assistant"),
-      tasks: $("view-tasks"), stats: $("view-stats"), home: $("view-home")
+      tasks: $("view-tasks"), stats: $("view-stats"), home: $("view-home"), transcribe: $("view-transcribe")
     },
+    trMain: $("tr-main"), trList: $("tr-list"), trSearch: $("tr-search"),
     sideAvatar: $("side-avatar"), sideName: $("side-name"),
     menuAvatar: $("menu-avatar"), menuName: $("menu-name"), menuSub: $("menu-sub"),
     statsAvatar: $("stats-avatar"), statsName: $("stats-name"), statsSince: $("stats-since"), statsEdit: $("stats-edit"),
@@ -128,6 +138,11 @@
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
     dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
     archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="4.5" rx="1.2"/><path d="M5 9v9.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V9M10 13h4"/></svg>',
+    wave: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/></svg>',
+    film: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>',
+    music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>',
+    upload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>',
+    download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
     stats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>'
   };
 
@@ -875,6 +890,7 @@
     if (state.page === "stats") renderStats();
     if (state.page === "calendar") renderCalendar();
     if (state.page === "tasks") renderTasks();
+    if (state.page === "transcribe") renderTranscribe();
     renderTaskPanel();
   }
 
@@ -888,10 +904,11 @@
     calendar: { name: "Календарь", icon: "calendar" },
     tasks: { name: "Задачи", icon: "tasks", beta: true },
     assistant: { name: "LLM", icon: "chat", many: true },
+    transcribe: { name: "Транскрибация", icon: "wave" },
     generator: { name: "Генератор", icon: "spark" },
     stats: { name: "Статистика", icon: "stats" }
   };
-  var TAB_ORDER = ["home", "prompts", "calendar", "tasks", "assistant", "generator", "stats"];
+  var TAB_ORDER = ["home", "prompts", "calendar", "tasks", "assistant", "transcribe", "generator", "stats"];
   var tabs = { list: [], active: -1, seq: 0 };
   // The first window is the main one: its tabs are remembered. A window opened from a moved tab gets its tabs in the address
   // (?tabs=[…]) and does not remember them; if the main window is closed, the next one becomes main ('window-main').
@@ -905,6 +922,7 @@
   function activeTab() { return tabs.list[tabs.active] || null; }
   function chatTitle(id) { var c = hist.list.find(function (x) { return x.id === id; }); return c ? c.title : ""; }
   function tabTitle(t) {
+    if (t.kind === "transcribe") return TABS.transcribe.name + (tr.open ? " · " + stemOf(tr.open.name) : tr.file ? " · " + stemOf(tr.file.name) : "");
     if (t.kind !== "assistant") return TABS[t.kind].name;
     var se = t.session;
     return "LLM · " + (se.title || (se.loadId && chatTitle(se.loadId)) || "Новый разговор");
@@ -1006,6 +1024,7 @@
         h("span", { class: "tab-ico", html: ICONS[TABS[t.kind].icon], "aria-hidden": "true" }),
         h("span", { class: "tab-t", text: title }),
         t.session && t.session.current ? h("span", { class: "tab-busy", title: "Пишет ответ" }) :
+          t.kind === "transcribe" && tr.busy ? h("span", { class: "tab-busy", title: "Идёт расшифровка" }) :
           t.session && t.session.unread ? h("span", { class: "tab-unread", title: "Есть новый ответ" }) : null,
         h("button", { type: "button", class: "tab-x", title: "Закрыть вкладку (Ctrl + W)", "aria-label": "Закрыть вкладку «" + title + "»", html: ICONS.x,
           onclick: function (e) { e.stopPropagation(); closeTab(i); } }));
@@ -1077,6 +1096,7 @@
     var t = tabs.list[i];
     if (!t) return;
     if (t.session && t.session.current) { toast("Дождитесь, пока ассистент допишет ответ, и попробуйте ещё раз."); return; }
+    if (t.kind === "transcribe" && tr.busy) { toast("Дождитесь, пока закончится расшифровка, и попробуйте ещё раз."); return; }
     call(api.windowOpen([tabDesc(t)], mode, point)).then(function (r) { if (r) closeTab(tabs.list.indexOf(t)); });
   }
 
@@ -1123,6 +1143,7 @@
     var t = activeTab();
     if (!t || isMainWindow) return;
     if (t.session && t.session.current) { toast("Дождитесь, пока ассистент допишет ответ, и попробуйте ещё раз."); return; }
+    if (t.kind === "transcribe" && tr.busy) { toast("Дождитесь, пока закончится расшифровка, и попробуйте ещё раз."); return; }
     if (t.session) persist(t.session);
     call(api.windowReturn(tabDesc(t), x));
   }
@@ -1224,6 +1245,7 @@
       calendar: (state.events || []).filter(function (e) { return e.date === today && (e.to ? minutesOf(e.to) : minutesOf(e.from) + 30) > mins; }).length,
       tasks: (state.tasks || []).filter(function (t) { return t.status !== "done"; }).length,
       assistant: sessions.filter(function (se) { return se.unread; }).length,
+      transcribe: tr.busy ? 1 : 0,
       generator: 0
     };
   }
@@ -1246,6 +1268,7 @@
       { page: "calendar", title: "Календарь", text: n.calendar ? "Сегодня ещё " + n.calendar + " " + plural(n.calendar, "дело", "дела", "дел") : "На сегодня дел больше нет" },
       { page: "tasks", title: "Задачи", text: n.tasks ? n.tasks + " " + plural(n.tasks, "задача не готова", "задачи не готовы", "задач не готово") + (doing ? ", в процессе " + doing : "") : "Все задачи готовы" },
       { page: "assistant", title: "LLM", text: n.assistant ? "Новых ответов: " + n.assistant : hist.list.length + " " + plural(hist.list.length, "разговор", "разговора", "разговоров") + " в истории" },
+      { page: "transcribe", title: "Транскрибация", text: tr.busy ? "Идёт расшифровка…" : tr.list.length ? tr.list.length + " " + plural(tr.list.length, "расшифровка", "расшифровки", "расшифровок") + " в истории" : "Текст и субтитры из аудио и видео" },
       { page: "generator", title: "Генератор", text: "Картинки и видео — скоро" }
     ];
     els.homeGrid.replaceChildren.apply(els.homeGrid, tiles.map(function (t) {
@@ -1404,7 +1427,8 @@
     els.breakdown.replaceChildren(
       chip("Создано промтов", s.by.created), chip("Правок", s.by.edited),
       chip("Прикреплено файлов", s.by.files), chip("Скопировано", s.by.copied),
-      chip("Дел в календаре", s.by.calendar), chip("Действий с задачами", s.by.tasks), chip("Сообщений ассистенту", s.by.assistant));
+      chip("Дел в календаре", s.by.calendar), chip("Действий с задачами", s.by.tasks), chip("Сообщений ассистенту", s.by.assistant),
+      chip("В транскрибации", s.by.transcribe));
     renderTopUse(s);
     renderHeat();
     fillAvatar(els.statsAvatar, p.avatar, p.name);
@@ -1598,7 +1622,7 @@
     call(api.backupExport()).then(function (r) {
       if (!r || r.canceled) return;
       var c = r.counts;
-      backupMessage("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + ". Ключей ChatGPT и Claude в ней нет.");
+      backupMessage("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + (c.transcripts ? ", расшифровок " + c.transcripts : "") + ". Ключей ChatGPT и Claude в ней нет.");
     });
   }
   // file: a path (drag and drop) or nothing (the program asks which file).
@@ -1614,11 +1638,13 @@
     var x = r.result || {};
     if (r.kind === "backup") {
       refreshChats();
+      refreshTranscripts();
       render();
       var parts = [];
       if (x.prompts) parts.push("промтов " + x.prompts);
       if (x.chats) parts.push("разговоров " + x.chats);
       if (x.events) parts.push("дел в календаре " + x.events);
+      if (x.transcripts) parts.push("расшифровок " + x.transcripts);
       backupMessage(parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
         : "Всё из этой копии уже есть в программе, ничего добавлять не пришлось.");
       return;
@@ -4050,12 +4076,19 @@
     dragDepth = 0;
     setDropRow(null);
     els.editor.classList.remove("drop-over");
+    Array.prototype.forEach.call(document.querySelectorAll(".tr-drop.over"), function (z) { z.classList.remove("over"); });
   }
   document.addEventListener("dragenter", function (e) { if (hasFiles(e)) dragDepth++; });
   document.addEventListener("dragleave", function (e) { if (hasFiles(e) && --dragDepth <= 0) clearDrag(); });
   document.addEventListener("dragover", function (e) {
     if (!hasFiles(e)) return;
     e.preventDefault();
+    // «Транскрибация»: a file can be let go anywhere on the page, the drop zone lights up.
+    if (state.page === "transcribe") {
+      e.dataTransfer.dropEffect = "copy";
+      Array.prototype.forEach.call(document.querySelectorAll(".tr-drop"), function (z) { z.classList.add("over"); });
+      return;
+    }
     var inEditor = state.editorOpen && els.editor.contains(e.target);
     var tr = !inEditor && e.target.closest ? e.target.closest("tr[data-id]:not(.editing)") : null;
     e.dataTransfer.dropEffect = inEditor || tr ? "copy" : "none";
@@ -4068,6 +4101,12 @@
     var archive = Array.prototype.find.call(e.dataTransfer.files || [], function (f) { return /\.(snowprompt|snowball)$/i.test(f.name); });
     if (archive) { clearDrag(); var ap = api.pathForFile(archive); if (ap) openArchive(ap); return; }
     if (state.page === "assistant") { clearDrag(); addChatImages(e.dataTransfer.files); return; }
+    if (state.page === "transcribe") {
+      clearDrag();
+      var media = e.dataTransfer.files && e.dataTransfer.files[0], mp = media && api.pathForFile(media);
+      if (mp) api.mediaInfo(mp).then(trSetFile); else toast("Этот файл не открылся. Попробуйте кнопку «Выбрать файл…».");
+      return;
+    }
     var inEditor = state.editorOpen && els.editor.contains(e.target);
     var tr = !inEditor && e.target.closest ? e.target.closest("tr[data-id]:not(.editing)") : null;
     var files = e.dataTransfer.files;
@@ -4093,6 +4132,495 @@
       toast(list.length > 1 ? "Картинки добавлены, нажмите «Сохранить»" : "Картинка добавлена, нажмите «Сохранить»");
     });
   });
+
+  /* ---------- «Транскрибация»: text, timings and subtitles of an audio or video file ----------
+     The window reads the file and takes its sound out itself (WebAudio at 16 kHz: enough for speech), finds where the voice
+     is by loudness, cuts it at pauses and sends the pieces to main.js four at a time; gpt-4o-mini-transcribe (or another
+     model) turns each into text. Only the pieces with speech are sent. The borders of phrases and subtitles are then put
+     on the real pauses of the voice. Checked in tools/record-test (the test program) before it came here. */
+  var TR_MODELS = [
+    { id: "gpt-4o-mini-transcribe", name: "GPT-4o mini transcribe — точнее всех в проверке", perMin: 0.003 },
+    { id: "gpt-transcribe", name: "GPT transcribe — самая новая", perMin: 0.0045 },
+    { id: "gpt-4o-transcribe", name: "GPT-4o transcribe", perMin: 0.006 }
+  ];
+  function trModel(id) { return TR_MODELS.find(function (m) { return m.id === id; }) || TR_MODELS[0]; }
+  function stemOf(name) { return String(name || "").replace(/\.[^.]+$/, ""); }
+  function trId() { return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  // 00:12,4 for the screen and the timings; 00:00:12,400 for .srt.
+  function trTime(sec, full) {
+    var ms = Math.round(Math.max(0, sec) * 1000), hh = Math.floor(ms / 3600000), mm = Math.floor(ms / 60000) % 60, ss = Math.floor(ms / 1000) % 60;
+    var p = function (n, w) { return String(n).padStart(w || 2, "0"); };
+    if (full) return p(hh) + ":" + p(mm) + ":" + p(ss) + "," + p(ms % 1000, 3);
+    return (hh ? hh + ":" : "") + p(mm) + ":" + p(ss) + "," + Math.floor(ms % 1000 / 100);
+  }
+  function trShort(sec) { var s = Math.floor(sec), m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") : String(m)) + ":" + String(s % 60).padStart(2, "0"); }
+  // A local file as an address for <video>: every part of the path is encoded, the drive letter is kept.
+  function fileUrl(p) {
+    var parts = String(p || "").replace(/\\/g, "/").split("/");
+    return "file:///" + parts.map(function (x, i) { return i === 0 && /^[A-Za-z]:$/.test(x) ? x : encodeURIComponent(x); }).join("/");
+  }
+
+  // Where the voice is. 30 ms frames; a frame is speech if it is louder than the quiet background of this file.
+  // Short gaps inside a phrase are glued; a piece with less than MIN_SPEECH of loud frames is a click or a breath and is
+  // not sent. The threshold is soft and the margins are wide on purpose: a lost word is worse than a second of pause.
+  // A very long phrase is cut in its longest pause between 12 and 20 seconds (cutting in the quietest single moment
+  // can fall inside a word). Every quiet stretch of at least MIN_PAUSE is remembered: timings are put on them.
+  var VAD = { FRAME: 0.03, GAP: 0.8, PAD: 0.4, MIN_SPEECH: 0.3, MIN_PAUSE: 0.15, OVER_FLOOR: 7, MAX_LEN: 20, CUT_FROM: 12 };
+  function findSpeech(data, rate) {
+    var F = VAD.FRAME, size = Math.round(rate * F), n = Math.floor(data.length / size), db = new Float32Array(n), f, i;
+    for (f = 0; f < n; f++) {
+      var sum = 0;
+      for (i = f * size; i < (f + 1) * size; i++) sum += data[i] * data[i];
+      db[f] = 10 * Math.log10(sum / size + 1e-12);
+    }
+    var sorted = Array.prototype.slice.call(db).sort(function (a, b) { return a - b; });
+    var floor = sorted[Math.floor(n * 0.2)] || -90, thr = Math.max(floor + VAD.OVER_FLOOR, -60);
+    var regions = [], pauses = [], start = -1, last = -1, loud = 0, quiet = -1;
+    for (f = 0; f < n; f++) {
+      if (db[f] < thr) { if (quiet < 0) quiet = f; continue; }
+      if (quiet >= 0 && (f - quiet) * F >= VAD.MIN_PAUSE) pauses.push([quiet * F, f * F]);
+      quiet = -1;
+      if (start < 0) start = f;
+      else if ((f - last) * F > VAD.GAP) { regions.push([start, last, loud]); start = f; loud = 0; }
+      last = f; loud++;
+    }
+    if (start >= 0) regions.push([start, last, loud]);
+    var out = [], end = n * F;
+    regions.forEach(function (r) {
+      if (r[2] * F < VAD.MIN_SPEECH) return;
+      // a, b — what is sent (with margins); sa, sb — where the voice really starts and stops (for the timings).
+      var p = { a: Math.max(0, r[0] * F - VAD.PAD), b: Math.min(end, (r[1] + 1) * F + VAD.PAD), sa: r[0] * F, sb: (r[1] + 1) * F };
+      var prev = out[out.length - 1];
+      if (prev && p.a <= prev.b) { p.a = prev.a; p.sa = prev.sa; out.pop(); }
+      while (p.b - p.a > VAD.MAX_LEN) {
+        var lo = p.a + VAD.CUT_FROM, hi = p.a + VAD.MAX_LEN, best = null;
+        pauses.forEach(function (q) { if (q[0] >= lo && q[1] <= hi && (!best || q[1] - q[0] > best[1] - best[0])) best = q; });
+        if (!best) best = quietestStretch(db, lo, hi);
+        var cut = (best[0] + best[1]) / 2;
+        out.push({ a: p.a, b: cut, sa: p.sa, sb: best[0] });
+        p = { a: cut, b: p.b, sa: best[1], sb: p.sb };
+      }
+      out.push(p);
+    });
+    return { pieces: out, pauses: pauses };
+  }
+  // No pause at all between 12 and 20 seconds: the quietest quarter of a second there, never one short moment.
+  function quietestStretch(db, lo, hi) {
+    var F = VAD.FRAME, w = Math.round(0.24 / F), from = Math.floor(lo / F), to = Math.floor(hi / F) - w, best = from, bestSum = Infinity;
+    for (var k = from; k <= to; k++) {
+      var s = 0;
+      for (var j = k; j < k + w; j++) s += db[j];
+      if (s < bestSum) { bestSum = s; best = k; }
+    }
+    return [best * F, (best + w) * F];
+  }
+  // Splits the time from start to end between parts of text: first by length, then each border moves to the nearest
+  // real pause within `reach` seconds — the phrase ends where the voice stops and the next starts where it begins again.
+  function placeParts(start, end, parts, pauses, reach) {
+    var total = parts.reduce(function (a, p) { return a + p.length; }, 0) || 1;
+    var inside = pauses.filter(function (q) { return q[0] > start && q[1] < end; });
+    var out = [], from = start, used = -1, acc = 0;
+    for (var i = 0; i < parts.length; i++) {
+      if (i === parts.length - 1) { out.push([from, end]); break; }
+      acc += parts[i].length;
+      var guess = start + (end - start) * acc / total, pick = -1;
+      for (var k = used + 1; k < inside.length; k++) {
+        var mid = (inside[k][0] + inside[k][1]) / 2;
+        if (Math.abs(mid - guess) <= reach && (pick < 0 || Math.abs(mid - guess) < Math.abs((inside[pick][0] + inside[pick][1]) / 2 - guess))) pick = k;
+      }
+      if (pick >= 0) { out.push([from, inside[pick][0]]); from = inside[pick][1]; used = pick; }
+      else { out.push([from, guess]); from = guess; }
+    }
+    return out;
+  }
+  function splitSentences(text) { return String(text || "").trim().split(/(?<=[.!?…])\s+/).filter(Boolean); }
+  // Pieces → phrases. A long piece may be cut in a pause in the middle of a sentence: the halves are glued back.
+  function sentencesOf(segments, pauses) {
+    var out = [];
+    segments.forEach(function (s) {
+      var parts = splitSentences(s.text);
+      placeParts(s.start, s.end, parts, pauses, 3).forEach(function (t, i) {
+        var prev = out[out.length - 1];
+        if (i === 0 && prev && !/[.!?…]["»)]?$/.test(prev.text) && t[0] - prev.end < 1.5) { prev.text += " " + parts[0]; prev.end = t[1]; }
+        else out.push({ start: t[0], end: t[1], text: parts[i] });
+      });
+    });
+    return out;
+  }
+  // Two halves where it reads best: at a comma, dash, colon or semicolon near the middle, else at the space nearest it.
+  function halves(text, max) {
+    var mid = text.length / 2, best = -1, re = /[,;:]\s|\s[—–-]\s/g, m;
+    while ((m = re.exec(text))) { var at = m[0][0] === " " ? m.index : m.index + 1; if (best < 0 || Math.abs(at - mid) < Math.abs(best - mid)) best = at; }
+    if (best < text.length * 0.25 || best > text.length * 0.75 || (max && Math.max(best, text.length - best) > max)) {
+      best = -1;
+      for (var i = 0; i < text.length; i++) if (text[i] === " " && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+    }
+    return best <= 0 ? [text] : [text.slice(0, best).trim(), text.slice(best).trim()];
+  }
+  function chunksOf(text, max) {
+    if (text.length <= max) return [text];
+    var hv = halves(text);
+    return hv.length < 2 ? [text] : chunksOf(hv[0], max).concat(chunksOf(hv[1], max));
+  }
+  // Subtitles: at most two lines of about 42 letters; a longer phrase becomes several, split at commas and dashes,
+  // with their borders on the pauses too.
+  function subtitlesOf(t) {
+    var out = [];
+    t.cues.forEach(function (c) {
+      var parts = chunksOf(c.text, 84);
+      placeParts(c.start, c.end, parts, t.pauses || [], 1.5).forEach(function (x, i) {
+        out.push({ start: x[0], end: x[1], text: (parts[i].length > 42 ? halves(parts[i], 44) : [parts[i]]).join("\n") });
+      });
+    });
+    return out;
+  }
+  function srtOf(t) {
+    return subtitlesOf(t).map(function (s, i) { return (i + 1) + "\n" + trTime(s.start, true) + " --> " + trTime(s.end, true) + "\n" + s.text + "\n"; }).join("\n");
+  }
+  function timingsOf(t, fmt) {
+    return t.cues.map(function (c) {
+      return fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "] " + c.text : trTime(c.start) + " – " + trTime(c.end) + "  " + c.text;
+    }).join("\n");
+  }
+  // A piece as WAV, 16 kHz mono: small, and OpenAI takes it as it is.
+  function pieceWav(audio, a, b) {
+    var rate = 16000, len = Math.max(1, Math.ceil((b - a) * rate));
+    var off = new OfflineAudioContext(1, len, rate), src = off.createBufferSource();
+    src.buffer = audio; src.connect(off.destination); src.start(0, a, b - a);
+    return off.startRendering().then(function (out) {
+      var pcm = out.getChannelData(0), buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+      var str = function (o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      str(0, "RIFF"); v.setUint32(4, 36 + pcm.length * 2, true); str(8, "WAVE"); str(12, "fmt ");
+      v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+      v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, "data"); v.setUint32(40, pcm.length * 2, true);
+      for (var i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+      return buf;
+    });
+  }
+
+  function trSetFile(info) {
+    if (!info || info.canceled) return;
+    if (!info.ok) { toast(info.error || "Этот файл не подходит.", true); return; }
+    if (tr.busy) { toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
+    tr.file = info; tr.open = null; tr.error = ""; tr.subs = null;
+    if (state.page !== "transcribe") setPage("transcribe"); else render();
+  }
+  function trPick() { api.mediaPick().then(trSetFile, function () { toast("Не получилось выбрать файл."); }); }
+  function trProgress(p, text) {
+    tr.prog = p; if (text) tr.progText = text;
+    var bar = els.trMain.querySelector(".tr-bar b"), t = els.trMain.querySelector(".tr-prog .tr-soft");
+    if (bar) bar.style.width = Math.min(100, Math.round(p)) + "%";
+    if (t) t.textContent = tr.progText;
+  }
+  function trFail(text) { tr.busy = false; tr.error = text; render(); }
+
+  async function trRun() {
+    var f = tr.file, model = tr.model;
+    if (!f || tr.busy) return;
+    if (!assistantState().keys.openai) { tr.error = "Для расшифровки нужен ключ ChatGPT."; render(); return; }
+    tr.busy = true; tr.stop = false; tr.error = ""; trProgress(2, "Читаю файл и достаю звук…");
+    render();
+    var r, audio;
+    try { r = await api.mediaRead(f.file); } catch (e) { r = null; }
+    if (!r || !r.ok) { trFail((r && r.error) || "Файл не прочитался."); return; }
+    try { audio = await new OfflineAudioContext(1, 1, 16000).decodeAudioData(r.data); }
+    catch (e) { trFail("Не получилось достать звук из этого файла: возможно, в нём нет звуковой дорожки или такой формат не открывается."); return; }
+    r = null;
+    var mono = audio.getChannelData(0);
+    if (audio.numberOfChannels > 1) {
+      mono = new Float32Array(audio.length);
+      for (var c = 0; c < audio.numberOfChannels; c++) { var ch = audio.getChannelData(c); for (var i = 0; i < ch.length; i++) mono[i] += ch[i] / audio.numberOfChannels; }
+    }
+    var found = findSpeech(mono, audio.sampleRate), pieces = found.pieces, n = pieces.length;
+    mono = null;
+    if (!n) { trFail("В файле не нашлось речи: звук есть, но он слишком тихий или это только музыка."); return; }
+    trProgress(8, "Нашёл кусков с речью: " + n + ". Расшифровываю…");
+    var texts = new Array(n), next = 0, done = 0, sent = 0, usd = 0, failed = null;
+    var before = function (k) { var s = ""; for (var j = 0; j < k; j++) if (texts[j]) s += " " + texts[j]; return s.slice(-600).trim(); };
+    var worker = async function () {
+      while (next < n && !failed && !tr.stop) {
+        var k = next++, p = pieces[k];
+        var res = await api.transcribePiece(await pieceWav(audio, p.a, p.b), before(k), model, p.b - p.a);
+        if (!res || !res.ok) { failed = (res && res.error) || "OpenAI не ответил."; return; }
+        texts[k] = res.text; sent += p.b - p.a; usd += res.usd || 0;
+        trProgress(8 + 88 * (++done) / n, "Расшифровано кусков: " + done + " из " + n + "… Можно уйти в другую вкладку — расшифровка продолжится.");
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    if (tr.stop) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+    if (failed) { trFail(failed); return; }
+    var segments = pieces.map(function (p, k) { return { start: p.sa, end: p.sb, text: texts[k] || "" }; }).filter(function (s) { return s.text; });
+    var cues = sentencesOf(segments, found.pauses);
+    var saved = await call(api.transcriptSave({
+      id: trId(), name: f.name, source: f.file, kind: f.kind, size: f.size, duration: audio.duration, model: model,
+      text: segments.map(function (s) { return s.text; }).join(" "), cues: cues,
+      pauses: found.pauses.map(function (q) { return [Math.round(q[0] * 1000) / 1000, Math.round(q[1] * 1000) / 1000]; }),
+      usd: usd, sent: sent, pieces: n
+    }));
+    tr.busy = false;
+    if (!saved) { tr.error = "Расшифровка готова, но не сохранилась. Попробуйте ещё раз."; render(); return; }
+    tr.list = saved.transcripts; tr.open = saved.transcript; tr.file = null; tr.view = "text"; tr.subs = null;
+    render();
+    toast("Готово: «" + f.name + "» — " + cues.length + " " + plural(cues.length, "фраза", "фразы", "фраз") + (usd ? ", около $" + usd.toFixed(4) : "") + ".");
+  }
+
+  function trOpen(id) {
+    if (tr.open && tr.open.id === id) return;
+    api.transcriptGet(id).then(function (r) {
+      if (!r || !r.ok) { toast((r && r.error) || "Не открылось.", true); return; }
+      tr.open = r.transcript; tr.subs = null; tr.view = "text";
+      if (!tr.busy) tr.file = null;
+      render();
+    });
+  }
+  // The same transcription changed in another window: take the fresh copy, keep what is shown.
+  function trOpenFresh(id) {
+    api.transcriptGet(id).then(function (r) {
+      if (!r || !r.ok || !tr.open || tr.open.id !== id || r.transcript.updatedAt === tr.open.updatedAt) return;
+      tr.open = r.transcript; tr.subs = null;
+      render();
+    }, function () {});
+  }
+  function trRemove(item) {
+    api.transcriptGet(item.id).then(function (r) {
+      var copy = r && r.ok ? r.transcript : null;
+      call(api.transcriptDelete(item.id)).then(function (d) {
+        if (!d) return;
+        tr.list = d.transcripts;
+        if (tr.open && tr.open.id === item.id) tr.open = null;
+        render();
+        if (copy) undoToast("Расшифровка «" + item.name + "» удалена", function () {
+          call(api.transcriptRestore(copy)).then(function (x) { if (x) { tr.list = x.transcripts; render(); } });
+        });
+      });
+    });
+  }
+  // The text was corrected: the same number of sentences keeps their times; otherwise the new sentences are spread over
+  // the whole length again and put on the pauses.
+  function trEditText(value) {
+    var t = tr.open, text = String(value || "").trim();
+    if (!t || text === t.text) return;
+    var parts = splitSentences(text), cues;
+    if (!parts.length) return;
+    if (parts.length === t.cues.length) cues = t.cues.map(function (c, i) { return { start: c.start, end: c.end, text: parts[i] }; });
+    else {
+      var a = t.cues.length ? t.cues[0].start : 0, b = t.cues.length ? t.cues[t.cues.length - 1].end : t.duration;
+      cues = placeParts(a, b, parts, t.pauses || [], 3).map(function (x, i) { return { start: x[0], end: x[1], text: parts[i] }; });
+    }
+    call(api.transcriptSave({ id: t.id, text: text, cues: cues })).then(function (r) {
+      if (!r) return;
+      tr.open = r.transcript; tr.list = r.transcripts; tr.subs = null;
+      toast("Правка сохранена, тайминги и субтитры обновились.");
+      if (tr.view !== "text") render();
+    });
+  }
+  function trSummary() {
+    var t = tr.open;
+    if (!t || tr.sumBusy) return;
+    tr.sumBusy = true; render();
+    call(api.transcriptSummary(t.id)).then(function (r) {
+      tr.sumBusy = false;
+      if (r && tr.open && tr.open.id === t.id) { tr.open = r.transcript; tr.list = r.transcripts; if (r.info) state.info = r.info; }
+      render();
+    });
+  }
+  function trCopy(text, what) { call(api.transcriptCopy(text)).then(function (r) { if (r) toast(what + " скопирован" + (what === "Тайминги" ? "ы" : "") + "."); }); }
+  function trExport(kind) {
+    var t = tr.open;
+    if (!t) return;
+    var content = kind === "srt" ? srtOf(t) : t.text + "\n\nТайминги:\n" + timingsOf(t, "plain") + "\n";
+    call(api.transcriptExport(t.id, kind, content)).then(function (r) {
+      if (r && !r.canceled) toast((kind === "srt" ? "Субтитры сохранены: " : "Текст сохранён: ") + r.path + (kind === "srt" ? ". Перетащите файл на таймлайн в монтаже." : ""), true);
+    });
+  }
+  // «В промт»: a new prompt of type «Видео» — the text in the prompt, the timings in its comment.
+  function trToPrompt() {
+    var t = tr.open;
+    if (!t) return;
+    if (editorDirty()) { setPage("prompts"); toast("Сначала сохраните или отмените правку промта."); return; }
+    setPage("prompts");
+    openEditor(null);
+    els.fTitle.value = stemOf(t.name).slice(0, 200);
+    els.fText.value = t.text;
+    els.fComment.value = "Тайминги:\n" + timingsOf(t, "prompt");
+    setCategory("Видео");
+    toast("Допишите промт и нажмите «Сохранить».");
+  }
+  // «Спросить в LLM»: a new conversation with the text and the timings already in the box.
+  function trToLlm() {
+    var t = tr.open;
+    if (!t) return;
+    openTab("assistant", { fresh: true });
+    var cur = activeTab();
+    if (!cur || !cur.session) return;
+    var text = "Вот расшифровка «" + t.name + "» с таймингами:\n\n" + timingsOf(t, "prompt") + "\n\n";
+    cur.session.draft = text;
+    els.chatInput.value = text;
+    growInput();
+    els.chatInput.focus();
+    els.chatInput.setSelectionRange(text.length, text.length);
+  }
+
+  function trDrop(small) {
+    var zone = h("div", { class: "tr-drop" + (small ? " small" : "") },
+      h("span", { class: "big", html: ICONS.upload, "aria-hidden": "true" }),
+      h("div", null, h("b", { text: small ? "Ещё файл — перетащите сюда" : "Перетащите аудио или видео сюда" }),
+        h("p", { text: small ? "Или выберите кнопкой. Новая расшифровка встанет в историю." :
+          "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама. Файл — до 2 ГБ, длина любая: на расшифровку уходят только куски с речью." })),
+      h("button", { type: "button", class: "btn " + (small ? "btn-ghost btn-sm" : "btn-primary"), onclick: trPick }, "Выбрать файл…"));
+    return zone;
+  }
+  function trFileCard() {
+    var f = tr.file, m = trModel(tr.model);
+    var card = h("section", { class: "card tr-file" },
+      h("div", { class: "tr-file-h" }, h("span", { class: "tr-ic" + (f.kind === "audio" ? " audio" : ""), html: f.kind === "audio" ? ICONS.music : ICONS.film, "aria-hidden": "true" }),
+        h("div", { class: "nm" }, h("b", { text: f.name }), h("span", { text: (f.kind === "audio" ? "Аудио" : "Видео") + " · " + (f.size / 1048576).toFixed(1).replace(".", ",") + " МБ" })),
+        tr.busy ? null : h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { tr.file = null; tr.error = ""; render(); } }, "Убрать")));
+    if (tr.busy) {
+      card.append(h("div", { class: "tr-prog" },
+        h("div", { class: "tr-bar" }, h("b")), h("span", { class: "tr-soft", text: tr.progText }),
+        h("div", null, h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { tr.stop = true; trProgress(tr.prog, "Останавливаю…"); } }, "Остановить"))));
+      setTimeout(function () { trProgress(tr.prog); }, 0);
+    } else {
+      var sel = h("select", { "aria-label": "Модель", onchange: function () { tr.model = this.value; try { localStorage.setItem("trModel", tr.model); } catch (e) {} render(); } },
+        TR_MODELS.map(function (x) { return h("option", { value: x.id, selected: x.id === m.id ? "selected" : null, text: x.name }); }));
+      card.append(h("div", { class: "tr-opts" }, "Модель:", sel,
+        h("span", { class: "tr-soft", text: "≈ $" + m.perMin + " за минуту речи · ключ ChatGPT из «Настроек»" }), h("span", { class: "grow" }),
+        h("button", { type: "button", class: "btn btn-primary", onclick: trRun }, "Расшифровать")));
+    }
+    if (tr.error) card.append(h("p", { class: "tr-err", text: tr.error }));
+    return card;
+  }
+  // The result: the file with subtitles over it, a strip of phrases, then «Текст / Тайминги / Кратко» and the buttons.
+  // The player is made once per transcription and kept across redraws, so playing does not stop when the window redraws.
+  var trUi = null;
+  function trPlayerOf(t) {
+    if (trUi && trUi.id === t.id && trUi.text === t.text) return trUi;
+    trDropPlayer();
+    if (!tr.subs) tr.subs = subtitlesOf(t);
+    var ui = { id: t.id, text: t.text, cueEls: [] };
+    var subLine = h("div", { class: "tr-sub", "aria-live": "off" });
+    var media = h(t.kind === "audio" ? "audio" : "video", { controls: "controls", preload: "metadata", src: fileUrl(t.source) });
+    var player = h("div", { class: "tr-player" + (t.kind === "audio" ? " audio" : "") });
+    if (t.kind === "audio") player.append(subLine, media); else player.append(media, subLine);
+    var strip = h("div", { class: "tr-tl", title: "Фразы на полоске времени: клик перематывает" });
+    var len = t.duration || (t.cues.length ? t.cues[t.cues.length - 1].end : 1);
+    t.cues.forEach(function (c) {
+      var i = h("i");
+      i.style.left = (c.start / len * 100) + "%";
+      i.style.width = Math.max(0.3, (c.end - c.start) / len * 100) + "%";
+      strip.append(i);
+    });
+    strip.addEventListener("click", function (e) { var r = strip.getBoundingClientRect(); seek((e.clientX - r.left) / r.width * len); });
+    var gone = h("div", { class: "tr-gone", hidden: true }, "Исходного файла на прежнем месте нет, поэтому смотреть нельзя. Текст, тайминги и субтитры сохранились.");
+    media.addEventListener("error", function () { player.hidden = true; gone.hidden = false; });
+    // Only the subtitle line, the strip and the current phrase change while it plays — no full redraw.
+    function paint(time) {
+      var s = tr.subs && tr.subs.find(function (x) { return time >= x.start && time < x.end; });
+      subLine.textContent = s ? s.text : "";
+      Array.prototype.forEach.call(strip.children, function (el, i) { el.classList.toggle("on", time >= t.cues[i].start && time < t.cues[i].end); });
+      ui.cueEls.forEach(function (el, i) { el.classList.toggle("now", time >= t.cues[i].start && time < t.cues[i].end); });
+    }
+    function seek(sec) { try { media.currentTime = Math.max(0, sec); } catch (e) {} paint(sec); }
+    media.addEventListener("timeupdate", function () { paint(media.currentTime); });
+    ui.media = media; ui.nodes = [player, gone, strip]; ui.seek = seek; ui.paint = paint;
+    trUi = ui;
+    return ui;
+  }
+  function trDropPlayer() {
+    if (trUi && trUi.media) { try { trUi.media.pause(); } catch (e) {} }
+    trUi = null;
+  }
+  function trResult() {
+    var t = tr.open, ui = trPlayerOf(t), seek = ui.seek;
+    ui.cueEls = [];
+
+    var seg = h("div", { class: "tr-seg", role: "group", "aria-label": "Что показать" }, [["text", "Текст"], ["cues", "Тайминги"], ["sum", "Кратко"]].map(function (v) {
+      return h("button", { type: "button", "aria-pressed": String(tr.view === v[0]), onclick: function () { tr.view = v[0]; render(); } }, v[1]);
+    }));
+    var model = trModel(t.model);
+    var tabsRow = h("div", { class: "tr-tabs" }, seg, h("span", { class: "grow" }),
+      h("span", { class: "tr-soft", text: trShort(t.duration) + " · " + t.cues.length + " " + plural(t.cues.length, "фраза", "фразы", "фраз") + " · " + model.id + (t.usd ? " · ≈ $" + t.usd.toFixed(4) : "") }));
+    var body = h("div", { class: "tr-body" });
+    if (tr.view === "text") {
+      var ta = h("textarea", { class: "tr-text", "aria-label": "Текст расшифровки", spellcheck: "true" });
+      ta.value = t.text;
+      ta.addEventListener("change", function () { trEditText(ta.value); });
+      body.append(ta, h("p", { class: "tr-hint", text: "Текст можно поправить прямо здесь: например, имя или название, которое модель расслышала неверно. Правка сохранится, когда вы щёлкнете мимо поля, и попадёт в тайминги и субтитры." }));
+    } else if (tr.view === "cues") {
+      var fmtSeg = h("div", { class: "tr-seg", role: "group", "aria-label": "Как копировать" }, [["plain", "00:12,4 – 00:15,8  текст"], ["prompt", "[0:12–0:15] текст"]].map(function (v) {
+        return h("button", { type: "button", "aria-pressed": String(tr.fmt === v[0]), onclick: function () { tr.fmt = v[0]; try { localStorage.setItem("trFmt", tr.fmt); } catch (e) {} render(); } }, v[1]);
+      }));
+      body.append(h("div", { class: "tr-copyfmt" }, "Копировать как:", fmtSeg,
+        h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.copy, onclick: function () { trCopy(timingsOf(t, tr.fmt), "Тайминги"); } }, "Копировать")));
+      var list = h("div", { class: "tr-cues" });
+      t.cues.forEach(function (c) {
+        var b = h("button", { type: "button", class: "tr-cue", onclick: function () { seek(c.start + 0.05); } },
+          h("span", { class: "tm", text: tr.fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "]" : trTime(c.start) + " – " + trTime(c.end) }), h("span", { text: c.text }));
+        ui.cueEls.push(b); list.append(b);
+      });
+      body.append(list, h("p", { class: "tr-hint", text: "Нажмите на фразу — плеер перемотается на неё. Время стоит на настоящих паузах голоса, примерно до четверти секунды." }));
+    } else {
+      var sum = h("div", { class: "tr-sum" });
+      if (!t.summary) {
+        sum.append(h("div", { class: "tr-sum-empty" }, "Краткое содержание делается по кнопке: так вы не платите, когда оно не нужно.",
+          h("button", { type: "button", class: "btn btn-primary btn-sm", html: ICONS.spark, disabled: tr.sumBusy ? "disabled" : null, onclick: trSummary }, tr.sumBusy ? "Пишу…" : "Сделать кратко")));
+      } else {
+        var ul = h("ul");
+        t.summary.points.forEach(function (x) { ul.append(h("li", { text: x })); });
+        sum.append(h("h4", { text: "Кратко" }), h("p", { text: t.summary.brief }), t.summary.points.length ? h("h4", { text: "Главные мысли" }) : null, t.summary.points.length ? ul : null,
+          h("p", { class: "tr-hint" }, h("button", { type: "button", class: "link-btn", onclick: function () { trCopy(t.summary.brief + (t.summary.points.length ? "\n\n" + t.summary.points.map(function (x) { return "— " + x; }).join("\n") : ""), "Текст"); } }, "Копировать"),
+            " · ", h("button", { type: "button", class: "link-btn", disabled: tr.sumBusy ? "disabled" : null, onclick: trSummary }, tr.sumBusy ? "Пишу…" : "Сделать заново")));
+      }
+      body.append(sum);
+    }
+    var acts = h("div", { class: "tr-acts" },
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.copy, onclick: function () { trCopy(t.text, "Текст"); } }, "Копировать текст"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.download, onclick: function () { trExport("srt"); } }, "Субтитры .srt"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.download, onclick: function () { trExport("txt"); } }, ".txt"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.prompts, onclick: trToPrompt }, "В промт"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.chat, onclick: trToLlm }, "Спросить в LLM"),
+      h("span", { class: "grow" }),
+      h("button", { type: "button", class: "link-btn", onclick: function () { api.transcriptShowSource(t.id).then(function (r) { if (!r || !r.ok) toast((r && r.error) || "Не открылось."); }); } }, "Показать исходный файл"));
+    var card = h("section", { class: "card tr-res" }, ui.nodes, tabsRow, body, acts);
+    if (ui.media) ui.paint(ui.media.currentTime || 0);
+    return card;
+  }
+  function trHistory() {
+    var q = tr.q.trim().toLowerCase(), kids = [], lastDay = null, now = new Date(), today = dayKey(now);
+    var yesterday = dayKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+    tr.list.forEach(function (x) {
+      if (q && (x.name + " " + x.words).toLowerCase().indexOf(q) === -1) return;
+      var d = dayKey(new Date(x.createdAt));
+      if (d !== lastDay) { lastDay = d; kids.push(h("p", { class: "tr-day", text: d === today ? "Сегодня" : d === yesterday ? "Вчера" : longDay(d) })); }
+      kids.push(h("div", { class: "tr-item" + (tr.open && tr.open.id === x.id ? " on" : "") },
+        h("button", { type: "button", class: "tr-open", title: x.name, onclick: function () { trOpen(x.id); } },
+          h("span", { class: "tr-ic" + (x.kind === "audio" ? " audio" : ""), html: x.kind === "audio" ? ICONS.music : ICONS.film, "aria-hidden": "true" }),
+          h("span", null, h("span", { class: "nm", text: x.name }), h("span", { class: "sb", text: trShort(x.duration) + " · " + x.first }))),
+        h("button", { type: "button", class: "tr-del", title: "Удалить", "aria-label": "Удалить расшифровку «" + x.name + "»", html: ICONS.x, onclick: function () { trRemove(x); } })));
+    });
+    if (tr.busy && tr.file) kids.unshift(h("div", { class: "tr-item" }, h("button", { type: "button", class: "tr-open", onclick: function () { tr.open = null; render(); } },
+      h("span", { class: "tr-ic" + (tr.file.kind === "audio" ? " audio" : ""), html: tr.file.kind === "audio" ? ICONS.music : ICONS.film, "aria-hidden": "true" }),
+      h("span", null, h("span", { class: "nm", text: tr.file.name }), h("span", { class: "sb", text: "Расшифровывается…" }))), h("span", { class: "tr-run" })));
+    if (!kids.length) kids.push(h("p", { class: "tr-empty", text: q ? "Ничего не нашлось." : "Пока пусто: здесь будут все расшифрованные файлы." }));
+    els.trList.replaceChildren.apply(els.trList, kids);
+  }
+  function renderTranscribe() {
+    var kids = [];
+    if (!tr.open || (trUi && trUi.id !== tr.open.id)) trDropPlayer();
+    if (!assistantState().keys.openai) kids.push(h("div", { class: "tr-nokey" }, h("span", { text: "Для расшифровки нужен ключ ChatGPT (OpenAI). Ключ Claude не подходит: звук в текст переводит только OpenAI." }),
+      h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: function () { openSettings("keys"); } }, "Подключить ChatGPT")));
+    if (tr.file && (tr.busy || !tr.open)) kids.push(trFileCard());
+    if (tr.open) kids.push(trResult(), trDrop(true));
+    else if (!tr.file) kids.push(trDrop(false));
+    var keep = els.trMain.querySelector(".tr-text");
+    if (keep && document.activeElement === keep) { trHistory(); return; }   // typing in the text: do not throw it away
+    els.trMain.replaceChildren.apply(els.trMain, kids);
+    trHistory();
+  }
+  els.trSearch.addEventListener("input", function () { tr.q = els.trSearch.value; trHistory(); });
+  function refreshTranscripts() { api.transcriptList().then(function (r) { if (r && r.ok) { tr.list = r.transcripts; if (state.page === "transcribe" || state.page === "home") render(); } }, function () {}); }
+  refreshTranscripts();
 
   /* ---------- events ---------- */
   buildCategoryPicker();
@@ -4154,6 +4682,12 @@
   api.onSync(function (d) {
     applyData(d);
     if (d.chats) { hist.list = d.chats; renderHistory(); }
+    if (d.transcripts) {
+      tr.list = d.transcripts;
+      // Deleted or corrected in another window: show it the same here.
+      if (tr.open && !tr.list.some(function (x) { return x.id === tr.open.id; })) tr.open = null;
+      else if (tr.open) trOpenFresh(tr.open.id);
+    }
     render();
   });
   api.onDataChanged(function (prompts) {

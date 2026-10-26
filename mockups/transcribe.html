@@ -1,0 +1,628 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет транскрибации — Snowball.ai</title>
+<!-- A mockup only: the new «Транскрибация» section inside the 1.14.0 window. An audio or video file → text, timings
+     by phrases (put on real pauses of the voice), .srt subtitles, a short summary, and the history of files.
+     It works the way tools/record-test checked: the sound is cut at pauses and gpt-4o-mini-transcribe turns the pieces
+     into text. Numbered marks match the explanations on the right. Not loaded by the app. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<style>
+  /* The program's colours (copied from src/styles.css, so the mockup also opens on its own) */
+  :root {
+    --bg: #FCEEE4; --titlebar: #F9E3D4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7;
+    --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --accent-ink: #3F251C; --accent-strong: #BF603D;
+    --danger: #B5463B; --ok-bg: #DCEBD1; --ok-ink: #3B5934; --toast-bg: #4B3128; --toast-ink: #FFF4EC;
+    --video: #3C78C8; --video-bg: #DCE8F8; --wave: #2E9A92;
+    --shadow: 0 1px 0 rgba(120, 72, 52, .05), 0 22px 44px -28px rgba(150, 85, 55, .38);
+    --pop-shadow: 0 12px 32px -10px rgba(110, 60, 40, .35);
+    --font-display: "Unbounded", "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Golos Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #251B17; --titlebar: #2C201B; --surface: #30241E; --surface-2: #3A2C25; --line: #4A372E;
+      --ink: #F5E6DC; --ink-soft: #C3A596; --accent: #F2A982; --accent-ink: #2B1C16; --accent-strong: #E08A62;
+      --danger: #F0907F; --ok-bg: #2F4430; --ok-ink: #CFE6C4; --toast-bg: #F5E6DC; --toast-ink: #2B1C16;
+      --video: #86B4F0; --video-bg: #22364F; --wave: #6CCFC6;
+      --shadow: 0 1px 0 rgba(0, 0, 0, .25), 0 22px 44px -28px rgba(0, 0, 0, .7); --pop-shadow: 0 14px 34px -10px rgba(0, 0, 0, .7);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+  svg { width: 16px; height: 16px; flex: none; }
+
+  .pg { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; padding: 18px; min-height: 100vh; align-items: start; }
+  @media (max-width: 1250px) { .pg { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ---- the program window, as in 1.14.0 ---- */
+  .win { position: relative; display: flex; height: calc(100vh - 36px); min-height: 760px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: var(--shadow); }
+  .side { flex: none; width: 236px; display: flex; flex-direction: column; gap: 16px; padding: 0 10px 12px; background: var(--titlebar); border-right: 1px solid var(--line); }
+  .side-head { flex: none; height: 40px; margin: 0 -10px; padding: 0 16px; display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; }
+  .side-head i { width: 18px; height: 18px; border-radius: 6px; background: var(--accent); }
+  .side-top { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+  .side-icons { display: flex; gap: 0; justify-content: space-between; margin: 4px 0 16px; }
+  .nav-icon { position: relative; display: grid; place-items: center; width: 30px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
+  .nav-icon:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--ink); }
+  .nav-icon.on { background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+  .nav-icon svg { width: 19px; height: 19px; }
+  .nav-badge { position: absolute; top: 1px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent-strong); color: #fff;
+    font-size: 10.5px; font-weight: 600; line-height: 16px; text-align: center; box-shadow: 0 0 0 2px var(--titlebar); }
+  .side-h { margin: 4px 11px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+  .up-day { margin: 8px 11px 2px; font-size: 12px; color: var(--ink-soft); }
+  .up-ev { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 9px; width: 100%; padding: 6px 9px; border: 0; border-radius: 9px; background: none; text-align: left; font-size: 13.5px; }
+  .up-ev i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+  .up-ev .tt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .up-ev .tm { font-size: 12px; color: var(--ink-soft); }
+  .side-bottom { display: grid; gap: 4px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 11px; border: 0; border-radius: 11px; background: none; color: var(--ink-soft); font-size: 14px; font-weight: 500; text-align: left; }
+  .nav-item svg { width: 19px; height: 19px; }
+  .profile-row { display: flex; gap: 8px; margin-top: 4px; }
+  .profile-btn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 7px 10px 7px 7px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); text-align: left; }
+  .avatar { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600; }
+  .profile-name { flex: 1; font-size: 14px; font-weight: 600; }
+  .qa-btn { flex: none; width: 46px; display: grid; place-items: center; border: 0; border-radius: 13px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); }
+  .qa-btn svg { width: 21px; height: 21px; }
+
+  .main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .titlebar { flex: none; height: 40px; display: flex; align-items: flex-end; gap: 2px; padding: 0 0 0 8px; background: var(--titlebar); border-bottom: 1px solid var(--line); font-size: 13px; color: var(--ink-soft); }
+  .tabs { display: flex; align-items: flex-end; gap: 2px; min-width: 0; overflow: hidden; }
+  .tab { position: relative; display: flex; align-items: center; gap: 8px; height: 34px; width: 190px; flex: 0 1 190px; min-width: 0; padding: 0 6px 0 12px; margin-bottom: -1px;
+    border: 1px solid transparent; border-bottom: 0; border-radius: 10px 10px 0 0; background: none; color: var(--ink-soft); text-align: left; font-weight: 500; }
+  .tab.on { background: var(--bg); color: var(--ink); border-color: var(--line); z-index: 1; }
+  .tab .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab .x { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; opacity: 0; }
+  .tab.on .x { opacity: 1; }
+  .tab .x svg { width: 11px; height: 11px; }
+  .tab .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-strong); animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  .tab-plus { align-self: center; display: grid; place-items: center; width: 30px; height: 30px; margin-left: 4px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); }
+  .wbtn { margin-left: auto; align-self: stretch; display: flex; }
+  .wbtn span { width: 46px; display: grid; place-items: center; font-size: 12px; color: var(--ink-soft); }
+
+  .mn { position: relative; flex: 1; min-height: 0; display: flex; overflow: hidden; }
+  .scroller { flex: 1; min-width: 0; overflow: auto; }
+  .page { max-width: 980px; margin: 0 auto; padding: 26px 28px 40px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .page { padding: 20px 16px 32px; } .hist { width: 210px; } .cue { grid-template-columns: 1fr; gap: 0; } }
+
+  /* history on the right */
+  .hist { position: relative; flex: none; width: 270px; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 50%, var(--bg)); }
+  .hist-h { display: flex; align-items: center; gap: 8px; padding: 16px 14px 8px; font-size: 13px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .06em; }
+  .hist-s { margin: 0 12px 8px; display: flex; align-items: center; gap: 7px; padding: 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); color: var(--ink-soft); }
+  .hist-s input { flex: 1; min-width: 0; border: 0; outline: none; background: none; font-size: 13.5px; color: var(--ink); }
+  .hist-l { flex: 1; overflow: auto; padding: 0 8px 12px; display: grid; align-content: start; gap: 2px; }
+  .hist-day { margin: 8px 6px 2px; font-size: 12px; color: var(--ink-soft); }
+  .hi { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; gap: 9px; align-items: center; width: 100%; padding: 8px; border: 0; border-radius: 11px; background: none; text-align: left; font-size: 13.5px; }
+  .hi:hover { background: var(--surface); }
+  .hi.on { background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); }
+  .hi .ic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--video-bg); color: var(--video); }
+  .hi .ic.au { background: color-mix(in srgb, var(--wave) 20%, var(--surface)); color: var(--wave); }
+  .hi .nm { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+  .hi .sb { display: block; font-size: 12px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hi .del { opacity: 0; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; color: var(--ink-soft); }
+  .hi:hover .del { opacity: 1; }
+  .hi .del svg { width: 12px; height: 12px; }
+  .hi .run { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-strong); animation: blink 1.2s infinite; }
+
+  .top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 24px; }
+  .top-text { display: grid; gap: 8px; }
+  .eyebrow { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft); }
+  h1 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 40px; line-height: 1.05; letter-spacing: -0.02em; }
+  .meta { margin: 0; color: var(--ink-soft); font-size: 14px; }
+
+  .btn { position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .btn:hover { background: var(--surface-2); }
+  .btn.pri { border-color: transparent; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .btn.sm { padding: 5px 11px; font-size: 13px; border-radius: 10px; }
+  .btn.ghost { background: none; border-color: transparent; color: var(--ink-soft); }
+  .btn.ghost:hover { background: var(--surface-2); color: var(--ink); }
+  .card { position: relative; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+
+  /* drop zone */
+  .drop { position: relative; display: grid; justify-items: center; gap: 10px; padding: 34px 20px; border: 2px dashed var(--line); border-radius: 18px; background: var(--surface); text-align: center; }
+  .drop.over { border-color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  .drop .big { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: color-mix(in srgb, var(--accent) 26%, var(--surface)); color: var(--accent-strong); }
+  .drop .big svg { width: 28px; height: 28px; }
+  .drop b { font-size: 17px; }
+  .drop p { margin: 0; font-size: 13.5px; color: var(--ink-soft); max-width: 520px; }
+  .drop.small { grid-template-columns: auto 1fr auto; justify-items: start; text-align: left; padding: 12px 14px; gap: 12px; border-style: dashed; }
+  .drop.small .big { width: 40px; height: 40px; border-radius: 12px; }
+  .drop.small .big svg { width: 20px; height: 20px; }
+  .drop.small b { font-size: 14.5px; }
+
+  /* the picked file */
+  .file { display: grid; gap: 14px; padding: 16px 18px; }
+  .file-h { display: flex; align-items: center; gap: 12px; }
+  .file-h .ic { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--video-bg); color: var(--video); }
+  .file-h .ic svg { width: 22px; height: 22px; }
+  .file-h .nm { flex: 1; min-width: 0; }
+  .file-h .nm b { display: block; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-h .nm span { font-size: 13px; color: var(--ink-soft); }
+  .opts { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
+  .opts select { height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 14px; }
+  .price { font-size: 13px; color: var(--ink-soft); }
+  .prog { display: grid; gap: 6px; }
+  .prog .bar { height: 8px; border-radius: 8px; background: var(--surface-2); overflow: hidden; }
+  .prog .bar b { display: block; height: 100%; background: var(--accent-strong); transition: width .2s linear; }
+  .prog small { font-size: 13px; color: var(--ink-soft); }
+
+  /* the result */
+  .res { display: grid; gap: 0; overflow: hidden; }
+  .player { position: relative; display: grid; gap: 0; background: #1c1411; }
+  .frame { position: relative; aspect-ratio: 16 / 7; background: linear-gradient(135deg, #3a2a3f, #1f3a4a 55%, #2d2016); overflow: hidden; }
+  .frame::before { content: ""; position: absolute; inset: 18% 30% 30% 30%; border-radius: 50% 50% 40% 40%; background: radial-gradient(circle at 50% 40%, rgba(255, 220, 190, .35), transparent 65%); }
+  .frame .sub { position: absolute; left: 50%; bottom: 10%; transform: translateX(-50%); max-width: 80%; padding: 4px 12px; border-radius: 8px; background: rgba(0, 0, 0, .62); color: #fff; font-size: 17px; line-height: 1.35; text-align: center; white-space: pre-line; }
+  .ctrl { display: flex; align-items: center; gap: 12px; padding: 8px 14px; color: #f4e6dc; font-size: 13px; }
+  .ctrl button { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .12); color: #fff; }
+  .ctrl .tl { position: relative; flex: 1; height: 26px; cursor: pointer; }
+  .ctrl .tl i { position: absolute; top: 9px; height: 8px; border-radius: 3px; background: rgba(255, 255, 255, .28); }
+  .ctrl .tl i.on { background: var(--accent); }
+  .ctrl .tl em { position: absolute; top: 2px; bottom: 2px; width: 2px; background: #fff; }
+  .ctrl .time { font-family: var(--font-mono); min-width: 110px; text-align: right; }
+  .rtabs { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .seg { position: relative; display: inline-flex; padding: 3px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--line); }
+  .seg button { padding: 6px 14px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); font-size: 13.5px; font-weight: 500; }
+  .seg button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
+  .rtabs .sp { flex: 1; }
+  .rbody { padding: 14px 16px 18px; }
+  .txt { width: 100%; min-height: 220px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); font-size: 15px; line-height: 1.65; resize: vertical; outline: none; }
+  .txt:focus { border-color: var(--accent); }
+  .hint { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-soft); }
+  .cues { display: grid; gap: 2px; }
+  .cue { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 10px; padding: 7px 10px; border: 0; border-radius: 10px; background: none; text-align: left; font-size: 14.5px; line-height: 1.5; }
+  .cue:hover { background: var(--surface-2); }
+  .cue.now { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+  .cue .tm { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-soft); padding-top: 2px; }
+  .copyfmt { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; color: var(--ink-soft); }
+  .sum h5 { margin: 14px 0 6px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+  .sum h5:first-child { margin-top: 0; }
+  .sum p { margin: 0; line-height: 1.6; }
+  .sum ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+  .sum .empty { display: grid; justify-items: start; gap: 10px; padding: 16px; border: 1px dashed var(--line); border-radius: 14px; color: var(--ink-soft); font-size: 14px; }
+  .acts { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .acts .info { margin-left: auto; font-size: 12.5px; color: var(--ink-soft); }
+
+  .tst { position: absolute; left: 50%; bottom: 18px; z-index: 60; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; max-width: calc(100% - 40px); padding: 10px 12px 10px 16px; border-radius: 12px; background: var(--toast-bg); color: var(--toast-ink); font-size: 14px; box-shadow: var(--pop-shadow); }
+  .tst button { border: 0; background: color-mix(in srgb, var(--toast-ink) 16%, transparent); color: var(--toast-ink); padding: 5px 11px; border-radius: 8px; font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+
+  /* ---- numbered marks and the explanations ---- */
+  [data-mark] { position: relative; }
+  .nb { position: absolute; top: -9px; right: -9px; z-index: 9; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 999px;
+    background: var(--accent-strong); color: #fff; font: 700 12px/1 var(--font-body); box-shadow: 0 0 0 2px var(--bg); cursor: help; }
+  .player > .nb, .hist > .nb, .res > .nb { top: 8px; right: 8px; }
+  .nav-icon > .nb { top: auto; bottom: -12px; right: -6px; }
+  .no-marks .nb { display: none; }
+  .hl { animation: hl 1.6s ease-out; }
+  @keyframes hl { 0%, 60% { box-shadow: 0 0 0 4px var(--accent-strong); border-radius: 12px; } 100% { box-shadow: 0 0 0 4px transparent; } }
+
+  .lg { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; display: grid; gap: 10px; align-content: start; }
+  .lg-top { padding: 16px 18px; border-radius: 16px; border: 1px dashed var(--ink-soft); background: var(--surface); font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+  .lg-top h2 { margin: 0 0 6px; font-family: var(--font-display); font-weight: 500; font-size: 19px; color: var(--ink); }
+  .lg-top p { margin: 0 0 8px; }
+  .lg-top label { display: flex; align-items: center; gap: 8px; color: var(--ink); cursor: pointer; }
+  .scn { display: grid; gap: 5px; margin: 4px 0 12px; }
+  .scn button { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); font-size: 13.5px; text-align: left; color: var(--ink); }
+  .scn button b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); font-size: 12px; }
+  .scn button.on { border-color: var(--accent-strong); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); font-weight: 600; }
+  .scn button.on b { background: var(--accent-strong); color: #fff; }
+  .lg-it { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); font-size: 13.5px; line-height: 1.5; cursor: pointer; }
+  .lg-it:hover, .lg-it.hl2 { border-color: var(--accent-strong); }
+  .lg-it > b { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px; background: var(--accent-strong); color: #fff; font-size: 12px; }
+  .lg-it h3 { margin: 0 0 3px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .lg-it p { margin: 0; color: var(--ink-soft); }
+  .lg-it p + p { margin-top: 5px; }
+  .lg-it .how { color: var(--ink); }
+  .lg-it p.now { margin-top: 7px; padding: 6px 9px; border-radius: 9px; background: var(--surface-2); color: var(--ink); font-size: 12.5px; }
+  .tg { font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 7px; border-radius: 999px; }
+  .tg-new { background: var(--ok-bg); color: var(--ok-ink); }
+  .tg-has { background: var(--surface-2); color: var(--ink-soft); }
+  .tg-part { background: color-mix(in srgb, #D9982A 24%, var(--surface)); color: var(--ink); }
+  .tg-test { background: color-mix(in srgb, var(--video) 22%, var(--surface)); color: var(--ink); }
+  .lg-it .show { margin-top: 6px; font-size: 12.5px; color: var(--accent-strong); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="pg">
+  <div class="win">
+    <nav class="side" aria-label="Разделы">
+      <div class="side-head"><i></i>Snowball.ai</div>
+      <div class="side-top">
+        <div class="side-icons" id="icons"></div>
+        <p class="side-h">Ближайшие дела</p>
+        <div id="up"></div>
+      </div>
+      <div class="side-bottom">
+        <button type="button" class="nav-item" data-go="Таймер"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg>Таймер</button>
+        <button type="button" class="nav-item" data-go="Статистика"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg>Статистика</button>
+        <div class="profile-row">
+          <button type="button" class="profile-btn" data-go="Профиль"><span class="avatar">А</span><span class="profile-name">Алексей</span></button>
+          <button type="button" class="qa-btn" data-go="Маленькое окно ассистента"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg></button>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-col">
+      <div class="titlebar">
+        <div class="tabs" id="tabs"></div>
+        <button type="button" class="tab-plus" data-go="Новая вкладка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <div class="wbtn"><span>─</span><span>☐</span><span>✕</span></div>
+      </div>
+      <div class="mn">
+        <main class="scroller" id="scroller">
+          <div class="page" id="page"></div>
+        </main>
+        <aside class="hist" id="hist" data-mark="11"></aside>
+      </div>
+    </div>
+    <div class="tst" id="tst" hidden></div>
+  </div>
+  <aside class="lg" id="lg"></aside>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function h(tag, attrs) {
+    var el = document.createElement(tag);
+    for (var k in attrs || {}) {
+      var v = attrs[k];
+      if (v == null || v === false) continue;
+      if (k === "text") el.textContent = v;
+      else if (k === "html") el.innerHTML = v;
+      else if (k.slice(0, 2) === "on") el.addEventListener(k.slice(2), v);
+      else el.setAttribute(k, v);
+    }
+    for (var i = 2; i < arguments.length; i++) add(el, arguments[i]);
+    return el;
+  }
+  function add(el, c) {
+    if (c == null || c === false) return;
+    if (Array.isArray(c)) c.forEach(function (x) { add(el, x); });
+    else el.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  var S = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  var I = {
+    home: '<svg ' + S + '><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg>',
+    prompts: '<svg ' + S + '><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
+    calendar: '<svg ' + S + '><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
+    tasks: '<svg ' + S + '><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg>',
+    llm: '<svg ' + S + '><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>',
+    wave: '<svg ' + S + '><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/></svg>',
+    gen: '<svg ' + S + '><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    up: '<svg ' + S + '><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>',
+    film: '<svg ' + S + '><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="m10 9.5 4.5 2.5-4.5 2.5z"/></svg>',
+    note: '<svg ' + S + '><path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></svg>',
+    play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>',
+    copy: '<svg ' + S + '><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>',
+    down: '<svg ' + S + '><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>',
+    spark: '<svg ' + S + '><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>'
+  };
+
+  /* ---------- the transcription of «вытащить текстовку.mov», as tools/record-test made it ---------- */
+  var SENT = [
+    [0.0, 7.5, "Если вы до сих пор пытаетесь собрать промпт вручную, слово за словом, вы играете на максимально сложном уровне."],
+    [7.9, 12.2, "Языковые модели отлично умеют писать промпты для других нейросетей."],
+    [12.5, 17.3, "Вы описываете свою идею простыми словами, прикрепляете пару референсов."],
+    [18.1, 30.2, "Указываете, для какой модели вам нужен промпт, и получаете готовый структурированный текст, который вы вручную собирали бы, может быть, полчаса, а может быть, час, а может быть, вообще бы не собрали."],
+    [30.4, 33.6, "Как всё это настроить, мы показываем подробно в наших уроках и курсах."],
+    [33.7, 38.4, "Ваша задача — понимать, что вы хотите, и проверять результат."],
+    [38.7, 40.2, "Всё остальное можно делегировать."]
+  ];
+  var SUBS = [
+    [0.06, 2.61, "Если вы до сих пор пытаетесь\nсобрать промпт вручную,"], [2.85, 7.53, "слово за словом,\nвы играете на максимально сложном уровне."],
+    [7.95, 12.24, "Языковые модели отлично умеют писать\nпромпты для других нейросетей."], [12.54, 17.34, "Вы описываете свою идею простыми словами,\nприкрепляете пару референсов."],
+    [18.18, 20.52, "Указываете, для какой\nмодели вам нужен промпт,"], [21.06, 23.88, "и получаете готовый\nструктурированный текст,"],
+    [24.33, 26.97, "который вы вручную собирали бы,\nможет быть, полчаса,"], [27.33, 30.24, "а может быть, час, а может быть,\nвообще бы не собрали."],
+    [30.42, 33.6, "Как всё это настроить, мы показываем\nподробно в наших уроках и курсах."], [33.78, 38.46, "Ваша задача — понимать,\nчто вы хотите, и проверять результат."],
+    [38.7, 40.23, "Всё остальное можно делегировать."]
+  ];
+  var DUR = 40.43;
+  var HIST = [
+    { id: "f1", day: "Сегодня", name: "вытащить текстовку.mov", kind: "video", len: "0:40", first: "Если вы до сих пор пытаетесь собрать промпт…" },
+    { id: "f2", day: "Вчера", name: "урок Seedance — озвучка.m4a", kind: "audio", len: "12:35", first: "Сегодня разбираем, как писать промпты для Seedance…" },
+    { id: "f3", day: "Вчера", name: "рилс колоризация.mp4", kind: "video", len: "0:58", first: "Старые фото оживают за минуту. Смотрите…" },
+    { id: "f4", day: "22 октября", name: "созвон с Мариной — запись.mp3", kind: "audio", len: "41:12", first: "Добрый день! Давайте начнём с тарифов…" }
+  ];
+
+  var st = { step: 1, model: "gpt-4o-mini-transcribe", prog: 0, progText: "", tab: "text", t: 0, playing: false, sum: false, sumBusy: false, fmt: "plain", open: "f1", q: "", text: null };
+  var PRICE = { "gpt-4o-mini-transcribe": 0.003, "gpt-transcribe": 0.0045, "gpt-4o-transcribe": 0.006 };
+  function fmt(sec, ms) {
+    var m = Math.floor(sec / 60), s = Math.floor(sec % 60), d = Math.floor((sec * 10) % 10);
+    return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0") + (ms ? "," + d : "");
+  }
+
+  /* ---------- the 1.14.0 window around the section ---------- */
+  var SECTIONS = [["home", "Главная"], ["prompts", "Промты"], ["calendar", "Календарь"], ["tasks", "Задачи"], ["llm", "LLM"], ["wave", "Транскрибация"], ["gen", "Генератор"]];
+  function renderShell() {
+    $("icons").replaceChildren();
+    SECTIONS.forEach(function (s) {
+      var on = s[0] === "wave";
+      var b = h("button", { type: "button", class: "nav-icon" + (on ? " on" : ""), title: s[1], html: I[s[0]], "data-mark": on ? "1" : null, onclick: on ? null : function () { soon(s[1]); } });
+      var n = s[0] === "calendar" ? 2 : s[0] === "tasks" ? 5 : s[0] === "wave" && st.step === 3 ? 1 : 0;
+      if (n) b.append(h("span", { class: "nav-badge", text: String(n) }));
+      $("icons").append(b);
+    });
+    marks($("icons"));
+    $("tabs").replaceChildren();
+    [["home", "Главная"], ["wave", st.step >= 2 ? "Транскрибация · вытащить текстовку" : "Транскрибация"], ["llm", "LLM · Идеи для рилс"]].forEach(function (t) {
+      var on = t[0] === "wave";
+      $("tabs").append(h("button", { type: "button", class: "tab" + (on ? " on" : ""), onclick: on ? null : function () { soon(t[1]); } },
+        h("span", { html: I[t[0]] }), h("span", { class: "t", text: t[1] }), on && st.step === 3 ? h("span", { class: "dot", title: "Идёт расшифровка" }) : h("span", { class: "x", html: I.x })));
+    });
+  }
+  var UP = [["Сегодня"], ["Дима, правки монтажа", "15:00", "#9466CC"], ["Записать урок", "18:00", "#F4AA84"], ["Завтра"], ["Оля, сценарий урока", "12:00", "#9466CC"]];
+  UP.forEach(function (u) {
+    if (u.length === 1) { $("up").append(h("p", { class: "up-day", text: u[0] })); return; }
+    $("up").append(h("button", { type: "button", class: "up-ev", style: "--c:" + u[2], onclick: function () { soon("Календарь"); } }, h("i"), h("span", { class: "tt", text: u[0] }), h("span", { class: "tm", text: u[1] })));
+  });
+  document.querySelectorAll("[data-go]").forEach(function (b) { b.addEventListener("click", function () { soon(b.dataset.go); }); });
+  function soon(what) { toast("В макете работает только «Транскрибация». «" + what + "» — как в программе 1.14.0."); }
+  var toastTimer;
+  function toast(text, btn, fn) {
+    var t = $("tst");
+    t.replaceChildren(h("span", { text: text }), btn ? h("button", { type: "button", text: btn, onclick: function () { t.hidden = true; fn(); } }) : null);
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 6000);
+  }
+
+  /* ---------- the page ---------- */
+  function header() {
+    return h("header", { class: "top" }, h("div", { class: "top-text" },
+      h("p", { class: "eyebrow", text: "Текст из аудио и видео" }), h("h1", { text: "Транскрибация" }),
+      h("p", { class: "meta", text: "Для озвучки, роликов и записей: текст, тайминги по фразам и субтитры для монтажа." })));
+  }
+  function dropZone(small) {
+    var z = h("div", { class: "drop" + (small ? " small" : ""), "data-mark": "2",
+      ondragover: function (e) { e.preventDefault(); z.classList.add("over"); }, ondragleave: function () { z.classList.remove("over"); },
+      ondrop: function (e) { e.preventDefault(); z.classList.remove("over"); go(2); } },
+      h("span", { class: "big", html: I.up }),
+      h("div", null, h("b", { text: small ? "Ещё файл — перетащите сюда" : "Перетащите аудио или видео сюда" }),
+        h("p", { text: small ? "Или выберите кнопкой. Новая расшифровка встанет в историю справа." : "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама, без сторонних программ. Видео — до 2 ГБ, длина любая." })),
+      h("button", { type: "button", class: "btn" + (small ? " sm" : " pri"), onclick: function () { go(2); } }, "Выбрать файл…"));
+    return z;
+  }
+  function fileCard() {
+    var est = (40 / 60 * PRICE[st.model]);
+    var card = h("section", { class: "card file" },
+      h("div", { class: "file-h" }, h("span", { class: "ic", html: I.film }),
+        h("div", { class: "nm" }, h("b", { text: "вытащить текстовку.mov" }), h("span", { text: "Видео · 0:40 · 59,3 МБ · Загрузки" })),
+        h("button", { type: "button", class: "btn sm ghost", onclick: function () { go(1); } }, "Другой файл")),
+      st.step === 2 ? h("div", { class: "opts", "data-mark": "3" }, "Модель:",
+        h("select", { onchange: function () { st.model = this.value; render(); } },
+          [["gpt-4o-mini-transcribe", "GPT-4o mini transcribe — точнее всех в проверке"], ["gpt-transcribe", "GPT transcribe — самая новая"], ["gpt-4o-transcribe", "GPT-4o transcribe"]].map(function (m) {
+            return h("option", { value: m[0], selected: st.model === m[0] ? "selected" : null, text: m[1] });
+          })),
+        h("span", { class: "price", text: "≈ $" + est.toFixed(4) + " · ключ ChatGPT из «Настроек»" }),
+        h("span", { style: "flex:1" }),
+        h("button", { type: "button", class: "btn pri", onclick: function () { go(3); } }, "Расшифровать")) : null,
+      st.step === 3 ? h("div", { class: "prog", "data-mark": "4" },
+        h("div", { class: "bar" }, h("b", { id: "pbar", style: "width:" + st.prog + "%" })),
+        h("small", { id: "ptext", text: st.progText }),
+        h("div", null, h("button", { type: "button", class: "btn sm ghost", onclick: function () { stopProc(); go(2); toast("Расшифровка остановлена. Уже потраченное — доли цента."); } }, "Остановить"))) : null);
+    return card;
+  }
+  function result() {
+    var cur = SUBS.find(function (s) { return st.t >= s[0] && st.t < s[1]; });
+    var tl = h("div", { class: "tl", onclick: function (e) { var r = this.getBoundingClientRect(); seek((e.clientX - r.left) / r.width * DUR); } },
+      SENT.map(function (s) {
+        var i = h("i", { class: st.t >= s[0] && st.t < s[1] ? "on" : "" });
+        i.style.left = (s[0] / DUR * 100) + "%"; i.style.width = ((s[1] - s[0]) / DUR * 100) + "%";
+        return i;
+      }), (function () { var em = h("em"); em.style.left = (st.t / DUR * 100) + "%"; return em; })());
+    var player = h("div", { class: "player", "data-mark": "5" },
+      h("div", { class: "frame" }, cur ? h("div", { class: "sub", text: cur[2] }) : null),
+      h("div", { class: "ctrl" },
+        h("button", { type: "button", html: st.playing ? I.pause : I.play, title: st.playing ? "Пауза" : "Смотреть", onclick: togglePlay }),
+        tl, h("span", { class: "time", text: fmt(st.t) + " / " + fmt(DUR) })));
+    var tabs = h("div", { class: "rtabs" },
+      h("div", { class: "seg" }, [["text", "Текст"], ["cues", "Тайминги"], ["sum", "Кратко"]].map(function (t) {
+        return h("button", { type: "button", class: st.tab === t[0] ? "on" : "", onclick: function () { st.tab = t[0]; render(); } }, t[1]);
+      })),
+      h("span", { class: "sp" }),
+      h("span", { class: "price", text: "3 куска · 40 с речи · 403 + 167 токенов · $0.0020" }));
+    var body = h("div", { class: "rbody" });
+    if (st.tab === "text") {
+      var ta = h("textarea", { class: "txt", "data-mark": "6", oninput: function () { st.text = this.value; } });
+      ta.value = st.text != null ? st.text : SENT.map(function (s) { return s[2]; }).join(" ");
+      body.append(ta, h("p", { class: "hint", text: "Текст можно поправить прямо здесь: например, имя или название, которое модель расслышала неверно. Правка сохраняется и попадает в тайминги и субтитры." }));
+    } else if (st.tab === "cues") {
+      body.append(
+        h("div", { class: "copyfmt", "data-mark": "7" }, "Копировать как:",
+          h("div", { class: "seg" }, [["plain", "00:12,4 – 00:15,8  текст"], ["prompt", "[00:12–00:15] текст"]].map(function (f) {
+            return h("button", { type: "button", class: st.fmt === f[0] ? "on" : "", onclick: function () { st.fmt = f[0]; render(); } }, f[1]);
+          })),
+          h("button", { type: "button", class: "btn sm", html: I.copy, onclick: function () { toast("Тайминги скопированы (" + (st.fmt === "prompt" ? "для промта" : "списком") + "): 7 фраз."); } }, "Копировать")),
+        h("div", { class: "cues" }, SENT.map(function (s) {
+          return h("button", { type: "button", class: "cue" + (st.t >= s[0] && st.t < s[1] ? " now" : ""), onclick: function () { seek(s[0] + 0.15); } },
+            h("span", { class: "tm", text: st.fmt === "prompt" ? "[" + fmt(s[0]) + "–" + fmt(s[1]) + "]" : fmt(s[0], 1) + " – " + fmt(s[1], 1) }), h("span", { text: s[2] }));
+        })),
+        h("p", { class: "hint", text: "Нажмите на фразу — плеер перемотается на неё. Время стоит на настоящих паузах голоса, примерно до четверти секунды." }));
+    } else {
+      var sum = h("div", { class: "sum", "data-mark": "9" });
+      if (!st.sum) {
+        sum.append(h("div", { class: "empty" }, "Краткое содержание делается по кнопке: так вы не платите за то, что не нужно.",
+          h("button", { type: "button", class: "btn sm pri", html: I.spark, disabled: st.sumBusy ? "disabled" : null, onclick: makeSum }, st.sumBusy ? "Пишу…" : "Сделать кратко (≈ $0.002)")));
+      } else {
+        sum.append(h("h5", { text: "Кратко" }),
+          h("p", { text: "Ролик о том, что промпты для нейросетей не нужно собирать вручную: языковая модель напишет готовый структурированный промпт по описанию идеи и паре референсов. Задача человека — понимать, что он хочет, и проверять результат; как всё настроить, показано в уроках и курсах." }),
+          h("h5", { text: "Главные мысли" }),
+          h("ul", null, ["Собирать промпт вручную — самый сложный путь", "Языковая модель пишет промпты для других нейросетей", "Нужно: идея простыми словами, референсы, для какой модели", "Человек ставит задачу и проверяет результат"].map(function (x) { return h("li", { text: x }); })),
+          h("p", { class: "hint", text: "GPT-6.1 Sol · 2,1 с · $0.0016" }));
+      }
+      body.append(sum);
+    }
+    var acts = h("div", { class: "acts" },
+      h("button", { type: "button", class: "btn sm", html: I.copy, onclick: function () { toast("Весь текст скопирован."); } }, "Копировать текст"),
+      h("button", { type: "button", class: "btn sm", "data-mark": "8", html: I.down, onclick: function () { toast("Сохранено: «вытащить текстовку.srt» — рядом с видео, в «Загрузках». Перетащите его на таймлайн в Premiere, After Effects, DaVinci или CapCut."); } }, "Субтитры .srt"),
+      h("button", { type: "button", class: "btn sm", html: I.down, onclick: function () { toast("Сохранено: «вытащить текстовку.txt» — текст и тайминги."); } }, ".txt"),
+      h("span", { "data-mark": "10", style: "display:inline-flex;gap:8px" },
+        h("button", { type: "button", class: "btn sm", html: I.prompts, onclick: function () { toast("Откроется новый промт: тип «Видео», в тексте — расшифровка, в комментарии — тайминги. Останется дописать, что нужно сгенерировать."); } }, "В промт"),
+        h("button", { type: "button", class: "btn sm", html: I.llm, onclick: function () { toast("Откроется вкладка «LLM · вытащить текстовку» с текстом и таймингами: можно попросить, например, «напиши промпт для анимации под каждую фразу»."); } }, "Спросить в LLM")),
+      h("span", { class: "info", "data-mark": "12", text: "Сохранено в «Транскрибации» · сегодня, 10:21" }));
+    return h("section", { class: "card res" }, player, tabs, body, acts);
+  }
+  function renderPage() {
+    var page = $("page");
+    page.replaceChildren(header());
+    if (st.step === 1) page.append(dropZone(false));
+    if (st.step === 2 || st.step === 3) page.append(fileCard());
+    if (st.step === 4) page.append(result(), dropZone(true));
+    marks(page);
+  }
+  function renderHist() {
+    var q = st.q.trim().toLowerCase(), box = $("hist"), last = null;
+    box.replaceChildren(h("div", { class: "hist-h", text: "История" }),
+      h("label", { class: "hist-s", html: I.search }, h("input", { placeholder: "Поиск по тексту и названию", value: st.q, oninput: function () { st.q = this.value; renderHist(); var i = $("hist").querySelector("input"); i.focus(); i.setSelectionRange(st.q.length, st.q.length); } })));
+    var list = h("div", { class: "hist-l" });
+    HIST.forEach(function (f) {
+      if (q && (f.name + " " + f.first).toLowerCase().indexOf(q) === -1) return;
+      if (f.id === "f1" && st.step < 3) return;
+      if (f.day !== last) { list.append(h("p", { class: "hist-day", text: f.day })); last = f.day; }
+      var running = f.id === "f1" && st.step === 3;
+      list.append(h("button", { type: "button", class: "hi" + (f.id === "f1" && st.step === 4 ? " on" : ""), onclick: function () { if (f.id === "f1") { if (st.step === 4) return; } else toast("В макете открывается только «вытащить текстовку.mov». Остальные — примеры истории."); } },
+        h("span", { class: "ic" + (f.kind === "audio" ? " au" : ""), html: f.kind === "audio" ? I.note : I.film }),
+        h("span", null, h("span", { class: "nm", text: f.name }), h("span", { class: "sb", text: running ? "Расшифровывается…" : f.len + " · " + f.first })),
+        running ? h("span", { class: "run" }) : h("span", { class: "del", html: I.x, title: "Удалить", onclick: function (e) { e.stopPropagation(); toast("«" + f.name + "» удалена из истории.", "Отменить", function () {}); } })));
+    });
+    if (!list.children.length) list.append(h("p", { class: "hist-day", text: st.q ? "Ничего не нашлось." : "Пока пусто: здесь будут все расшифрованные файлы." }));
+    box.append(list);
+    marks(box);
+  }
+  function render() { renderShell(); renderPage(); renderHist(); document.querySelectorAll(".scn button").forEach(function (b) { b.classList.toggle("on", +b.dataset.step === st.step); }); }
+
+  /* ---------- the scenario ---------- */
+  var procTimer = null, playTimer = null;
+  function stopProc() { clearInterval(procTimer); procTimer = null; }
+  function go(step) {
+    stopProc();
+    if (step !== 4) { st.playing = false; clearInterval(playTimer); }
+    st.step = step;
+    if (step === 3) runProc();
+    render();
+  }
+  function runProc() {
+    st.prog = 0;
+    var phases = [[0, "Читаю файл и достаю звук из видео…"], [12, "Нашёл 3 куска речи, режу по паузам…"], [25, "Расшифровано кусков: 1 из 3…"], [55, "Расшифровано кусков: 2 из 3…"], [85, "Ставлю тайминги на паузы, собираю субтитры…"]];
+    procTimer = setInterval(function () {
+      st.prog += 3;
+      phases.forEach(function (p) { if (st.prog >= p[0]) st.progText = p[1] + "  Можно уйти в другую вкладку — расшифровка продолжится."; });
+      if ($("pbar")) $("pbar").style.width = Math.min(100, st.prog) + "%";
+      if ($("ptext")) $("ptext").textContent = st.progText;
+      if (st.prog >= 100) { stopProc(); go(4); toast("Готово: «вытащить текстовку.mov» — 7 фраз, 11 субтитров."); }
+    }, 90);
+  }
+  function seek(t) { st.t = Math.max(0, Math.min(DUR - 0.01, t)); render(); }
+  function togglePlay() {
+    st.playing = !st.playing;
+    clearInterval(playTimer);
+    if (st.playing) playTimer = setInterval(function () {
+      st.t += 0.25;
+      if (st.t >= DUR) { st.t = 0; st.playing = false; clearInterval(playTimer); }
+      renderPage();
+    }, 250);
+    renderPage();
+  }
+  function makeSum() {
+    st.sumBusy = true; render();
+    setTimeout(function () { st.sumBusy = false; st.sum = true; render(); }, 900);
+  }
+
+  /* ---------- the explanations on the right ---------- */
+  var NOTES = [
+    { n: 1, tag: "new", h: "Новый раздел «Транскрибация»", p: "Своя иконка в ряду разделов (звуковая волна, между LLM и Генератором) и своя вкладка, как у «Календаря» или «Задач». Открывается одной вкладкой; пока идёт расшифровка, на вкладке мигает точка, а на иконке — счётчик.",
+      more: "Чтобы в ряд влезли семь иконок, они станут чуть уже. Ещё раздел будет в меню «+» новой вкладки." },
+    { n: 2, tag: "new", step: 1, h: "Загрузка файла", p: "Перетащите аудио или видео на страницу или нажмите «Выбрать файл…». Подходят mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достаёт сама, без сторонних программ: в проверке открылись mp4, mov с HEVC (как с iPhone), mp3, m4a, wav и ваш ролик с 24-битным звуком.",
+      how: "Нажмите «Выбрать файл…» или перетащите на рамку любой файл с компьютера — макет сделает вид, что это «вытащить текстовку.mov».",
+      more: "Видео — до 2 ГБ: программа держит файл в памяти, пока достаёт звук. Длина любая: на расшифровку уходят только куски с речью, поэтому ограничение OpenAI в 25 МБ не мешает." },
+    { n: 3, tag: "new", step: 2, h: "Модель и цена до запуска", p: "Перед расшифровкой видно, что за файл, и сколько это примерно будет стоить. По умолчанию — GPT-4o mini transcribe: в наших проверках она расшифровала точнее всех. Ключ берётся из «Настроек», вводить его не нужно.",
+      how: "Поменяйте модель — цена пересчитается. Потом «Расшифровать».", more: "Цены за минуту пока взяты со сторонних сайтов; точные программа будет считать по ответу OpenAI, как траты на ассистента." },
+    { n: 4, tag: "new", step: 3, h: "Ход работы", p: "Полоса и надпись: достаю звук, сколько кусков речи нашлось, сколько уже расшифровано. Можно уйти в другую вкладку — расшифровка продолжится, а по готовности придёт подсказка внизу (или уведомление Windows, если программа свёрнута). «Остановить» — бросить на середине.",
+      how: "Шаг 3 сценария — полоса сама дойдёт до конца.", more: "Ролик на 40 секунд в проверке занял около 4 секунд, час записи — примерно пару минут: куски уходят по четыре сразу." },
+    { n: 5, tag: "new", step: 4, h: "Плеер с субтитрами", p: "Сверху — сам файл с субтитрами поверх кадра. На полоске времени видно, где какая фраза; текущая подсвечена. Так сразу проверяется, правильно ли стоят тайминги, — до того, как нести их в монтаж.",
+      how: "Нажмите ▶ или кликните по полоске времени.", more: "В макете вместо кадра — заглушка; в программе будет настоящее видео. У аудиофайла вместо кадра — крупная строка субтитра." },
+    { n: 6, tag: "new", step: 4, tab: "text", h: "Текст", p: "Весь текст целиком, с абзацами и знаками препинания. Его можно поправить прямо здесь: например, имя или название, которое модель расслышала неверно. Правка сохраняется и переходит в тайминги и субтитры.",
+      how: "Исправьте любое слово в поле." },
+    { n: 7, tag: "new", step: 4, tab: "cues", h: "Тайминги по фразам", p: "Каждая фраза со временем начала и конца. Время стоит на настоящих паузах голоса — примерно до четверти секунды. Клик по фразе перематывает плеер.",
+      how: "Переключите «Копировать как»: списком (как в проверке) или в виде «[00:12–00:15] текст» — так удобнее вставлять в промт для motion-графики. Потом «Копировать».", more: "Это то, что вы делали вручную: текст озвучки с таймингами для анимации." },
+    { n: 8, tag: "new", step: 4, h: "Субтитры .srt", p: "Кнопка сохраняет файл субтитров рядом с видео. Его понимают Premiere, After Effects, DaVinci и CapCut: перетащили на таймлайн — и фразы встали по местам. Длинные фразы делятся по запятым и тире, в строчке не больше 42 букв, в субтитре не больше двух строчек." },
+    { n: 9, tag: "part", step: 4, tab: "sum", h: "Краткое содержание", p: "Пара предложений о главном и список главных мыслей — тем же способом, что итоги созвона (их мы проверили в тестовой программе). Делается только по кнопке, чтобы не платить, когда не нужно.",
+      how: "Откройте «Кратко» → «Сделать кратко».", now: "LLM уже умеет пересказывать текст, если вставить его в чат вручную." },
+    { n: 10, tag: "part", step: 4, h: "Дальше: в промт или в LLM", p: "«В промт» — создаёт новый промт типа «Видео»: в тексте — расшифровка, в комментарии — тайминги. «Спросить в LLM» — открывает разговор, где ассистент уже знает текст и тайминги: «напиши промпт для анимации под каждую фразу».",
+      now: "промты и LLM есть; нового — только кнопки, которые переносят туда расшифровку." },
+    { n: 11, tag: "new", h: "История", p: "Справа — все расшифрованные файлы по дням: название, длина и начало текста. Поиск ищет и по названию, и по тексту внутри. Клик открывает расшифровку целиком; крестик удаляет, внизу 7 секунд «Отменить», как у задач.",
+      how: "Напишите в поиске «Seedance» или «тариф».", more: "Если исходный файл потом удалили или переместили, текст, тайминги и субтитры всё равно останутся — нельзя будет только смотреть плеер." },
+    { n: 12, tag: "new", step: 4, h: "Где хранится", p: "В папке с данными появится папка «Транскрибации»: на каждый файл — текст, тайминги и субтитры (сам видеофайл не копируется, чтобы не занимать место). Резервная копия .snowball её переносит, смена папки — копирует." },
+    { n: 13, tag: "test", h: "Что уже проверено", p: "Всё, что под этим макетом, проверено в тестовой программе tools/record-test на вашем «вытащить текстовку.mov»: звук достаётся, текст без потерь («уроках и курсах»), тайминги стоят на паузах, субтитры не длиннее 41 буквы.",
+      more: "Не проверено: файлы длиннее пары минут и как ведёт себя музыка под голосом. Плеер, правка текста, «В промт», история и краткое содержание файла — пока только в макете." }
+  ];
+  var TAG_NAME = { "new": ["Новое", "tg-new"], has: ["Есть в 1.14.0", "tg-has"], part: ["Частично есть", "tg-part"], test: ["Проверено", "tg-test"] };
+  var SCENE = [[1, "Пусто: загрузите файл"], [2, "Файл выбран"], [3, "Идёт расшифровка"], [4, "Готово: текст и тайминги"]];
+  function renderLegend() {
+    var lg = $("lg");
+    var cb = h("input", { type: "checkbox", checked: "checked", onchange: function () { document.body.classList.toggle("no-marks", !this.checked); } });
+    lg.append(h("div", { class: "lg-top" },
+      h("h2", { text: "Что на макете" }),
+      h("p", { text: "Окно — как в программе 1.14.0, открыт новый раздел «Транскрибация». В примере — ваш «вытащить текстовку.mov» с тем текстом и таймингами, что получились в проверке. Шаги:" }),
+      h("div", { class: "scn" }, SCENE.map(function (s) { return h("button", { type: "button", "data-step": s[0], onclick: function () { go(s[0]); } }, h("b", { text: String(s[0]) }), s[1]); })),
+      h("p", { text: "Цифры на макете совпадают с пунктами ниже. Нажмите на пункт — макет покажет, где это. Плашка «Сейчас в 1.14.0» — как это устроено в вышедшей версии." }),
+      h("label", null, cb, "Показывать цифры на макете")));
+    NOTES.forEach(function (it) {
+      var tg = TAG_NAME[it.tag];
+      lg.append(h("div", { class: "lg-it", id: "lg-" + it.n, onclick: function () { showNote(it); } },
+        h("b", { text: String(it.n) }),
+        h("div", null,
+          h("h3", null, it.h, h("span", { class: "tg " + tg[1], text: tg[0] })),
+          h("p", { text: it.p }),
+          it.how ? h("p", { class: "how", text: it.how }) : null,
+          it.more ? h("p", { text: it.more }) : null,
+          it.now ? h("p", { class: "now" }, h("b", { text: "Сейчас в 1.14.0: " }), it.now) : null,
+          h("div", { class: "show", text: "Показать на макете →" }))));
+    });
+  }
+  function showNote(it) {
+    if (it.step && it.step !== st.step) go(it.step);
+    if (it.tab) { st.tab = it.tab; render(); }
+    setTimeout(function () {
+      document.querySelectorAll('[data-mark="' + it.n + '"]').forEach(function (el, i) {
+        if (i === 0) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        el.classList.remove("hl"); void el.offsetWidth; el.classList.add("hl");
+      });
+    }, 150);
+  }
+  // Puts a numbered circle on every element with data-mark; clicking it scrolls the explanations to that point.
+  function marks(root) {
+    if (!root) return;
+    var list = Array.prototype.slice.call(root.querySelectorAll("[data-mark]"));
+    if (root.hasAttribute && root.hasAttribute("data-mark")) list.unshift(root);
+    list.forEach(function (el) {
+      if (el.querySelector(":scope > .nb")) return;
+      var n = el.getAttribute("data-mark");
+      el.append(h("span", { class: "nb", text: n, title: "Пояснение № " + n, onclick: function (e) {
+        e.stopPropagation(); e.preventDefault();
+        var it = $("lg-" + n);
+        if (!it) return;
+        it.scrollIntoView({ block: "center", behavior: "smooth" });
+        it.classList.remove("hl2"); void it.offsetWidth; it.classList.add("hl2");
+        setTimeout(function () { it.classList.remove("hl2"); }, 1600);
+      } }));
+    });
+  }
+
+  renderLegend();
+  render();
+})();
+</script>
+</body>
+</html>

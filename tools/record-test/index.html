@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Проверка записи созвона</title>
+<style>
+  :root { --bg: #FCEEE4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7; --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --rec: #D43F35; --ok: #4F9A40; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 22px; background: var(--bg); color: var(--ink); font: 15px/1.5 "Golos Text", "Segoe UI", system-ui, sans-serif; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  p { margin: 0 0 10px; }
+  .soft { color: var(--ink-soft); font-size: 13.5px; }
+  .card { margin-top: 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+  label { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  select { flex: 1; min-width: 0; height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font: inherit; color: inherit; }
+  button { padding: 9px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font: inherit; font-weight: 600; color: inherit; cursor: pointer; }
+  button.go { border-color: transparent; background: var(--rec); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .clock { font: 600 22px/1 Consolas, monospace; min-width: 80px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--rec); margin-right: 6px; animation: blink 1.2s infinite; }
+  @keyframes blink { 50% { opacity: .3; } }
+  .meter { display: grid; grid-template-columns: 140px 1fr 60px; align-items: center; gap: 10px; margin: 8px 0; font-size: 14px; }
+  .bar { height: 12px; border-radius: 6px; background: var(--surface-2); overflow: hidden; }
+  .bar b { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+  .meter span:last-child { font-size: 12.5px; color: var(--ink-soft); text-align: right; }
+  .file { margin: 10px 0; }
+  .file b { display: block; font-size: 14px; }
+  audio { width: 100%; margin-top: 4px; }
+  .err { color: var(--rec); font-weight: 600; }
+  ol { margin: 6px 0 0; padding-left: 20px; }
+  h2 { margin: 0 0 8px; font-size: 17px; font-weight: 600; }
+  #mf-card.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
+  textarea.mf-text { width: 100%; min-height: 140px; margin: 6px 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font: 14px/1.5 inherit; color: inherit; resize: vertical; }
+  .cue { display: grid; grid-template-columns: 150px 1fr; gap: 8px; font-size: 14px; margin: 2px 0; }
+  .cue span:first-child { font: 12.5px/1.8 Consolas, monospace; color: var(--ink-soft); }
+  .sum h4 { margin: 12px 0 4px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+  .sum p, .sum ul { margin: 0; font-size: 14.5px; }
+  .sum ul { padding-left: 20px; }
+  .sum .tag { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; background: var(--surface-2); font-size: 12px; color: var(--ink-soft); }
+  input[type=text], input[type=password] { flex: 1; min-width: 0; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font: inherit; color: inherit; }
+  .models { display: grid; gap: 4px; margin: 8px 0 12px; }
+  .models label { align-items: flex-start; margin: 0; }
+  .models input { margin-top: 4px; }
+  .models small { display: block; color: var(--ink-soft); font-size: 12.5px; }
+  button.go2 { border-color: transparent; background: var(--accent); }
+  .res { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+  .res h3 { margin: 0 0 2px; font: 600 14px/1.4 Consolas, monospace; }
+  .res .meta { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 8px; }
+  .line { display: grid; grid-template-columns: 46px 96px 1fr; gap: 8px; font-size: 14px; margin: 3px 0; }
+  .line .tm { font: 12px/1.9 Consolas, monospace; color: var(--ink-soft); }
+  .line .me { color: #BF603D; font-weight: 600; }
+  .line .them { color: #3C78C8; font-weight: 600; }
+  .track b { font-size: 13px; color: var(--ink-soft); }
+  .track p { white-space: pre-wrap; font-size: 14px; }
+</style>
+</head>
+<body>
+  <h1>Проверка записи созвона</h1>
+  <p class="soft">Тестовая страница, не часть Snowball.ai. Пишет две дорожки в два файла: ваш микрофон и весь звук компьютера (голос собеседника из Telegram, Zoom, браузера).</p>
+
+  <div class="card">
+    <label>Микрофон: <select id="mic"></select></label>
+    <label><input type="checkbox" id="clean" checked> Убирать эхо и шум у микрофона</label>
+    <p class="soft">Попробуйте записать и с галочкой, и без: так будет понятно, помогает ли она, если говорить через колонки, а не в наушниках.</p>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <button type="button" class="go" id="start">● Начать запись</button>
+      <button type="button" id="stop" disabled>■ Остановить</button>
+      <span class="clock" id="clock">00:00</span>
+    </div>
+    <div class="meter"><span>Микрофон (вы)</span><div class="bar"><b id="lv-mic"></b></div><span id="pk-mic"></span></div>
+    <div class="meter"><span>Звук компьютера</span><div class="bar"><b id="lv-sys"></b></div><span id="pk-sys"></span></div>
+    <p class="soft" id="state">Полоски показывают громкость прямо сейчас, справа — самый громкий момент записи.</p>
+  </div>
+
+  <div class="card" id="result" hidden>
+    <b>Готово. Послушайте обе дорожки:</b>
+    <div id="files"></div>
+    <button type="button" id="folder">Открыть папку с файлами</button>
+  </div>
+
+  <div class="card">
+    <b>Что проверить</b>
+    <ol class="soft">
+      <li>Созвон в наушниках: на дорожке «микрофон» только вы, на «звук компьютера» — только собеседник.</li>
+      <li>Тот же созвон через колонки: не слышен ли собеседник ещё и в дорожке микрофона.</li>
+      <li>Во время записи придёт уведомление или заиграет музыка — попадёт ли это в дорожку компьютера.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h2>Шаг 2. Расшифровка через OpenAI</h2>
+    <label>Запись: <select id="tr-rec"></select></label>
+    <label>Ключ ChatGPT: <input type="password" id="tr-key" placeholder="sk-…" autocomplete="off"></label>
+    <p class="soft">Ключ нигде не сохраняется: он нужен только этой проверке и забудется, когда вы закроете окно. Это тот же ключ, что вы вставляли в Snowball.ai («Настройки» → «API-ключи»); взять его можно на сайте OpenAI.</p>
+    <div class="models" id="tr-models"></div>
+    <div class="row">
+      <button type="button" class="go2" id="tr-go">Расшифровать</button>
+      <span class="soft" id="tr-state">Каждая модель расшифрует обе дорожки. Минута записи стоит меньше цента на модель.</span>
+    </div>
+    <div id="tr-out"></div>
+  </div>
+
+  <div class="card">
+    <h2>Шаг 3. Итоги созвона</h2>
+    <p class="soft">Итоги делаются по разговору из шага 2 (запись выбирается там же, ключ тоже берётся оттуда). Нужна запись, расшифрованная «своей нарезкой» или diarize.</p>
+    <p class="soft" id="sum-src"></p>
+    <label>Название дела: <input type="text" id="sum-title" placeholder="Например: Дима, правки монтажа (можно оставить пустым)" autocomplete="off"></label>
+    <label>Модель: <select id="sum-model">
+      <option value="gpt-6.1-sol">GPT-6.1 Sol — основная ($2 / $10 за миллион токенов)</option>
+      <option value="gpt-6-luna">GPT-6 Luna — самая дешёвая ($0.10 / $0.50)</option>
+      <option value="gpt-6-astra">GPT-6 Astra — самая сильная ($10 / $50)</option>
+    </select></label>
+    <label>Размышления: <select id="sum-effort">
+      <option value="low">Быстро</option>
+      <option value="medium" selected>Средне</option>
+      <option value="high">Глубоко</option>
+    </select></label>
+    <div class="row">
+      <button type="button" class="go2" id="sum-go">Сделать итоги</button>
+      <span class="soft" id="sum-state">Можно сделать итоги несколько раз разными моделями и сравнить.</span>
+    </div>
+    <div id="sum-out"></div>
+  </div>
+
+  <div class="card" id="mf-card">
+    <h2>Расшифровка файла: аудио или видео</h2>
+    <p class="soft">Для озвучки и роликов: один голос, без «Вы» и «Собеседник». Перетащите файл сюда или выберите кнопкой. Звук из видео программа достаёт сама, ключ берётся из шага 2.</p>
+    <div class="row">
+      <button type="button" id="mf-pick">Выбрать файл…</button>
+      <span class="soft" id="mf-name">Файл не выбран</span>
+    </div>
+    <label>Модель: <select id="mf-model">
+      <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe — лучшая по точности в нашей проверке</option>
+      <option value="gpt-transcribe">gpt-transcribe — самая новая</option>
+      <option value="gpt-4o-transcribe">gpt-4o-transcribe — предыдущая хорошая</option>
+    </select></label>
+    <div class="row">
+      <button type="button" class="go2" id="mf-go" disabled>Расшифровать файл</button>
+      <span class="soft" id="mf-state"></span>
+    </div>
+    <div id="mf-out"></div>
+  </div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var SELFTEST = new URLSearchParams(location.search).has('selftest');
+  var NAMES = { mic: 'микрофон.webm', sys: 'звук компьютера.webm' };
+  var rec = null;
+
+  function say(text, bad) { $('state').textContent = text; $('state').className = bad ? 'err' : 'soft'; }
+
+  // The list of microphones gets real names only after the first permission, so ask once at start.
+  async function listMics() {
+    try { (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach(function (t) { t.stop(); }); } catch (e) { say('Нет доступа к микрофону: ' + e.message, true); }
+    var devices = (await navigator.mediaDevices.enumerateDevices()).filter(function (d) { return d.kind === 'audioinput'; });
+    $('mic').replaceChildren.apply($('mic'), devices.map(function (d) {
+      var o = document.createElement('option'); o.value = d.deviceId; o.textContent = d.label || 'Микрофон'; return o;
+    }));
+  }
+
+  async function getStreams() {
+    var clean = $('clean').checked;
+    var mic = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: $('mic').value ? { exact: $('mic').value } : undefined, echoCancellation: clean, noiseSuppression: clean, autoGainControl: clean } });
+    // Windows gives the computer sound only together with a picture of the screen; the picture is not needed.
+    var screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    screen.getVideoTracks().forEach(function (t) { t.stop(); });
+    if (!screen.getAudioTracks().length) throw new Error('Windows не отдал звук компьютера');
+    return { mic: mic, sys: new MediaStream(screen.getAudioTracks()) };
+  }
+
+  function meter(ctx, stream, key) {
+    var an = ctx.createAnalyser();
+    an.fftSize = 1024;
+    ctx.createMediaStreamSource(stream).connect(an);
+    var buf = new Float32Array(an.fftSize);
+    return { key: key, peak: 0, read: function () {
+      an.getFloatTimeDomainData(buf);
+      var sum = 0;
+      for (var i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      var rms = Math.sqrt(sum / buf.length);
+      this.peak = Math.max(this.peak, rms);
+      return rms;
+    } };
+  }
+  function pct(rms) { return rms <= 0 ? 0 : Math.max(0, Math.min(100, (20 * Math.log10(rms) + 60) / 60 * 100)); }
+
+  async function start() {
+    $('start').disabled = true; $('result').hidden = true;
+    try {
+      var streams = await getStreams();
+      var dir = await window.rec.start();
+      var ctx = new AudioContext();
+      rec = { streams: streams, ctx: ctx, pending: [], chunks: { mic: [], sys: [] }, t0: Date.now(), recorders: [], meters: [meter(ctx, streams.mic, 'mic'), meter(ctx, streams.sys, 'sys')] };
+      ['mic', 'sys'].forEach(function (key) {
+        var r = new MediaRecorder(streams[key], { mimeType: 'audio/webm;codecs=opus', audioBitsPerSecond: 48000 });
+        r.ondataavailable = function (e) {
+          if (!e.data.size) return;
+          if (SELFTEST) rec.chunks[key].push(e.data);
+          rec.pending.push(e.data.arrayBuffer().then(function (b) { return window.rec.append(NAMES[key], b); }));
+        };
+        r.start(3000);
+        rec.recorders.push(r);
+      });
+      rec.tick = setInterval(function () {
+        var s = Math.floor((Date.now() - rec.t0) / 1000);
+        $('clock').textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+        rec.meters.forEach(function (m) {
+          $('lv-' + m.key).style.width = pct(m.read()) + '%';
+          $('pk-' + m.key).textContent = m.peak > 0.0005 ? Math.round(pct(m.peak)) + '%' : 'тишина';
+        });
+      }, 100);
+      $('stop').disabled = false;
+      $('state').innerHTML = '<span class="dot"></span>Идёт запись. Файлы пишутся в папку: ' + dir.replace(/</g, '&lt;');
+    } catch (e) {
+      say('Не получилось начать запись: ' + e.message, true);
+      $('start').disabled = false;
+      if (SELFTEST) window.rec.selftestDone({ error: e.message });
+    }
+  }
+
+  async function stop() {
+    if (!rec) return;
+    $('stop').disabled = true;
+    clearInterval(rec.tick);
+    await Promise.all(rec.recorders.map(function (r) { return new Promise(function (ok) { r.onstop = ok; r.stop(); }); }));
+    await Promise.all(rec.pending);
+    rec.streams.mic.getTracks().concat(rec.streams.sys.getTracks()).forEach(function (t) { t.stop(); });
+    var files = await window.rec.files();
+    $('files').replaceChildren.apply($('files'), files.map(function (f) {
+      var div = document.createElement('div'); div.className = 'file';
+      var b = document.createElement('b'); b.textContent = f.name + ' — ' + (f.size / 1024).toFixed(0) + ' КБ';
+      var a = document.createElement('audio'); a.controls = true; a.src = encodeURI('file:///' + f.file.replace(/\\/g, '/'));
+      div.append(b, a); return div;
+    }));
+    $('result').hidden = false;
+    $('start').disabled = false;
+    say('Запись остановлена. Её можно сразу расшифровать ниже, в шаге 2.');
+    listRecordings();
+    var done = rec; rec = null;
+    if (SELFTEST) report(done, files);
+    done.ctx.close();
+  }
+
+  // Self-test: decodes both files and measures how loud they are, to see that sound really got in.
+  async function report(done, files) {
+    var out = { files: files.map(function (f) { return { name: f.name, kb: Math.round(f.size / 1024) }; }), live: {} };
+    done.meters.forEach(function (m) { out.live[m.key] = Math.round(pct(m.peak)); });
+    var ctx = new AudioContext();
+    for (var key of ['mic', 'sys']) {
+      try {
+        var audio = await ctx.decodeAudioData(await new Blob(done.chunks[key], { type: 'audio/webm' }).arrayBuffer());
+        var d = audio.getChannelData(0), peak = 0;
+        for (var i = 0; i < d.length; i++) peak = Math.max(peak, Math.abs(d[i]));
+        out[key] = { seconds: +audio.duration.toFixed(1), channels: audio.numberOfChannels, peak: +peak.toFixed(3) };
+      } catch (e) { out[key] = { error: e.message }; }
+    }
+    window.rec.selftestDone(out);
+  }
+
+  // A short quiet tone through the speakers: it must show up in the computer sound.
+  function beep() {
+    var ctx = new AudioContext(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 440; g.gain.value = 0.15;
+    o.connect(g).connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 1.5);
+  }
+
+  /* ---------- step 2: turning a recording into text ---------- */
+  var MODELS = [
+    ['gpt-transcribe', 'Самая новая. Только текст, без времени реплик.', true],
+    ['gpt-4o-transcribe', 'Предыдущая хорошая. Только текст.', false],
+    ['gpt-4o-mini-transcribe', 'Дешёвая. Только текст.', true],
+    ['gpt-4o-transcribe-diarize', 'Со временем каждой реплики: из двух дорожек получается разговор по порядку.', true],
+    ['whisper-1', 'Старая, тоже со временем реплик. На тишине иногда придумывает фразы.', false],
+    ['slices', 'Своя нарезка: программа сама режет дорожки по паузам, каждый кусок расшифровывает gpt-4o-mini-transcribe, разговор собирается по времени кусков. Паузы не отправляются.', true]
+  ];
+  var SLICES_NAME = 'своя нарезка · gpt-4o-mini-transcribe';
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  MODELS.forEach(function (m) {
+    var lb = el('label'), cb = el('input'), sp = el('span');
+    cb.type = 'checkbox'; cb.value = m[0]; cb.checked = m[2];
+    sp.append(el('b', null, m[0]), el('small', null, m[1]));
+    lb.append(cb, sp);
+    $('tr-models').append(lb);
+  });
+  async function listRecordings() {
+    var list = await window.rec.list();
+    $('tr-rec').replaceChildren.apply($('tr-rec'), list.map(function (r) { var o = el('option', null, r.name + ' · ' + r.kb + ' КБ'); o.value = r.name; return o; }));
+    if (!list.length) $('tr-rec').append(el('option', null, 'Записей пока нет — сначала запишите в шаге 1'));
+    return list;
+  }
+  function mmss(sec) { var s = Math.floor(sec); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+  function usage(u) {
+    if (!u) return 'расход не сообщён';
+    if (u.type === 'duration') return Math.round(u.seconds) + ' с звука';
+    if (u.type === 'tokens') return u.input_tokens + ' + ' + u.output_tokens + ' токенов';
+    return '';
+  }
+  function showResult(r) {
+    var box = el('div', 'res');
+    box.append(el('h3', null, r.model));
+    if (r.error) { box.append(el('p', 'err', r.error)); return box; }
+    box.append(el('div', 'meta', 'Ждали: микрофон ' + (r.mic.ms / 1000).toFixed(1) + ' с, звук компьютера ' + (r.sys.ms / 1000).toFixed(1) + ' с · расход: ' + usage(r.mic.usage) + ' и ' + usage(r.sys.usage)));
+    if (r.extra) box.append(el('div', 'meta', r.extra));
+    if (r.mic.noLang || r.sys.noLang) box.append(el('div', 'meta', 'Подсказку «речь на русском» модель не приняла, расшифровано без неё.'));
+    if (r.dialog) {
+      r.dialog.forEach(function (l) {
+        var row = el('div', 'line');
+        row.append(el('span', 'tm', mmss(l.start)), el('span', l.who === 'Вы' ? 'me' : 'them', l.who), el('span', null, l.text));
+        box.append(row);
+      });
+    } else {
+      [['mic', 'Микрофон (вы)'], ['sys', 'Звук компьютера (собеседник)']].forEach(function (t) {
+        var d = el('div', 'track'); d.append(el('b', null, t[1]), el('p', null, r[t[0]].text || '(тишина)')); box.append(d);
+      });
+    }
+    return box;
+  }
+  /* ---------- «своя нарезка» ---------- */
+  // Finds where a person speaks by loudness: 30 ms frames, a frame is speech if it is louder than the quiet
+  // background of this track. Short gaps inside a phrase are glued, very long phrases are cut in their longest pause.
+  // The threshold is soft and the margins are wide on purpose: a lost word is worse than a second of extra pause.
+  // A piece with less than MIN_SPEECH of loud frames is a click or a breath, not a word, and is not sent.
+  // Every quiet stretch of at least MIN_PAUSE is remembered as a pause: the timings of phrases are put on them.
+  var FRAME = 0.03, GAP = 0.8, PAD = 0.4, MIN_SPEECH = 0.3, MIN_PAUSE = 0.15, OVER_FLOOR = 7, MAX_LEN = 20, CUT_FROM = 12;
+  function findSpeech(data, rate) {
+    var size = Math.round(rate * FRAME), n = Math.floor(data.length / size), db = new Float32Array(n);
+    for (var f = 0; f < n; f++) {
+      var sum = 0;
+      for (var i = f * size; i < (f + 1) * size; i++) sum += data[i] * data[i];
+      db[f] = 10 * Math.log10(sum / size + 1e-12);
+    }
+    var sorted = Array.prototype.slice.call(db).sort(function (a, b) { return a - b; });
+    var floor = sorted[Math.floor(n * 0.2)] || -90, thr = Math.max(floor + OVER_FLOOR, -60);
+    var regions = [], pauses = [], start = -1, last = -1, loud = 0, quiet = -1;
+    for (f = 0; f < n; f++) {
+      if (db[f] < thr) { if (quiet < 0) quiet = f; continue; }
+      if (quiet >= 0 && (f - quiet) * FRAME >= MIN_PAUSE) pauses.push([quiet * FRAME, f * FRAME]);
+      quiet = -1;
+      if (start < 0) start = f;
+      else if ((f - last) * FRAME > GAP) { regions.push([start, last, loud]); start = f; loud = 0; }
+      last = f; loud++;
+    }
+    if (start >= 0) regions.push([start, last, loud]);
+    var out = [], skipped = 0, end = n * FRAME;
+    regions.forEach(function (r) {
+      if (r[2] * FRAME < MIN_SPEECH) { skipped++; return; }
+      // a, b — what is sent (with margins); sa, sb — where the speech really starts and ends (for the timings).
+      var p = { a: Math.max(0, r[0] * FRAME - PAD), b: Math.min(end, (r[1] + 1) * FRAME + PAD), sa: r[0] * FRAME, sb: (r[1] + 1) * FRAME };
+      // Wide margins may touch the previous piece: then it is one piece.
+      var prev = out[out.length - 1];
+      if (prev && p.a <= prev.b) { p.a = prev.a; p.sa = prev.sa; out.pop(); }
+      // A long phrase: cut in the longest pause between 12 and 20 seconds from its start. Cutting in the quietest
+      // single moment could fall inside a word («уроках и… курсах» lost «курсах»).
+      while (p.b - p.a > MAX_LEN) {
+        var lo = p.a + CUT_FROM, hi = p.a + MAX_LEN, best = null;
+        pauses.forEach(function (q) { if (q[0] >= lo && q[1] <= hi && (!best || q[1] - q[0] > best[1] - best[0])) best = q; });
+        if (!best) best = quietestStretch(db, lo, hi);
+        var cut = (best[0] + best[1]) / 2;
+        out.push({ a: p.a, b: cut, sa: p.sa, sb: best[0] });
+        p = { a: cut, b: p.b, sa: best[1], sb: p.sb };
+      }
+      out.push(p);
+    });
+    return { pieces: out, skipped: skipped, pauses: pauses };
+  }
+  // No pause at all between 12 and 20 seconds: the quietest quarter of a second there, never a single short moment.
+  function quietestStretch(db, lo, hi) {
+    var w = Math.round(0.24 / FRAME), from = Math.floor(lo / FRAME), to = Math.floor(hi / FRAME) - w, best = from, bestSum = Infinity;
+    for (var k = from; k <= to; k++) {
+      var s = 0;
+      for (var j = k; j < k + w; j++) s += db[j];
+      if (s < bestSum) { bestSum = s; best = k; }
+    }
+    return [best * FRAME, (best + w) * FRAME];
+  }
+  // Splits the time from start to end between parts of text. First by length, then each border moves to the nearest
+  // real pause within `reach` seconds: the phrase ends where the voice stops, and the next starts where it begins again.
+  function place(start, end, parts, pauses, reach) {
+    var total = parts.reduce(function (a, p) { return a + p.length; }, 0) || 1, inside = pauses.filter(function (q) { return q[0] > start && q[1] < end; });
+    var out = [], from = start, used = -1, acc = 0;
+    for (var i = 0; i < parts.length; i++) {
+      if (i === parts.length - 1) { out.push([from, end]); break; }
+      acc += parts[i].length;
+      var guess = start + (end - start) * acc / total, pick = -1;
+      for (var k = used + 1; k < inside.length; k++) {
+        var mid = (inside[k][0] + inside[k][1]) / 2;
+        if (Math.abs(mid - guess) <= reach && (pick < 0 || Math.abs(mid - guess) < Math.abs((inside[pick][0] + inside[pick][1]) / 2 - guess))) pick = k;
+      }
+      if (pick >= 0) { out.push([from, inside[pick][0]]); from = inside[pick][1]; used = pick; }
+      else { out.push([from, guess]); from = guess; }
+    }
+    return out;
+  }
+  // A piece as WAV, 16 kHz mono: small and understood by OpenAI without any conversion.
+  async function pieceWav(audio, a, b) {
+    var rate = 16000, len = Math.max(1, Math.ceil((b - a) * rate));
+    var off = new OfflineAudioContext(1, len, rate), src = off.createBufferSource();
+    src.buffer = audio; src.connect(off.destination); src.start(0, a, b - a);
+    var pcm = (await off.startRendering()).getChannelData(0);
+    var buf = new ArrayBuffer(44 + pcm.length * 2), v = new DataView(buf);
+    function str(o, s) { for (var i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); }
+    str(0, 'RIFF'); v.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true);
+    v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); str(36, 'data'); v.setUint32(40, pcm.length * 2, true);
+    for (var i = 0; i < pcm.length; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
+    return buf;
+  }
+  async function sliceTrack(name, track, key, ctx, progress) {
+    var t0 = Date.now(), raw = await window.rec.readTrack(name, track);
+    if (!raw || !raw.byteLength) return { text: '', segments: [], usage: null, ms: 0, pieces: 0, sent: 0, total: 0 };
+    var audio = await ctx.decodeAudioData(raw);
+    var data = audio.getChannelData(0);
+    if (audio.numberOfChannels > 1) { var r2 = audio.getChannelData(1); data = data.map(function (x, i) { return (x + r2[i]) / 2; }); }
+    var found = findSpeech(data, audio.sampleRate), segments = [], inTok = 0, outTok = 0, sent = 0, said = '';
+    for (var i = 0; i < found.pieces.length; i++) {
+      var p = found.pieces[i];
+      progress(track, i + 1, found.pieces.length);
+      // The prompt is only what this person said just before: an instruction there gets copied into the text
+      // when a piece is almost silent («Разговор на русском.» in the first test).
+      var r = await window.rec.transcribePiece(key, await pieceWav(audio, p.a, p.b), said);
+      if (r.error) throw new Error(r.error);
+      sent += p.b - p.a;
+      if (r.usage && r.usage.type === 'tokens') { inTok += r.usage.input_tokens; outTok += r.usage.output_tokens; }
+      if (r.text) { segments.push({ start: p.sa, end: p.sb, text: r.text }); said = (said + ' ' + r.text).slice(-600); }
+    }
+    return { text: segments.map(function (s) { return s.text; }).join(' '), segments: segments, ms: Date.now() - t0,
+      usage: { type: 'tokens', input_tokens: inTok, output_tokens: outTok }, pieces: found.pieces.length, skipped: found.skipped, sent: sent, total: audio.duration,
+      cuts: found.pieces.map(function (p) { return mmss(p.a) + '–' + mmss(p.b); }) };
+  }
+  function mergeDialog(mic, sys) {
+    return mic.segments.map(function (s) { return { start: s.start, who: 'Вы', text: s.text }; })
+      .concat(sys.segments.map(function (s) { return { start: s.start, who: 'Собеседник', text: s.text }; }))
+      .sort(function (a, b) { return a.start - b.start; });
+  }
+  async function runSlices(name, key) {
+    var ctx = new AudioContext(), done = { mic: '', sys: '' };
+    function progress(track, i, n) {
+      done[track] = (track === 'mic' ? 'микрофон' : 'звук компьютера') + ' ' + i + '/' + n;
+      $('tr-state').className = 'soft';
+      $('tr-state').textContent = 'Своя нарезка: ' + [done.mic, done.sys].filter(Boolean).join(', ') + '…';
+    }
+    try {
+      var both = await Promise.all([sliceTrack(name, 'mic', key, ctx, progress), sliceTrack(name, 'sys', key, ctx, progress)]);
+      var mic = both[0], sys = both[1];
+      return { model: SLICES_NAME, mic: mic, sys: sys, dialog: mergeDialog(mic, sys),
+        extra: 'Кусков: микрофон ' + mic.pieces + ' (' + mic.cuts.join(', ') + '), звук компьютера ' + sys.pieces + ' (' + sys.cuts.join(', ') + ').' +
+          ' Пропущено щелчков и вдохов: ' + (mic.skipped + sys.skipped) + '. Отправлено звука: ' + Math.round(mic.sent + sys.sent) + ' с из ' + Math.round(mic.total + sys.total) + ' с (паузы не отправлялись).' };
+    } catch (e) {
+      return { model: SLICES_NAME, error: e.message };
+    } finally { ctx.close(); }
+  }
+
+  // Words that the same model heard in the whole track but not in the pieces: a quick way to see what the cutting lost.
+  // Small differences in spelling («E60» and «Е60») also show up here, so the list needs a look by eye.
+  function words(text) { return (text.toLowerCase().replace(/ё/g, 'е').match(/[a-zа-я0-9]{2,}/g) || []); }
+  function lostWords(whole, part) {
+    var left = {};
+    words(part).forEach(function (w) { left[w] = (left[w] || 0) + 1; });
+    var lost = [];
+    words(whole).forEach(function (w) { if (left[w]) left[w]--; else if (lost.indexOf(w) === -1) lost.push(w); });
+    return lost;
+  }
+  function lostLine(whole, sl) {
+    var mic = lostWords(whole.mic.text, sl.mic.text), sys = lostWords(whole.sys.text, sl.sys.text);
+    if (!mic.length && !sys.length) return 'Сверка с gpt-4o-mini-transcribe по всей дорожке: нарезка не потеряла ни одного слова.';
+    return 'Сверка с gpt-4o-mini-transcribe по всей дорожке — есть там, но нет в нарезке: микрофон — ' + (mic.join(', ') || 'ничего') + '; звук компьютера — ' + (sys.join(', ') || 'ничего') + '.';
+  }
+
+  async function transcribe(models) {
+    var name = $('tr-rec').value, key = $('tr-key').value;
+    $('tr-go').disabled = true; $('tr-out').replaceChildren();
+    var plain = models.filter(function (m) { return m !== 'slices'; });
+    var res = plain.length ? await window.rec.transcribe(name, key, plain) : { results: [] };
+    if (!res.error && models.indexOf('slices') !== -1) {
+      var sl = await runSlices(name, key);
+      var whole = res.results.find(function (r) { return r.model === 'gpt-4o-mini-transcribe' && !r.error; });
+      if (whole && !sl.error) sl.extra += ' ' + lostLine(whole, sl);
+      res.results.push(sl);
+    }
+    $('tr-go').disabled = false;
+    if (res.error) { $('tr-state').textContent = res.error; $('tr-state').className = 'err'; return res; }
+    await window.rec.saveReport(name, res.results);
+    $('tr-state').className = 'soft';
+    $('tr-state').textContent = 'Готово. Всё это сохранено в файл «расшифровка.md» рядом с записью.';
+    res.results.forEach(function (r) { $('tr-out').append(showResult(r)); });
+    var fb = el('button', null, 'Открыть папку с записью');
+    fb.type = 'button'; fb.style.marginTop = '12px';
+    fb.addEventListener('click', function () { window.rec.openFolder(name); });
+    $('tr-out').append(fb);
+    return res;
+  }
+  window.rec.onProgress(function (model) { $('tr-state').className = 'soft'; $('tr-state').textContent = 'Расшифровывает ' + model + '…'; });
+  $('tr-go').addEventListener('click', function () {
+    var models = Array.prototype.map.call(document.querySelectorAll('#tr-models input:checked'), function (c) { return c.value; });
+    if (!models.length) { $('tr-state').textContent = 'Отметьте хотя бы одну модель.'; return; }
+    transcribe(models);
+  });
+
+  $('start').addEventListener('click', start);
+  $('stop').addEventListener('click', stop);
+  $('folder').addEventListener('click', function () { window.rec.openFolder(); });
+  /* ---------- step 3: the summary ---------- */
+  var MONTHS_SHORT = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  function dayText(iso) {
+    var m = String(iso || '').match(/^(\d{4})-(\d\d)-(\d\d)$/);
+    return m ? +m[3] + ' ' + MONTHS_SHORT[m[2] - 1] : '';
+  }
+  async function showSource() {
+    var info = await window.rec.dialogInfo($('tr-rec').value);
+    var n = info && info.lines, m10 = n % 10, m100 = n % 100;
+    var word = m10 === 1 && m100 !== 11 ? 'реплика' : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? 'реплики' : 'реплик';
+    $('sum-src').textContent = info ? 'Разговор для итогов: ' + n + ' ' + word + ', расшифровка «' + info.source + '».' :'У выбранной записи ещё нет разговора по времени: сначала расшифруйте её в шаге 2.';
+    return info;
+  }
+  $('tr-rec').addEventListener('change', showSource);
+  function showSummary(o) {
+    var s = o.summary, box = el('div', 'res sum');
+    box.append(el('div', 'meta', o.model + ' · размышления ' + o.effort + ' · ждали ' + (o.ms / 1000).toFixed(1) + ' с · ' + o.tokens.input + ' + ' + o.tokens.output + ' токенов · стоило $' + o.usd.toFixed(4)));
+    box.append(el('h4', null, 'Кратко'), el('p', null, s.brief));
+    box.append(el('h4', null, 'Решили'));
+    if (s.decisions.length) { var ul = el('ul'); s.decisions.forEach(function (d) { ul.append(el('li', null, d)); }); box.append(ul); } else box.append(el('p', 'soft', 'Ничего не решили.'));
+    box.append(el('h4', null, 'Следующие шаги'));
+    if (s.steps.length) {
+      var ul2 = el('ul');
+      s.steps.forEach(function (x) {
+        var li = el('li', null, x.title);
+        li.append(el('span', 'tag', (x.who === 'me' ? 'Вы' : x.who === 'both' ? 'Вместе' : 'Собеседник') + (x.name ? ' · ' + x.name : '')));
+        if (x.due || x.due_text) li.append(el('span', 'tag', 'срок: ' + (dayText(x.due) || '') + (x.due_text ? ' («' + x.due_text + '»)' : '')));
+        ul2.append(li);
+      });
+      box.append(ul2);
+    } else box.append(el('p', 'soft', 'Никто ничего не обещал.'));
+    box.append(el('h4', null, 'Договорились созвониться'));
+    if (s.meetings.length) {
+      var ul3 = el('ul');
+      s.meetings.forEach(function (m) {
+        ul3.append(el('li', null, m.title + ' — ' + (dayText(m.date) || 'день не назван') + (m.from ? ', ' + m.from + (m.to ? '–' + m.to : '') : '') + ' («' + m.when_text + '»)'));
+      });
+      box.append(ul3);
+    } else box.append(el('p', 'soft', 'Новых созвонов не назначили.'));
+    return box;
+  }
+  async function summarize() {
+    var name = $('tr-rec').value;
+    $('sum-go').disabled = true;
+    $('sum-state').className = 'soft'; $('sum-state').textContent = 'Пишу итоги…';
+    var o = await window.rec.summarize(name, $('tr-key').value, { title: $('sum-title').value, model: $('sum-model').value, effort: $('sum-effort').value });
+    $('sum-go').disabled = false;
+    if (o.error) { $('sum-state').className = 'err'; $('sum-state').textContent = o.error; return o; }
+    $('sum-state').textContent = 'Готово. Итоги сохранены в «итоги.md» рядом с записью (последние итоги заменяют прошлые).';
+    $('sum-out').prepend(showSummary(o));
+    return o;
+  }
+  $('sum-go').addEventListener('click', summarize);
+
+  /* ---------- a file: text from an audio or video file ---------- */
+  // The whole file is read into the window, its sound is decoded at 16 kHz (enough for speech, and 3 times less memory),
+  // then cut at pauses like the calls and sent in pieces, four at a time.
+  var PER_MIN = { 'gpt-4o-mini-transcribe': 0.003, 'gpt-transcribe': 0.0045, 'gpt-4o-transcribe': 0.006 };
+  var mf = { file: null };
+  function setFile(info) {
+    if (!info) return;
+    if (info.error) { $('mf-name').textContent = info.error; $('mf-name').className = 'err'; mf.file = null; $('mf-go').disabled = true; return; }
+    mf.file = info.file;
+    $('mf-name').className = 'soft';
+    $('mf-name').textContent = info.name + ' · ' + (info.size / 1048576).toFixed(1) + ' МБ';
+    $('mf-go').disabled = false;
+  }
+  $('mf-pick').addEventListener('click', async function () { setFile(await window.rec.pickFile()); });
+  document.addEventListener('dragover', function (e) { e.preventDefault(); });
+  document.addEventListener('drop', function (e) { e.preventDefault(); });
+  $('mf-card').addEventListener('dragover', function () { $('mf-card').classList.add('over'); });
+  $('mf-card').addEventListener('dragleave', function (e) { if (!$('mf-card').contains(e.relatedTarget)) $('mf-card').classList.remove('over'); });
+  $('mf-card').addEventListener('drop', async function (e) {
+    $('mf-card').classList.remove('over');
+    var f = e.dataTransfer.files[0];
+    if (f) setFile(await window.rec.mediaInfo(window.rec.pathOf(f)));
+  });
+
+  function stamp(sec, comma) {
+    var ms = Math.round(sec * 1000), h = Math.floor(ms / 3600000), m = Math.floor(ms / 60000) % 60, s = Math.floor(ms / 1000) % 60;
+    var p = function (n, w) { return String(n).padStart(w || 2, '0'); };
+    return comma ? p(h) + ':' + p(m) + ':' + p(s) + ',' + p(ms % 1000, 3) : (h ? h + ':' : '') + p(m) + ':' + p(s) + ',' + Math.floor(ms % 1000 / 100);
+  }
+  // A piece can hold several sentences: their borders are put on the real pauses inside the piece (see place).
+  // A long piece may be cut in a pause in the middle of a sentence («что вы хотите, | и проверять результат»):
+  // the two halves are glued back into one phrase.
+  function sentences(segments, pauses) {
+    var out = [];
+    segments.forEach(function (s) {
+      var parts = s.text.split(/(?<=[.!?…])\s+/).filter(Boolean);
+      place(s.start, s.end, parts, pauses, 3).forEach(function (t, i) {
+        var prev = out[out.length - 1];
+        if (i === 0 && prev && !/[.!?…]["»)]?$/.test(prev.text) && t[0] - prev.end < 1.5) { prev.text += ' ' + parts[0]; prev.end = t[1]; }
+        else out.push({ start: t[0], end: t[1], text: parts[i] });
+      });
+    });
+    return out;
+  }
+  // Splits text in two where it reads best: at a comma, dash, colon or semicolon nearest the middle;
+  // without punctuation — at the space nearest the middle.
+  function halves(text, max) {
+    var mid = text.length / 2, best = -1, re = /[,;:]\s|\s[—–-]\s/g, m;
+    while ((m = re.exec(text))) { var at = m[0][0] === ' ' ? m.index : m.index + 1; if (best < 0 || Math.abs(at - mid) < Math.abs(best - mid)) best = at; }
+    // A comma far from the middle makes one half tiny or one line too long: then the space nearest the middle is better.
+    if (best < text.length * 0.25 || best > text.length * 0.75 || (max && Math.max(best, text.length - best) > max)) {
+      best = -1;
+      for (var i = 0; i < text.length; i++) if (text[i] === ' ' && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+    }
+    return best <= 0 ? [text] : [text.slice(0, best).trim(), text.slice(best).trim()];
+  }
+  function chunks(text, max) {
+    if (text.length <= max) return [text];
+    var h = halves(text);
+    return h.length < 2 ? [text] : chunks(h[0], max).concat(chunks(h[1], max));
+  }
+  // Subtitles: at most two lines of about 42 letters; a longer sentence becomes several subtitles,
+  // split at commas and dashes, and their times are put on the pauses too.
+  function srt(cues, pauses) {
+    var out = [], n = 0;
+    cues.forEach(function (c) {
+      var parts = chunks(c.text, 84);
+      place(c.start, c.end, parts, pauses, 1.5).forEach(function (t, i) {
+        var lines = parts[i].length > 42 ? halves(parts[i], 44) : [parts[i]];
+        out.push(++n + '\n' + stamp(t[0], true) + ' --> ' + stamp(t[1], true) + '\n' + lines.join('\n') + '\n');
+      });
+    });
+    return out.join('\n');
+  }
+
+  async function transcribeFile(file, key, model) {
+    var t0 = Date.now();
+    $('mf-state').className = 'soft'; $('mf-state').textContent = 'Читаю файл и достаю звук…';
+    var r = await window.rec.readMedia(file);
+    if (r.error) throw new Error(r.error);
+    var audio;
+    try { audio = await new OfflineAudioContext(1, 1, 16000).decodeAudioData(r.data); }
+    catch (e) { throw new Error('Не получилось достать звук из этого файла (' + e.message + '). Возможно, в нём нет звуковой дорожки или такой формат не открывается.'); }
+    r = null;
+    var decodeMs = Date.now() - t0, mono = audio.getChannelData(0);
+    if (audio.numberOfChannels > 1) {
+      mono = new Float32Array(audio.length);
+      for (var c = 0; c < audio.numberOfChannels; c++) { var ch = audio.getChannelData(c); for (var i = 0; i < ch.length; i++) mono[i] += ch[i] / audio.numberOfChannels; }
+    }
+    var found = findSpeech(mono, audio.sampleRate), pieces = found.pieces, n = pieces.length;
+    if (!n) throw new Error('В файле не нашлось речи: звук есть, но он слишком тихий или это только музыка.');
+    var texts = new Array(n), next = 0, finished = 0, inTok = 0, outTok = 0, sent = 0;
+    function before(i) { var s = ''; for (var j = 0; j < i; j++) if (texts[j]) s += ' ' + texts[j]; return s.slice(-600).trim(); }
+    async function worker() {
+      while (next < n) {
+        var i = next++, p = pieces[i];
+        var res = await window.rec.transcribePiece(key, await pieceWav(audio, p.a, p.b), before(i), model);
+        if (res.error) throw new Error(res.error);
+        texts[i] = res.text; sent += p.b - p.a;
+        if (res.usage && res.usage.type === 'tokens') { inTok += res.usage.input_tokens; outTok += res.usage.output_tokens; }
+        $('mf-state').textContent = 'Расшифровано кусков: ' + (++finished) + ' из ' + n + '…';
+      }
+    }
+    $('mf-state').textContent = 'Нашёл кусков с речью: ' + n + '. Расшифровываю…';
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    var segments = pieces.map(function (p, i) { return { start: p.sa, end: p.sb, text: texts[i] || '' }; }).filter(function (s) { return s.text; });
+    var cues = sentences(segments, found.pauses);
+    return { model: model, duration: audio.duration, decodeMs: decodeMs, ms: Date.now() - t0, pieces: n, sent: sent, tokens: { input: inTok, output: outTok },
+      cuts: pieces.map(function (p) { return stamp(p.a) + '–' + stamp(p.b); }), pauses: found.pauses.map(function (q) { return stamp(q[0]) + '–' + stamp(q[1]); }),
+      text: segments.map(function (s) { return s.text; }).join(' '), cues: cues, srt: srt(cues, found.pauses),
+      timings: cues.map(function (c) { return stamp(c.start) + ' – ' + stamp(c.end) + '  ' + c.text; }).join('\n') };
+  }
+  function copyBtn(label, text) {
+    var b = el('button', null, label); b.type = 'button';
+    b.addEventListener('click', function () { navigator.clipboard.writeText(text); b.textContent = 'Скопировано'; setTimeout(function () { b.textContent = label; }, 1500); });
+    return b;
+  }
+  function showFile(o, folder) {
+    var box = el('div', 'res'), mins = o.sent / 60;
+    var info = 'Длина ' + stamp(o.duration) + ' · звук достали за ' + (o.decodeMs / 1000).toFixed(1) + ' с · кусков ' + o.pieces + ' · отправлено ' + Math.round(o.sent) + ' с речи · всего ' + (o.ms / 1000).toFixed(1) + ' с · ' +
+      o.tokens.input + ' + ' + o.tokens.output + ' токенов · примерно $' + (mins * PER_MIN[o.model]).toFixed(4) + ' (по чужой цене $' + PER_MIN[o.model] + ' за минуту)';
+    box.append(el('div', 'meta', info));
+    var ta = el('textarea', 'mf-text'); ta.value = o.text; ta.readOnly = true;
+    var row = el('div', 'row'), fb = el('button', null, 'Открыть папку с файлами');
+    fb.type = 'button'; fb.addEventListener('click', function () { window.rec.openFolder(folder); });
+    row.append(copyBtn('Копировать текст', o.text), copyBtn('Копировать тайминги', o.timings), fb);
+    box.append(el('b', null, 'Текст'), ta, row, el('h4', null, 'Тайминги'));
+    o.cues.forEach(function (c) { var d = el('div', 'cue'); d.append(el('span', null, stamp(c.start) + ' – ' + stamp(c.end)), el('span', null, c.text)); box.append(d); });
+    return box;
+  }
+  async function runFile() {
+    if (!mf.file) return null;
+    $('mf-go').disabled = true; $('mf-out').replaceChildren();
+    try {
+      var o = await transcribeFile(mf.file, $('tr-key').value, $('mf-model').value);
+      var folder = await window.rec.saveMediaText({ text: o.text, timings: o.timings, srt: o.srt,
+        info: 'Модель: ' + o.model + '\nДлина: ' + stamp(o.duration) + '\nКусков: ' + o.pieces + ', отправлено ' + Math.round(o.sent) + ' с речи\nТокенов: ' + o.tokens.input + ' + ' + o.tokens.output });
+      $('mf-state').textContent = 'Готово. Текст, тайминги и субтитры (субтитры.srt) сохранены в папке «' + folder + '».';
+      $('mf-out').append(showFile(o, folder));
+      return o;
+    } catch (e) {
+      $('mf-state').className = 'err'; $('mf-state').textContent = e.message;
+      return { error: e.message };
+    } finally { $('mf-go').disabled = false; }
+  }
+  $('mf-go').addEventListener('click', runFile);
+
+  // Loudness of the newest recording by quarter seconds, to tune the cutting without spending anything.
+  async function vadReport(name) {
+    var ctx = new AudioContext(), out = {};
+    for (var track of ['mic', 'sys']) {
+      var audio = await ctx.decodeAudioData(await window.rec.readTrack(name, track)), d = audio.getChannelData(0), rate = audio.sampleRate;
+      var step = Math.round(rate * 0.25), levels = [];
+      for (var i = 0; i + step <= d.length; i += step) {
+        var s = 0; for (var j = i; j < i + step; j++) s += d[j] * d[j];
+        levels.push(Math.round(10 * Math.log10(s / step + 1e-12)));
+      }
+      var f = findSpeech(d, rate);
+      out[track] = { levels: levels.join(' '), pieces: f.pieces.map(function (p) { return p.a.toFixed(2) + '–' + p.b.toFixed(2); }), skipped: f.skipped };
+    }
+    return out;
+  }
+  listRecordings().then(async function (list) {
+    if (list.length) showSource();
+    var sf = new URLSearchParams(location.search).get('selftestFile');
+    if (sf) {
+      setFile(await window.rec.mediaInfo(sf));
+      var o = await runFile();
+      window.rec.selftestDone(o && !o.error ? { decodeMs: o.decodeMs, duration: +o.duration.toFixed(2), pieces: o.pieces, cuts: o.cuts, pauses: o.pauses, sent: +o.sent.toFixed(1), cues: o.cues.length,
+        text: o.text, timings: o.timings, srtHead: o.srt.slice(0, 300), state: $('mf-state').textContent } : { error: o ? o.error : $('mf-name').textContent });
+      return;
+    }
+    if (new URLSearchParams(location.search).has('selftestVad')) { window.rec.selftestDone(await vadReport(list[0].name)); return; }
+    if (new URLSearchParams(location.search).has('selftestSum')) {
+      $('sum-title').value = 'Дима, правки монтажа';
+      var o = await summarize();
+      window.rec.selftestDone({ src: $('sum-src').textContent, state: $('sum-state').textContent, shown: document.querySelectorAll('.sum').length, result: o });
+      return;
+    }
+    if (!new URLSearchParams(location.search).has('selftestTr')) return;
+    if (!list.length) { window.rec.selftestDone({ error: 'no recordings' }); return; }
+    var res = await transcribe(MODELS.map(function (m) { return m[0]; }));
+    window.rec.selftestDone({ shown: document.querySelectorAll('.res').length, state: $('tr-state').textContent, results: res.results && res.results.map(function (r) {
+      return r.error ? { model: r.model, error: r.error } : { model: r.model, dialog: r.dialog && r.dialog.length, mic: r.mic.text, sys: r.sys.text, extra: r.extra };
+    }) });
+  });
+  listMics().then(async function () {
+    if (!SELFTEST) return;
+    await start();
+    setTimeout(beep, 1000);
+    setTimeout(stop, 4500);
+  });
+})();
+</script>
+</body>
+</html>
