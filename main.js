@@ -424,7 +424,7 @@ function fail(e) {
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
 const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir',
-  'media-pick', 'media-info', 'media-read', 'transcribe-piece', 'transcript-list', 'transcript-get']);
+  'media-pick', 'media-info', 'media-read', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
@@ -1618,7 +1618,8 @@ handle('chat-image-open', async (chatId, stored) => {
    the pieces here one by one (transcribe-piece); OpenAI turns each into text with the user's ChatGPT key. Only the pieces
    with speech are sent, so the 25 MB limit of OpenAI does not matter and a long video works too.
    Transcription is priced by minutes of sound; these are estimates, the spending counts them like answers of the assistant. */
-const TRANSCRIBE_MODELS = { 'gpt-4o-mini-transcribe': 0.003, 'gpt-transcribe': 0.0045, 'gpt-4o-transcribe': 0.006 };
+const TRANSCRIBE_MODELS = { 'gpt-4o-mini-transcribe': 0.003, 'gpt-transcribe': 0.0045, 'gpt-4o-transcribe': 0.006, 'gpt-4o-transcribe-diarize': 0.006 };
+const DIARIZE_MODEL = 'gpt-4o-transcribe-diarize';
 const MEDIA_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', '3gp', 'mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac'];
 const AUDIO_ONLY = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac'];
 const MEDIA_MAX = 2 * 1024 * 1024 * 1024;   // the window holds the whole file while it takes the sound out
@@ -1653,7 +1654,7 @@ handle('media-read', async (file) => {
 handle('transcribe-piece', async (wav, prompt, model, seconds) => {
   if (!keys.openai) return { ok: false, error: 'Для расшифровки нужен ключ ChatGPT: «Настройки» → «API-ключи».', noKey: true };
   if (!wav || !(wav.byteLength > 44) || wav.byteLength > 24 * 1024 * 1024) return { ok: false, error: 'Кусок звука не подошёл.' };
-  const id = TRANSCRIBE_MODELS[model] ? model : 'gpt-4o-mini-transcribe';
+  const id = TRANSCRIBE_MODELS[model] ? model : 'gpt-transcribe';
   const client = new OpenAI({ apiKey: keys.openai, maxRetries: 2, timeout: 5 * 60 * 1000 });
   const body = { file: await toFile(Buffer.from(wav), 'piece.wav', { type: 'audio/wav' }), model: id, response_format: 'json', language: 'ru' };
   if (prompt) body.prompt = String(prompt).slice(-800);
@@ -1666,6 +1667,36 @@ handle('transcribe-piece', async (wav, prompt, model, seconds) => {
     // Only the code goes to the log: the text of a service error may contain a piece of the key.
     console.error('transcribe', e && e.status, e && (e.code || e.type));
     return { ok: false, error: modelError(e) || 'OpenAI не расшифровал кусок. Попробуйте ещё раз.' };
+  }
+});
+// Several voices: a long part of the recording (up to about 9 minutes, a 16 kHz WAV) goes to the diarize model, which
+// returns phrases with who says them. refs: [{ name, data }] — 2–10 seconds of each voice already met (a WAV data URL),
+// so in the next part the same people keep their names; OpenAI takes up to 4 of them.
+handle('transcribe-diarize', async (wav, refs, seconds) => {
+  if (!keys.openai) return { ok: false, error: 'Для расшифровки нужен ключ ChatGPT: «Настройки» → «API-ключи».', noKey: true };
+  if (!wav || !(wav.byteLength > 44) || wav.byteLength > 24.5 * 1024 * 1024) return { ok: false, error: 'Часть записи не подошла.' };
+  const client = new OpenAI({ apiKey: keys.openai, maxRetries: 2, timeout: 10 * 60 * 1000 });
+  const known = (Array.isArray(refs) ? refs : []).filter((r) => r && typeof r.name === 'string' && /^data:audio\/wav;base64,/.test(String(r.data))).slice(0, 4);
+  const body = async (lang) => {
+    const b = { file: await toFile(Buffer.from(wav), 'part.wav', { type: 'audio/wav' }), model: DIARIZE_MODEL, response_format: 'diarized_json', chunking_strategy: 'auto' };
+    if (lang) b.language = 'ru';
+    if (known.length) { b.known_speaker_names = known.map((r) => r.name.slice(0, 40)); b.known_speaker_references = known.map((r) => r.data); }
+    return b;
+  };
+  try {
+    let r;
+    try { r = await client.audio.transcriptions.create(await body(true)); } catch (e) {
+      // The model may not take the language hint: then once more without it.
+      if (e.status !== 400 || !/language/i.test(String(e.error && e.error.message || e.message))) throw e;
+      r = await client.audio.transcriptions.create(await body(false));
+    }
+    const segments = (r.segments || []).map((s) => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || '').trim(), speaker: String(s.speaker || '') })).filter((s) => s.text);
+    const usd = Math.max(0, Number(seconds) || 0) / 60 * TRANSCRIBE_MODELS[DIARIZE_MODEL];
+    if (usd > 0) { const sp = spendOf('openai'); sp.monthUsd += usd; sp.sinceUsd += usd; saveSettings(); }
+    return { ok: true, segments, usd };
+  } catch (e) {
+    console.error('diarize', e && e.status, e && (e.code || e.type));
+    return { ok: false, error: modelError(e) || 'OpenAI не расшифровал часть записи. Попробуйте ещё раз.' };
   }
 });
 handle('transcript-list', async () => ({ ok: true, transcripts: store.transcriptList() }));

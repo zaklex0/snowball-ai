@@ -15,7 +15,7 @@ module.exports = async function ({ main, page, shot, demo }) {
   await ev(`vsApi.saveProfile({ name: 'Гость' })`);
   const day = 864e5;
   await ev(`(async () => {
-    const mk = (id, name, kind, dur, text, ago) => vsApi.transcriptSave({ id, name, kind, source: '', duration: dur, model: 'gpt-4o-mini-transcribe', text,
+    const mk = (id, name, kind, dur, text, ago) => vsApi.transcriptSave({ id, name, kind, source: '', duration: dur, model: 'gpt-transcribe', text,
       cues: [{ start: 0, end: dur, text }], createdAt: Date.now() - ago });
     await mk('tguide1camera', 'урок 2 — движение камеры.m4a', 'audio', 755, 'Сегодня разбираем, как писать промты, чтобы камера двигалась так, как вы задумали.', ${day});
     await mk('tguide2reels', 'рилс — оживляем фото.mp4', 'video', 58, 'Старые фото оживают за минуту. Смотрите, как это делается в нейросети.', ${day * 1.2});
@@ -35,11 +35,22 @@ module.exports = async function ({ main, page, shot, demo }) {
   await click('.nav-icon[data-page=transcribe]');
   await sleep(400);
   // 2. The empty page.
-  await shot('02-empty', { drop: '.tr-drop', pick: '.tr-drop .btn', hist: '.tr-hist', help: '.tr-help' });
+  await shot('02-empty', { drop: '.tr-drop', pick: '.tr-drop .btn', hist: '.tr-hist', help: '.tr-help', newBtn: '#tr-new' });
   // 3. A file is picked.
   await click('.tr-drop .btn');
   await until('!!document.querySelector(".tr-file")');
-  await shot('03-file', { model: '.tr-opts select', go: '.tr-opts .btn-primary', remove: '.tr-file-h .btn' });
+  await shot('03-file', { model: '.tr-mbtn', go: '.tr-opts .btn-primary', remove: '.tr-file-h .btn' });
+  // The model list open, the mouse on the «!» of «Диалог»: its hint is shown.
+  await click('.tr-mbtn');
+  await sleep(300);
+  const why = await ev(`(() => { const w = document.querySelectorAll('.tr-why')[2].getBoundingClientRect(); return [w.x + w.width / 2, w.y + w.height / 2]; })()`);
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: why[0] - 60, y: why[1] });
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: why[0], y: why[1] });
+  await sleep(400);
+  await shot('03b-models', { list: '.tr-mmenu', why: '.tr-mrow:nth-child(3) .tr-why', tip: '.tr-mrow:nth-child(3) .tr-tip' });
+  await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 810 });
+  await click('.tr-mbtn');
+  await sleep(300);
   // 4. Working.
   await click('.tr-opts .btn-primary');
   await until('document.querySelector(".tr-prog .tr-soft") && /Нашёл кусков/.test(document.querySelector(".tr-prog .tr-soft").textContent)', 30000);
@@ -52,7 +63,7 @@ module.exports = async function ({ main, page, shot, demo }) {
   await shot('05-result', { sub: '.tr-sub', strip: '.tr-tl', tabs: '.tr-tabs .tr-seg' });
   // 6. The text and the buttons under it.
   await ev(`(() => { document.getElementById('scroller').scrollTop = 99999; return 1; })()`);
-  await shot('06-text', { text: '.tr-text', srt: { sel: '.tr-acts .btn', text: 'Субтитры' }, prompt: { sel: '.tr-acts .btn', text: 'В промт' }, llm: { sel: '.tr-acts .btn', text: 'Спросить' } });
+  await shot('06-text', { text: '.tr-text', srt: { sel: '.tr-acts .btn', text: 'Субтитры' }, llm: { sel: '.tr-acts .btn', text: 'Спросить' } });
   // 7. «Тайминги».
   await tab(1);
   await sleep(300);

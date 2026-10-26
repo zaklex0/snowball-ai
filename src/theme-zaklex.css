@@ -132,6 +132,9 @@
 
 /* ---------- menus and pop-ups ---------- */
 :where(html[data-theme="zaklex"]) :is(.menu, .model-menu, .tcol-pop) { border: 3px solid var(--zx-paper); }
+:where(html[data-theme="zaklex"]) .tr-tip { border: 3px solid var(--zx-paper); box-shadow: 6px 6px 0 var(--zx-cyan); }
+:where(html[data-theme="zaklex"]) .tr-mbtn { border-width: 2px; }
+:where(html[data-theme="zaklex"]) :is(.tr-why:hover, .tr-why:focus-visible) { background: var(--zx-paper); color: var(--zx-ink); }
 :where(html[data-theme="zaklex"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub, .tcol-pop button:hover, .tcol-pop button:focus-visible) { background: var(--zx-paper); color: var(--zx-ink); }
 :where(html[data-theme="zaklex"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub) :is(svg, .sub-value, .sub-chev, .tick) { color: var(--zx-ink); }
 :where(html[data-theme="zaklex"]) :is(.menu hr, .model-menu hr) { border-top-width: 3px; }

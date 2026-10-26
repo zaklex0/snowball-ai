@@ -280,11 +280,17 @@
           </header>
           <div class="tr-layout">
             <div class="tr-main" id="tr-main"></div>
+            <div class="tr-side">
+            <button type="button" class="btn btn-primary tr-new" id="tr-new" title="Выбрать новый файл для расшифровки">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              Новая транскрибация
+            </button>
             <aside class="tr-hist card" aria-labelledby="tr-hist-title">
               <p class="side-h" id="tr-hist-title">История</p>
               <label class="tr-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg><input id="tr-search" type="search" placeholder="Поиск по тексту и названию" autocomplete="off" aria-label="Поиск по расшифровкам"></label>
               <div class="tr-list" id="tr-list"></div>
             </aside>
+            </div>
           </div>
         </section>
 

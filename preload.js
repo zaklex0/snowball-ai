@@ -110,6 +110,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   mediaInfo: (file) => ipcRenderer.invoke('media-info', file),
   mediaRead: (file) => ipcRenderer.invoke('media-read', file),
   transcribePiece: (wav, prompt, model, seconds) => ipcRenderer.invoke('transcribe-piece', wav, prompt, model, seconds),
+  transcribeDiarize: (wav, refs, seconds) => ipcRenderer.invoke('transcribe-diarize', wav, refs, seconds),
   transcriptList: () => ipcRenderer.invoke('transcript-list'),
   transcriptGet: (id) => ipcRenderer.invoke('transcript-get', id),
   transcriptSave: (t) => ipcRenderer.invoke('transcript-save', t),

@@ -54,9 +54,10 @@
   // open — the transcription on the screen (with cues and pauses); view — "text", "cues" or "sum".
   var tr = {
     list: [], q: "", file: null, open: null, view: "text", fmt: "plain", busy: false, stop: false,
-    prog: 0, progText: "", error: "", sumBusy: false, model: "gpt-4o-mini-transcribe", subs: null
+    prog: 0, progText: "", error: "", sumBusy: false, model: "gpt-transcribe", subs: null
   };
-  try { tr.model = localStorage.getItem("trModel") || tr.model; tr.fmt = localStorage.getItem("trFmt") || tr.fmt; } catch (e) { /* defaults */ }
+  // trModel2: the choice remembered since GPT transcribe became the main model (the old trModel was mostly mini).
+  try { tr.model = localStorage.getItem("trModel2") || tr.model; tr.fmt = localStorage.getItem("trFmt") || tr.fmt; } catch (e) { /* defaults */ }
 
   var $ = function (id) { return document.getElementById(id); };
   var els = {
@@ -115,6 +116,7 @@
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/></svg>',
     check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
     chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+    alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5"/><path d="M12 16.5h.01"/></svg>',
     pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>',
     clip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.2-8.2a3.3 3.3 0 0 1 4.7 4.7l-8.2 8.2a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/></svg>',
     plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
@@ -4142,15 +4144,23 @@
 
   /* ---------- «Транскрибация»: text, timings and subtitles of an audio or video file ----------
      The window reads the file and takes its sound out itself (WebAudio at 16 kHz: enough for speech), finds where the voice
-     is by loudness, cuts it at pauses and sends the pieces to main.js four at a time; gpt-4o-mini-transcribe (or another
+     is by loudness, cuts it at pauses and sends the pieces to main.js four at a time; gpt-transcribe (or another
      model) turns each into text. Only the pieces with speech are sent. The borders of phrases and subtitles are then put
      on the real pauses of the voice. Checked in tools/record-test (the test program) before it came here. */
+  // note: where the model is best, in two or three words (shown in the list and under it); when: when to pick it, in
+  // the hint of the «!» next to it. speakers: the model tells voices apart; its own text is weaker, so the text is
+  // written by `text` (the strongest model) on the same recording.
   var TR_MODELS = [
-    { id: "gpt-4o-mini-transcribe", name: "GPT-4o mini transcribe — точнее всех в проверке", perMin: 0.003 },
-    { id: "gpt-transcribe", name: "GPT transcribe — самая новая", perMin: 0.0045 },
-    { id: "gpt-4o-transcribe", name: "GPT-4o transcribe", perMin: 0.006 }
+    { id: "gpt-transcribe", name: "GPT transcribe", note: "основная, точнее всех", perMin: 0.0045,
+      when: "Когда говорит один человек: урок, ролик, озвучка, голосовая заметка. Точнее всех в словах и знаках препинания. Не знаете, что выбрать, — берите её." },
+    { id: "gpt-4o-mini-transcribe", name: "GPT-4o mini transcribe", note: "дешевле, бывают повторы", perMin: 0.003,
+      when: "Когда нужно подешевле, а важен общий смысл: например, длинная запись для себя. Иногда вставляет уже сказанный кусок второй раз — перечитайте текст." },
+    { id: "gpt-4o-transcribe-diarize", name: "Диалог (diarize + GPT transcribe)", note: "несколько собеседников", perMin: 0.006, speakers: true, text: "gpt-transcribe",
+      when: "Когда говорят двое и больше: интервью, созвон, подкаст, круглый стол. Подпишет «Собеседник 1», «Собеседник 2»…, лучше всего различает до 4 голосов; текст напишет GPT transcribe. Дольше и примерно вдвое дороже." }
   ];
   function trModel(id) { return TR_MODELS.find(function (m) { return m.id === id; }) || TR_MODELS[0]; }
+  // Per minute of speech; with several voices both models are paid.
+  function trPrice(m) { return Math.round((m.perMin + (m.text ? trModel(m.text).perMin : 0)) * 10000) / 10000; }
   function stemOf(name) { return String(name || "").replace(/\.[^.]+$/, ""); }
   function trId() { return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
   // 00:12,4 for the screen and the timings; 00:00:12,400 for .srt.
@@ -4242,14 +4252,15 @@
   }
   function splitSentences(text) { return String(text || "").trim().split(/(?<=[.!?…])\s+/).filter(Boolean); }
   // Pieces → phrases. A long piece may be cut in a pause in the middle of a sentence: the halves are glued back.
+  // A piece with a speaker gives phrases with it; halves are glued only when it is the same person.
   function sentencesOf(segments, pauses) {
     var out = [];
     segments.forEach(function (s) {
       var parts = splitSentences(s.text);
       placeParts(s.start, s.end, parts, pauses, 3).forEach(function (t, i) {
         var prev = out[out.length - 1];
-        if (i === 0 && prev && !/[.!?…]["»)]?$/.test(prev.text) && t[0] - prev.end < 1.5) { prev.text += " " + parts[0]; prev.end = t[1]; }
-        else out.push({ start: t[0], end: t[1], text: parts[i] });
+        if (i === 0 && prev && prev.speaker === s.speaker && !/[.!?…]["»)]?$/.test(prev.text) && t[0] - prev.end < 1.5) { prev.text += " " + parts[0]; prev.end = t[1]; }
+        else { var c = { start: t[0], end: t[1], text: parts[i] }; if (s.speaker) c.speaker = s.speaker; out.push(c); }
       });
     });
     return out;
@@ -4274,7 +4285,7 @@
   function subtitlesOf(t) {
     var out = [];
     t.cues.forEach(function (c) {
-      var parts = chunksOf(c.text, 84);
+      var parts = chunksOf(cueText(c), 84);
       placeParts(c.start, c.end, parts, t.pauses || [], 1.5).forEach(function (x, i) {
         out.push({ start: x[0], end: x[1], text: (parts[i].length > 42 ? halves(parts[i], 44) : [parts[i]]).join("\n") });
       });
@@ -4286,8 +4297,104 @@
   }
   function timingsOf(t, fmt) {
     return t.cues.map(function (c) {
-      return fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "] " + c.text : trTime(c.start) + " – " + trTime(c.end) + "  " + c.text;
+      return fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "] " + cueText(c) : trTime(c.start) + " – " + trTime(c.end) + "  " + cueText(c);
     }).join("\n");
+  }
+  // With several voices every phrase says who it is: «Собеседник 1: …».
+  function cueText(c) { return c.speaker ? c.speaker + ": " + c.text : c.text; }
+  // Phrases of the same person in a row make one paragraph «Собеседник 1: …»; paragraphs are split by an empty line.
+  function speakerGroups(cues) {
+    var out = [];
+    cues.forEach(function (c) {
+      var g = out[out.length - 1];
+      if (g && g.speaker === c.speaker) { g.cues.push(c); g.end = c.end; } else out.push({ speaker: c.speaker, start: c.start, end: c.end, cues: [c] });
+    });
+    return out;
+  }
+  function speakerText(cues) {
+    return speakerGroups(cues).map(function (g) { return g.speaker + ": " + g.cues.map(function (c) { return c.text; }).join(" "); }).join("\n\n");
+  }
+  function b64(buf) {
+    var bytes = new Uint8Array(buf), out = "";
+    for (var i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(out);
+  }
+  // Several voices (the diarize model). It must hear long stretches to tell people apart, so the recording goes in
+  // parts of up to 9 minutes cut in the longest pause; a WAV of 9 minutes is about 17 MB, under the 25 MB of OpenAI.
+  // After a part, 2–10 seconds of every new voice go along with the next parts (up to 4), so people keep their names.
+  var DIAR = { MAX: 540, CUT_FROM: 420, REF_MIN: 2, REF_MAX: 10, REFS: 4 };
+  async function trDiarize(audio, found) {
+    var pcs = found.pieces, S = pcs[0].a, E = pcs[pcs.length - 1].b, parts = [], a = S;
+    while (E - a > DIAR.MAX) {
+      var lo = a + DIAR.CUT_FROM, hi = a + DIAR.MAX, best = null;
+      found.pauses.forEach(function (q) { if (q[0] >= lo && q[1] <= hi && (!best || q[1] - q[0] > best[1] - best[0])) best = q; });
+      var cut = best ? (best[0] + best[1]) / 2 : hi;
+      parts.push([a, cut]); a = cut;
+    }
+    parts.push([a, E]);
+    var refs = [], count = 0, segs = [], usd = 0;
+    for (var pi = 0; pi < parts.length; pi++) {
+      if (tr.stop) return null;
+      var p = parts[pi];
+      trProgress(8 + 42 * pi / parts.length, "Различаю голоса: часть " + (pi + 1) + " из " + parts.length + "… Можно уйти в другую вкладку — расшифровка продолжится.");
+      var res = await api.transcribeDiarize(await pieceWav(audio, p[0], p[1]), refs, p[1] - p[0]);
+      if (!res || !res.ok) throw new Error((res && res.error) || "OpenAI не ответил.");
+      usd += res.usd || 0;
+      // A label is a known name (from the voice samples) or a letter: letters become «Собеседник N» in order of appearance.
+      var names = {}, fresh = [];
+      res.segments.forEach(function (x) {
+        var label = x.speaker || "?", name;
+        if (refs.some(function (r) { return r.name === label; })) name = label;
+        else if (names[label]) name = names[label];
+        else { name = "Собеседник " + (++count); names[label] = name; fresh.push(name); }
+        segs.push({ start: p[0] + x.start, end: p[0] + x.end, text: x.text, speaker: name });
+      });
+      for (var fi = 0; fi < fresh.length && refs.length < DIAR.REFS; fi++) {
+        var who = fresh[fi];
+        var own = segs.filter(function (x) { return x.speaker === who && x.end - x.start >= DIAR.REF_MIN; }).sort(function (x, y) { return (y.end - y.start) - (x.end - x.start); })[0];
+        if (own) refs.push({ name: who, data: "data:audio/wav;base64," + b64(await pieceWav(audio, own.start, Math.min(own.end, own.start + DIAR.REF_MAX))) });
+      }
+    }
+    var cues = [];
+    segs.forEach(function (x) {
+      var ps = splitSentences(x.text);
+      placeParts(x.start, x.end, ps, found.pauses, 3).forEach(function (t, i) {
+        var prev = cues[cues.length - 1];
+        if (i === 0 && prev && prev.speaker === x.speaker && !/[.!?…]["»)]?$/.test(prev.text) && t[0] - prev.end < 1.5) { prev.text += " " + ps[0]; prev.end = t[1]; }
+        else cues.push({ start: t[0], end: t[1], text: ps[i], speaker: x.speaker });
+      });
+    });
+    return { cues: cues, text: speakerText(cues), usd: usd, sent: E - S, parts: parts.length };
+  }
+  // Where the voice changes (by the diarize model), moved to the nearest pause within a second: the pieces for the text
+  // model are cut there, so every piece is one person and gets that person's name.
+  function turnPieces(pieces, cues, pauses) {
+    var groups = speakerGroups(cues), cuts = [], out = [];
+    for (var i = 1; i < groups.length; i++) {
+      var at = (groups[i - 1].end + groups[i].start) / 2, q = null;
+      pauses.forEach(function (x) { var m = (x[0] + x[1]) / 2; if (Math.abs(m - at) <= 1 && (!q || Math.abs(m - at) < Math.abs((q[0] + q[1]) / 2 - at))) q = x; });
+      cuts.push(q || [at, at]);
+    }
+    pieces.forEach(function (p) {
+      p = { a: p.a, b: p.b, sa: p.sa, sb: p.sb };
+      cuts.forEach(function (q) {
+        var m = (q[0] + q[1]) / 2;
+        if (m <= p.sa + 0.3 || m >= p.sb - 0.3) return;
+        out.push({ a: p.a, b: m, sa: p.sa, sb: Math.max(p.sa, q[0]) });
+        p = { a: m, b: p.b, sa: Math.min(p.sb, q[1]), sb: p.sb };
+      });
+      out.push(p);
+    });
+    out.forEach(function (p) { p.speaker = whoAt(groups, p.sa, p.sb); });
+    return out;
+  }
+  // The person who speaks most of the time from a to b; if nobody does (the diarize model heard nothing there), the nearest.
+  function whoAt(groups, a, b) {
+    var best = null, most = 0, near = Infinity;
+    groups.forEach(function (g) { var o = Math.min(b, g.end) - Math.max(a, g.start); if (o > most) { most = o; best = g.speaker; } });
+    if (best) return best;
+    groups.forEach(function (g) { var d = Math.max(g.start - b, a - g.end); if (d < near) { near = d; best = g.speaker; } });
+    return best;
   }
   // A piece as WAV, 16 kHz mono: small, and OpenAI takes it as it is.
   function pieceWav(audio, a, b) {
@@ -4310,8 +4417,23 @@
     if (!info.ok) { toast(info.error || "Этот файл не подходит.", true); return; }
     if (tr.busy) { toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
     tr.file = info; tr.open = null; tr.error = ""; tr.subs = null;
+    trDuration(info);
     if (state.page !== "transcribe") setPage("transcribe"); else render();
   }
+  // How long the file is, from its header (the window reads only the start of it): for the price before the work.
+  // Only speech is paid, so the real price is the same or a little lower.
+  function trDuration(f) {
+    var el = document.createElement(f.kind === "audio" ? "audio" : "video");
+    el.preload = "metadata";
+    el.addEventListener("loadedmetadata", function () {
+      if (isFinite(el.duration) && el.duration > 0) { f.duration = el.duration; if (tr.file === f && !tr.busy) render(); }
+      el.removeAttribute("src"); el.load();
+    });
+    el.src = f.url || fileUrl(f.file);
+  }
+  // «≈ $0.03 за этот файл» when the length is known, else the price of a minute.
+  function trCost(m, f) { return f && f.duration ? trFilePrice(m, f) + " за этот файл" : "≈ $" + trPrice(m) + " за минуту"; }
+  function trFilePrice(m, f) { var usd = trPrice(m) * f.duration / 60; return usd < 0.01 ? "меньше $0.01" : "примерно $" + usd.toFixed(2); }
   function trPick() { api.mediaPick().then(trSetFile, function () { toast("Не получилось выбрать файл."); }); }
   function trProgress(p, text) {
     tr.prog = p; if (text) tr.progText = text;
@@ -4322,8 +4444,10 @@
   function trFail(text) { tr.busy = false; tr.error = text; render(); }
 
   async function trRun() {
-    var f = tr.file, model = tr.model;
+    // A model no longer in the list (remembered from an older version) becomes the main one.
+    var f = tr.file, model = trModel(tr.model).id;
     if (!f || tr.busy) return;
+    tr.modelMenu = false;
     if (!assistantState().keys.openai) { tr.error = "Для расшифровки нужен ключ ChatGPT."; render(); return; }
     tr.busy = true; tr.stop = false; tr.error = ""; trProgress(2, "Читаю файл и достаю звук…");
     render();
@@ -4341,26 +4465,45 @@
     var found = findSpeech(mono, audio.sampleRate), pieces = found.pieces, n = pieces.length;
     mono = null;
     if (!n) { trFail("В файле не нашлось речи: звук есть, но он слишком тихий или это только музыка."); return; }
-    trProgress(8, "Нашёл кусков с речью: " + n + ". Расшифровываю…");
+    // Several voices: first the diarize model says who speaks when, then the strongest model writes the text of the
+    // same pieces, cut where the voice changes. Its text with the names of the diarize model is the result.
+    var textModel = model, d = null, from = 8;
+    if (trModel(model).speakers) {
+      try { d = await trDiarize(audio, found); } catch (e) { trFail(e.message); return; }
+      if (!d) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+      if (!d.cues.length) { trFail("В записи не нашлось речи, которую получилось расшифровать."); return; }
+      textModel = trModel(model).text; pieces = turnPieces(pieces, d.cues, found.pauses); n = pieces.length; from = 50;
+    }
+    trProgress(from, (d ? "Голоса различены. Пишу текст: кусков " : "Нашёл кусков с речью: ") + n + ". Расшифровываю…");
     var texts = new Array(n), next = 0, done = 0, sent = 0, usd = 0, failed = null;
     var before = function (k) { var s = ""; for (var j = 0; j < k; j++) if (texts[j]) s += " " + texts[j]; return s.slice(-600).trim(); };
     var worker = async function () {
       while (next < n && !failed && !tr.stop) {
         var k = next++, p = pieces[k];
-        var res = await api.transcribePiece(await pieceWav(audio, p.a, p.b), before(k), model, p.b - p.a);
+        var res = await api.transcribePiece(await pieceWav(audio, p.a, p.b), before(k), textModel, p.b - p.a);
         if (!res || !res.ok) { failed = (res && res.error) || "OpenAI не ответил."; return; }
         texts[k] = res.text; sent += p.b - p.a; usd += res.usd || 0;
-        trProgress(8 + 88 * (++done) / n, "Расшифровано кусков: " + done + " из " + n + "… Можно уйти в другую вкладку — расшифровка продолжится.");
+        trProgress(from + (96 - from) * (++done) / n, (d ? "Пишу текст: готово кусков " : "Расшифровано кусков: ") + done + " из " + n + "… Можно уйти в другую вкладку — расшифровка продолжится.");
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
     if (tr.stop) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+    if (failed && d) {
+      // The voices are already paid for: keep their own text rather than lose everything.
+      await trSaveResult(f, audio, model, found, d.text, d.cues, d.usd + usd, d.sent, d.parts, "");
+      toast("Текст написала модель, которая различала голоса: вторая не ответила (" + failed + ")", true);
+      return;
+    }
     if (failed) { trFail(failed); return; }
-    var segments = pieces.map(function (p, k) { return { start: p.sa, end: p.sb, text: texts[k] || "" }; }).filter(function (s) { return s.text; });
+    var segments = pieces.map(function (p, k) { var s = { start: p.sa, end: p.sb, text: texts[k] || "" }; if (p.speaker) s.speaker = p.speaker; return s; }).filter(function (s) { return s.text; });
     var cues = sentencesOf(segments, found.pauses);
+    if (d) await trSaveResult(f, audio, model, found, speakerText(cues), cues, d.usd + usd, sent, n, textModel);
+    else await trSaveResult(f, audio, model, found, segments.map(function (s) { return s.text; }).join(" "), cues, usd, sent, n);
+  }
+  async function trSaveResult(f, audio, model, found, text, cues, usd, sent, n, textModel) {
     var saved = await call(api.transcriptSave({
-      id: trId(), name: f.name, source: f.file, kind: f.kind, size: f.size, duration: audio.duration, model: model,
-      text: segments.map(function (s) { return s.text; }).join(" "), cues: cues,
+      id: trId(), name: f.name, source: f.file, kind: f.kind, size: f.size, duration: audio.duration, model: model, textModel: textModel || "",
+      text: text, cues: cues,
       pauses: found.pauses.map(function (q) { return [Math.round(q[0] * 1000) / 1000, Math.round(q[1] * 1000) / 1000]; }),
       usd: usd, sent: sent, pieces: n
     }));
@@ -4368,8 +4511,10 @@
     if (!saved) { tr.error = "Расшифровка готова, но не сохранилась. Попробуйте ещё раз."; render(); return; }
     tr.list = saved.transcripts; tr.open = saved.transcript; tr.file = null; tr.view = "text"; tr.subs = null;
     render();
-    toast("Готово: «" + f.name + "» — " + cues.length + " " + plural(cues.length, "фраза", "фразы", "фраз") + (usd ? ", около $" + usd.toFixed(4) : "") + ".");
+    var people = trSpeakers(cues).length;
+    toast("Готово: «" + f.name + "» — " + cues.length + " " + plural(cues.length, "фраза", "фразы", "фраз") + (people ? ", " + people + " " + plural(people, "собеседник", "собеседника", "собеседников") : "") + (usd ? ", около $" + usd.toFixed(4) : "") + ".");
   }
+  function trSpeakers(cues) { var seen = []; cues.forEach(function (c) { if (c.speaker && seen.indexOf(c.speaker) === -1) seen.push(c.speaker); }); return seen; }
 
   function trOpen(id) {
     if (tr.open && tr.open.id === id) return;
@@ -4407,6 +4552,7 @@
   function trEditText(value) {
     var t = tr.open, text = String(value || "").trim();
     if (!t || text === t.text) return;
+    if (trSpeakers(t.cues).length) { trEditSpeakers(t, text); return; }
     var parts = splitSentences(text), cues;
     if (!parts.length) return;
     if (parts.length === t.cues.length) cues = t.cues.map(function (c, i) { return { start: c.start, end: c.end, text: parts[i] }; });
@@ -4421,6 +4567,29 @@
       if (tr.view !== "text") render();
     });
   }
+  // With several voices the text is paragraphs «Имя: …». Each paragraph keeps its time; the name before the colon can be
+  // changed («Собеседник 2» → «Дима») and stays only for that paragraph. Adding or removing paragraphs is not possible:
+  // the program would not know whose words they are.
+  function trEditSpeakers(t, text) {
+    var groups = speakerGroups(t.cues), paras = text.split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+    var parsed = paras.map(function (x) { var m = x.match(/^([^:\n]{1,40}):\s*([\s\S]+)$/); return m ? { speaker: m[1].trim(), text: m[2].replace(/\s+/g, " ").trim() } : null; });
+    if (parsed.length !== groups.length || parsed.some(function (x) { return !x; })) {
+      toast("Правка не сохранилась: в записи с несколькими собеседниками правьте текст внутри абзацев и оставляйте «Имя:» в начале каждого.", true);
+      render();
+      return;
+    }
+    var cues = [];
+    groups.forEach(function (g, i) {
+      var ps = splitSentences(parsed[i].text);
+      placeParts(g.start, g.end, ps, t.pauses || [], 3).forEach(function (x, k) { cues.push({ start: x[0], end: x[1], text: ps[k], speaker: parsed[i].speaker }); });
+    });
+    call(api.transcriptSave({ id: t.id, text: speakerText(cues), cues: cues })).then(function (r) {
+      if (!r) return;
+      tr.open = r.transcript; tr.list = r.transcripts; tr.subs = null;
+      toast("Правка сохранена, тайминги и субтитры обновились.");
+      render();
+    });
+  }
   function trSummary() {
     var t = tr.open;
     if (!t || tr.sumBusy) return;
@@ -4431,7 +4600,8 @@
       render();
     });
   }
-  function trCopy(text, what) { call(api.transcriptCopy(text)).then(function (r) { if (r) toast(what + " скопирован" + (what === "Тайминги" ? "ы" : "") + "."); }); }
+  function trCopy(text, done) { call(api.transcriptCopy(text)).then(function (r) { if (r) toast(done); }); }
+  function summaryText(s) { return s.brief + (s.points.length ? "\n\n" + s.points.map(function (x) { return "— " + x; }).join("\n") : ""); }
   function trExport(kind) {
     var t = tr.open;
     if (!t) return;
@@ -4439,19 +4609,6 @@
     call(api.transcriptExport(t.id, kind, content)).then(function (r) {
       if (r && !r.canceled) toast((kind === "srt" ? "Субтитры сохранены: " : "Текст сохранён: ") + r.path + (kind === "srt" ? ". Перетащите файл на таймлайн в монтаже." : ""), true);
     });
-  }
-  // «В промт»: a new prompt of type «Видео» — the text in the prompt, the timings in its comment.
-  function trToPrompt() {
-    var t = tr.open;
-    if (!t) return;
-    if (editorDirty()) { setPage("prompts"); toast("Сначала сохраните или отмените правку промта."); return; }
-    setPage("prompts");
-    openEditor(null);
-    els.fTitle.value = stemOf(t.name).slice(0, 200);
-    els.fText.value = t.text;
-    els.fComment.value = "Тайминги:\n" + timingsOf(t, "prompt");
-    setCategory("Видео");
-    toast("Допишите промт и нажмите «Сохранить».");
   }
   // «Спросить в LLM»: a new conversation with the text and the timings already in the box.
   function trToLlm() {
@@ -4468,15 +4625,60 @@
     els.chatInput.setSelectionRange(text.length, text.length);
   }
 
-  function trDrop(small) {
-    var zone = h("div", { class: "tr-drop" + (small ? " small" : "") },
+  function trDrop() {
+    return h("div", { class: "tr-drop" },
       h("span", { class: "big", html: ICONS.upload, "aria-hidden": "true" }),
-      h("div", null, h("b", { text: small ? "Ещё файл — перетащите сюда" : "Перетащите аудио или видео сюда" }),
-        h("p", { text: small ? "Или выберите кнопкой. Новая расшифровка встанет в историю." :
-          "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама. Файл — до 2 ГБ, длина любая: на расшифровку уходят только куски с речью." })),
-      h("button", { type: "button", class: "btn " + (small ? "btn-ghost btn-sm" : "btn-primary"), onclick: trPick }, "Выбрать файл…"));
-    return zone;
+      h("div", null, h("b", { text: "Перетащите аудио или видео сюда" }),
+        h("p", { text: "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама. Файл — до 2 ГБ, длина любая: на расшифровку уходят только куски с речью." })),
+      h("button", { type: "button", class: "btn btn-primary", onclick: trPick }, "Выбрать файл…"));
   }
+  // «Новая транскрибация» above the history: back to the start and straight to choosing a file. A file can also be
+  // dropped anywhere on the page, the open transcription stays in the history.
+  function trNew() {
+    if (tr.busy) { toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
+    tr.open = null; tr.file = null; tr.error = ""; tr.subs = null;
+    render();
+    trPick();
+  }
+  // The model list: a button and a menu like «Модель» in LLM. Next to every model a «!»: hovering it (or focusing it with
+  // Tab) shows when to pick this model, so nobody has to open the guide for it.
+  function trModelPick(m) {
+    var btn = h("button", { type: "button", class: "tr-mbtn", "aria-haspopup": "true", "aria-expanded": String(!!tr.modelMenu),
+      onclick: function () { tr.modelMenu = !tr.modelMenu; render(); if (tr.modelMenu) trFocusModel(); } },
+      h("span", { class: "nm", text: m.name }), h("span", { class: "tr-soft", text: m.note }), h("span", { class: "chev", html: ICONS.chevron, "aria-hidden": "true" }));
+    var wrap = h("div", { class: "tr-mpick" }, btn);
+    if (tr.modelMenu) {
+      wrap.append(h("div", { class: "model-menu tr-mmenu", role: "menu", "aria-label": "Модель" }, TR_MODELS.map(function (x) {
+        var item = modelOption({ name: x.name, text: x.note + " · " + trCost(x, tr.file) }, x.id === m.id, function () {
+          tr.model = x.id; tr.modelMenu = false;
+          try { localStorage.setItem("trModel2", tr.model); } catch (e) {}
+          render();
+          var b = els.trMain.querySelector(".tr-mbtn"); if (b) b.focus();
+        });
+        return h("div", { class: "tr-mrow" }, item,
+          h("span", { class: "tr-why", tabindex: "0", role: "note", "aria-label": "Когда выбирать: " + x.when },
+            h("span", { class: "ic", html: ICONS.alert, "aria-hidden": "true" }),
+            h("span", { class: "tr-tip", "aria-hidden": "true" }, h("b", { text: "Когда выбирать" }), h("span", { text: x.when }))));
+      })));
+    }
+    return wrap;
+  }
+  function trFocusModel() { var c = els.trMain.querySelector('.tr-mmenu .mm-item[aria-checked="true"]'); if (c) c.focus(); }
+  function trCloseModels(focus) {
+    if (!tr.modelMenu) return;
+    tr.modelMenu = false; render();
+    if (focus) { var b = els.trMain.querySelector(".tr-mbtn"); if (b) b.focus(); }
+  }
+  document.addEventListener("mousedown", function (e) { if (tr.modelMenu && !e.target.closest(".tr-mpick")) trCloseModels(false); });
+  document.addEventListener("keydown", function (e) {
+    if (!tr.modelMenu || !document.activeElement || !document.activeElement.closest(".tr-mpick")) return;
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); trCloseModels(true); return; }
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    var items = Array.prototype.slice.call(els.trMain.querySelectorAll(".tr-mmenu .mm-item")), i = items.indexOf(document.activeElement);
+    e.preventDefault();
+    var next = items[(i < 0 ? 0 : i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+    if (next) next.focus();
+  }, true);
   function trFileCard() {
     var f = tr.file, m = trModel(tr.model);
     var card = h("section", { class: "card tr-file" },
@@ -4489,10 +4691,8 @@
         h("div", null, h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { tr.stop = true; trProgress(tr.prog, "Останавливаю…"); } }, "Остановить"))));
       setTimeout(function () { trProgress(tr.prog); }, 0);
     } else {
-      var sel = h("select", { "aria-label": "Модель", onchange: function () { tr.model = this.value; try { localStorage.setItem("trModel", tr.model); } catch (e) {} render(); } },
-        TR_MODELS.map(function (x) { return h("option", { value: x.id, selected: x.id === m.id ? "selected" : null, text: x.name }); }));
-      card.append(h("div", { class: "tr-opts" }, "Модель:", sel,
-        h("span", { class: "tr-soft", text: "≈ $" + m.perMin + " за минуту речи · ключ ChatGPT из «Настроек»" }), h("span", { class: "grow" }),
+      card.append(h("div", { class: "tr-opts" }, "Модель:", trModelPick(m),
+        h("span", { class: "tr-soft", text: (f.duration ? "Этот файл (" + trShort(f.duration) + ") — " + trFilePrice(m, f) + " · " : "") + "$" + trPrice(m) + " за минуту речи" + (m.speakers ? " · голоса различит эта модель («Собеседник 1», «Собеседник 2»…, до 4), а текст напишет " + trModel(m.text).name : "") + " · ключ ChatGPT из «Настроек»" }), h("span", { class: "grow" }),
         h("button", { type: "button", class: "btn btn-primary", onclick: trRun }, "Расшифровать")));
     }
     if (tr.error) card.append(h("p", { class: "tr-err", text: tr.error }));
@@ -4545,25 +4745,27 @@
     var seg = h("div", { class: "tr-seg", role: "group", "aria-label": "Что показать" }, [["text", "Текст"], ["cues", "Тайминги"], ["sum", "Кратко"]].map(function (v) {
       return h("button", { type: "button", "aria-pressed": String(tr.view === v[0]), onclick: function () { tr.view = v[0]; render(); } }, v[1]);
     }));
-    var model = trModel(t.model);
     var tabsRow = h("div", { class: "tr-tabs" }, seg, h("span", { class: "grow" }),
-      h("span", { class: "tr-soft", text: trShort(t.duration) + " · " + t.cues.length + " " + plural(t.cues.length, "фраза", "фразы", "фраз") + " · " + model.id + (t.usd ? " · ≈ $" + t.usd.toFixed(4) : "") }));
+      h("span", { class: "tr-soft", text: trShort(t.duration) + " · " + t.cues.length + " " + plural(t.cues.length, "фраза", "фразы", "фраз") + (trSpeakers(t.cues).length ? " · " + trSpeakers(t.cues).length + " " + plural(trSpeakers(t.cues).length, "собеседник", "собеседника", "собеседников") : "") + " · " + (t.textModel ? "голоса: " + t.model + ", текст: " + t.textModel : t.model) + (t.usd ? " · ≈ $" + t.usd.toFixed(4) : "") }));
     var body = h("div", { class: "tr-body" });
     if (tr.view === "text") {
       var ta = h("textarea", { class: "tr-text", "aria-label": "Текст расшифровки", spellcheck: "true" });
       ta.value = t.text;
       ta.addEventListener("change", function () { trEditText(ta.value); });
-      body.append(ta, h("p", { class: "tr-hint", text: "Текст можно поправить прямо здесь: например, имя или название, которое модель расслышала неверно. Правка сохранится, когда вы щёлкнете мимо поля, и попадёт в тайминги и субтитры." }));
+      body.append(ta, h("p", { class: "tr-hint", text: trSpeakers(t.cues).length
+        ? "Каждый абзац — один собеседник. Чтобы подписать человека по имени, замените «Собеседник 2» на имя в его абзацах. Текст можно править внутри абзаца; правка сохранится, когда вы щёлкнете мимо поля, и попадёт в тайминги и субтитры."
+        : "Текст можно поправить прямо здесь: например, имя или название, которое модель расслышала неверно. Правка сохранится, когда вы щёлкнете мимо поля, и попадёт в тайминги и субтитры." }));
     } else if (tr.view === "cues") {
       var fmtSeg = h("div", { class: "tr-seg", role: "group", "aria-label": "Как копировать" }, [["plain", "00:12,4 – 00:15,8  текст"], ["prompt", "[0:12–0:15] текст"]].map(function (v) {
         return h("button", { type: "button", "aria-pressed": String(tr.fmt === v[0]), onclick: function () { tr.fmt = v[0]; try { localStorage.setItem("trFmt", tr.fmt); } catch (e) {} render(); } }, v[1]);
       }));
       body.append(h("div", { class: "tr-copyfmt" }, "Копировать как:", fmtSeg,
-        h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.copy, onclick: function () { trCopy(timingsOf(t, tr.fmt), "Тайминги"); } }, "Копировать")));
+        h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.copy, onclick: function () { trCopy(timingsOf(t, tr.fmt), "Тайминги скопированы."); } }, "Копировать")));
       var list = h("div", { class: "tr-cues" });
       t.cues.forEach(function (c) {
         var b = h("button", { type: "button", class: "tr-cue", onclick: function () { seek(c.start + 0.05); } },
-          h("span", { class: "tm", text: tr.fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "]" : trTime(c.start) + " – " + trTime(c.end) }), h("span", { text: c.text }));
+          h("span", { class: "tm", text: tr.fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "]" : trTime(c.start) + " – " + trTime(c.end) }),
+          h("span", null, c.speaker ? h("b", { class: "tr-who", text: c.speaker + ": " }) : null, c.text));
         ui.cueEls.push(b); list.append(b);
       });
       body.append(list, h("p", { class: "tr-hint", text: "Нажмите на фразу — плеер перемотается на неё. Время стоит на настоящих паузах голоса, примерно до четверти секунды." }));
@@ -4576,16 +4778,19 @@
         var ul = h("ul");
         t.summary.points.forEach(function (x) { ul.append(h("li", { text: x })); });
         sum.append(h("h4", { text: "Кратко" }), h("p", { text: t.summary.brief }), t.summary.points.length ? h("h4", { text: "Главные мысли" }) : null, t.summary.points.length ? ul : null,
-          h("p", { class: "tr-hint" }, h("button", { type: "button", class: "link-btn", onclick: function () { trCopy(t.summary.brief + (t.summary.points.length ? "\n\n" + t.summary.points.map(function (x) { return "— " + x; }).join("\n") : ""), "Текст"); } }, "Копировать"),
-            " · ", h("button", { type: "button", class: "link-btn", disabled: tr.sumBusy ? "disabled" : null, onclick: trSummary }, tr.sumBusy ? "Пишу…" : "Сделать заново")));
+          h("p", { class: "tr-hint" }, h("button", { type: "button", class: "link-btn", disabled: tr.sumBusy ? "disabled" : null, onclick: trSummary }, tr.sumBusy ? "Пишу…" : "Сделать заново")));
       }
       body.append(sum);
     }
+    // The copy button copies what the open tab shows: the text, the timings (in the chosen form) or the summary.
+    var copy = tr.view === "cues" ? { label: "Копировать тайминги", text: timingsOf(t, tr.fmt), done: "Тайминги скопированы." }
+      : tr.view === "sum" ? { label: "Копировать кратко", text: t.summary ? summaryText(t.summary) : "", done: "Краткое содержание скопировано." }
+      : { label: "Копировать текст", text: t.text, done: "Текст скопирован." };
     var acts = h("div", { class: "tr-acts" },
-      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.copy, onclick: function () { trCopy(t.text, "Текст"); } }, "Копировать текст"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.copy, disabled: copy.text ? null : "disabled", title: copy.text ? null : "Сначала сделайте краткое содержание",
+        onclick: function () { trCopy(copy.text, copy.done); } }, copy.label),
       h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.download, onclick: function () { trExport("srt"); } }, "Субтитры .srt"),
       h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.download, onclick: function () { trExport("txt"); } }, ".txt"),
-      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.prompts, onclick: trToPrompt }, "В промт"),
       h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.chat, onclick: trToLlm }, "Спросить в LLM"),
       h("span", { class: "grow" }),
       h("button", { type: "button", class: "link-btn", onclick: function () { api.transcriptShowSource(t.id).then(function (r) { if (!r || !r.ok) toast((r && r.error) || "Не открылось."); }); } }, "Показать исходный файл"));
@@ -4618,14 +4823,15 @@
     if (!assistantState().keys.openai) kids.push(h("div", { class: "tr-nokey" }, h("span", { text: "Для расшифровки нужен ключ ChatGPT (OpenAI). Ключ Claude не подходит: звук в текст переводит только OpenAI." }),
       h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: function () { openSettings("keys"); } }, "Подключить ChatGPT")));
     if (tr.file && (tr.busy || !tr.open)) kids.push(trFileCard());
-    if (tr.open) kids.push(trResult(), trDrop(true));
-    else if (!tr.file) kids.push(trDrop(false));
+    if (tr.open) kids.push(trResult());
+    else if (!tr.file) kids.push(trDrop());
     var keep = els.trMain.querySelector(".tr-text");
     if (keep && document.activeElement === keep) { trHistory(); return; }   // typing in the text: do not throw it away
     els.trMain.replaceChildren.apply(els.trMain, kids);
     trHistory();
   }
   els.trSearch.addEventListener("input", function () { tr.q = els.trSearch.value; trHistory(); });
+  $("tr-new").addEventListener("click", trNew);
   function refreshTranscripts() { api.transcriptList().then(function (r) { if (r && r.ok) { tr.list = r.transcripts; if (state.page === "transcribe" || state.page === "home") render(); } }, function () {}); }
   refreshTranscripts();
 

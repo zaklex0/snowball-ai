@@ -317,7 +317,11 @@ function normalizeTranscript(t) {
     const text = str(c.text, 5000).trim();
     if (!text) return null;
     const start = sec(c.start);
-    return { start, end: Math.max(start, sec(c.end)), text };
+    const cue = { start, end: Math.max(start, sec(c.end)), text };
+    // Who says it, for recordings with several voices («Собеседник 1» or a name the user wrote instead).
+    const speaker = str(c.speaker, 60).trim();
+    if (speaker) cue.speaker = speaker;
+    return cue;
   }).filter(Boolean);
   const pauses = (Array.isArray(t.pauses) ? t.pauses : []).slice(0, TRANSCRIPT_PAUSES_MAX)
     .filter((p) => Array.isArray(p) && p.length === 2).map((p) => [sec(p[0]), sec(p[1])]).filter((p) => p[1] > p[0]);
@@ -329,6 +333,8 @@ function normalizeTranscript(t) {
   return {
     id: t.id, name: str(t.name, 300).trim() || 'файл', source: str(t.source, 2000), kind: t.kind === 'audio' ? 'audio' : 'video',
     size: Math.max(0, Math.round(num(t.size))), duration: sec(t.duration), model: str(t.model, 60),
+    // With several voices: the model that wrote the text (the voices and times are from `model`, the diarize one).
+    textModel: str(t.textModel, 60),
     createdAt: num(t.createdAt) || now, updatedAt: num(t.updatedAt) || now,
     text: str(t.text, 2000000).trim() || cues.map((c) => c.text).join(' '), cues, pauses, summary,
     usd: Math.max(0, num(t.usd)), sent: sec(t.sent), pieces: Math.max(0, Math.round(num(t.pieces)))

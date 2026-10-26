@@ -33,6 +33,23 @@ http.createServer((req, res) => {
         usage: { input_tokens: 900, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, total_tokens: 1200 } }));
       return;
     }
+    // The diarize model: phrases every 8 seconds, two voices in turn. Voices whose samples came with the request
+    // (known_speaker_names) answer under those names, the others under letters — as the real API does.
+    const latin = body.toString('latin1');
+    const field = (name) => { const m = latin.match(new RegExp('name="' + name + '"\\r\\n(?:Content-Type: [^\\r]*\\r\\n)?\\r\\n([^\\r]*)')); return m ? Buffer.from(m[1], 'latin1').toString('utf8') : ''; };
+    if (field('model') === 'gpt-4o-transcribe-diarize') {
+      const known = [...latin.matchAll(/name="known_speaker_names(?:\[\])?"\r\n\r\n([^\r]*)/g)].map((m) => Buffer.from(m[1], 'latin1').toString('utf8'));
+      const refs = (latin.match(/name="known_speaker_references/g) || []).length;
+      const secs = (body.length - 300) / 32000, segments = [];
+      for (let t = 0, i = 0; t + 3 < secs; t += 8, i++) {
+        const who = i % 2 ? 'B' : 'A';
+        segments.push({ id: 's' + i, type: 'transcript.text.segment', start: t + 0.3, end: Math.min(secs, t + 7), speaker: known[i % 2] || who, text: 'Реплика ' + (i + 1) + ' голосом ' + who + '.' });
+      }
+      console.log('diarize', secs.toFixed(1), 's, known names:', JSON.stringify(known), 'samples:', refs, 'lang:', field('language') || '-');
+      res.end(JSON.stringify({ task: 'transcribe', duration: secs, text: segments.map((s) => s.text).join(' '), segments, usage: { type: 'duration', seconds: secs } }));
+      return;
+    }
+    console.log('model', field('model'));
     const text = pieceText(body.length);
     setTimeout(() => res.end(JSON.stringify({ text, usage: { type: 'tokens', input_tokens: 40, output_tokens: 8, total_tokens: 48 } })), Number(process.env.FAKE_DELAY) || 0);
   });

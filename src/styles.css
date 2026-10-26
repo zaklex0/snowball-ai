@@ -1608,10 +1608,6 @@ h1 .brand { color: var(--accent-strong); }
 .tr-drop .big svg { width: 28px; height: 28px; }
 .tr-drop b { font-size: 17px; }
 .tr-drop p { margin: 0; font-size: 13.5px; color: var(--ink-soft); max-width: 560px; }
-.tr-drop.small { grid-template-columns: auto minmax(0, 1fr) auto; justify-items: start; align-items: center; text-align: left; padding: 12px 14px; gap: 12px; }
-.tr-drop.small .big { width: 40px; height: 40px; border-radius: 12px; }
-.tr-drop.small .big svg { width: 20px; height: 20px; }
-.tr-drop.small b { font-size: 14.5px; }
 .tr-nokey { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent-strong); font-size: 14px; }
 .tr-file { display: grid; gap: 14px; padding: 16px 18px; }
 .tr-file-h { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -1622,7 +1618,37 @@ h1 .brand { color: var(--accent-strong); }
 .tr-file-h .nm b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tr-file-h .nm span { font-size: 13px; color: var(--ink-soft); }
 .tr-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 14px; }
-.tr-opts select { height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; }
+/* The model list: a button like a select, a menu like «Модель» in LLM, a «!» with a hint next to every model. */
+.tr-mpick { position: relative; min-width: 0; }
+.card.tr-file { overflow: visible; } /* the menu and its hints go out of the card */
+.tr-mbtn {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%; height: 38px; padding: 0 10px 0 12px;
+  border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--ink); font: inherit; font-size: 14px; white-space: nowrap;
+}
+.tr-mbtn:hover, .tr-mbtn[aria-expanded="true"] { border-color: var(--ink-soft); }
+.tr-mbtn .nm { font-weight: 500; }
+.tr-mbtn .tr-soft { overflow: hidden; text-overflow: ellipsis; }
+.tr-mbtn .chev { display: inline-flex; color: var(--ink-soft); transition: transform .15s; }
+.tr-mbtn .chev svg { width: 15px; height: 15px; }
+.tr-mbtn[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.model-menu.tr-mmenu { top: calc(100% + 6px); bottom: auto; width: 380px; max-width: calc(100vw - 80px); }
+.tr-mrow { display: flex; align-items: center; gap: 2px; }
+.tr-mrow .mm-item { flex: 1; min-width: 0; }
+.tr-why {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border-radius: 8px; color: var(--ink-soft); cursor: help; outline: none;
+}
+.tr-why .ic { display: inline-flex; }
+.tr-why .ic svg { width: 18px; height: 18px; }
+.tr-why:hover, .tr-why:focus-visible { background: var(--surface-2); color: var(--accent-strong); }
+.tr-tip {
+  position: absolute; left: calc(100% + 12px); top: 50%; transform: translateY(-50%); z-index: 31; width: 280px;
+  display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--surface); box-shadow: var(--pop-shadow); color: var(--ink); font-size: 13px; line-height: 1.45; font-weight: 400;
+  visibility: hidden; pointer-events: none;
+}
+.tr-tip b { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); }
+.tr-why:hover .tr-tip, .tr-why:focus-visible .tr-tip { visibility: visible; }
 .tr-opts .grow, .tr-tabs .grow, .tr-acts .grow { flex: 1; }
 .tr-soft { font-size: 13px; color: var(--ink-soft); }
 .tr-prog { display: grid; gap: 6px; }
@@ -1668,7 +1694,10 @@ h1 .brand { color: var(--accent-strong); }
 .tr-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); }
 .btn-sm { padding: 6px 11px; font-size: 13px; border-radius: 10px; }
 
-.tr-hist { align-self: start; position: sticky; top: 14px; display: flex; flex-direction: column; max-height: calc(100vh - 120px); padding: 12px 8px; }
+/* the right column: «Новая транскрибация» above the history, both stay in view while the page scrolls */
+.tr-side { align-self: start; position: sticky; top: 14px; display: grid; gap: 10px; max-height: calc(100vh - 120px); grid-template-rows: auto minmax(0, 1fr); }
+.tr-new { justify-content: center; width: 100%; padding: 12px 16px; border-radius: 16px; font-weight: 600; box-shadow: var(--shadow); }
+.tr-hist { display: flex; flex-direction: column; min-height: 0; padding: 12px 8px; }
 .tr-search { display: flex; align-items: center; gap: 7px; margin: 4px 4px 8px; padding: 0 10px; height: 34px; border: 1px solid var(--line); border-radius: 11px; background: var(--bg); color: var(--ink-soft); }
 .tr-search svg { width: 15px; height: 15px; flex: none; }
 .tr-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--ink); font: inherit; font-size: 13.5px; }
@@ -1688,6 +1717,7 @@ h1 .brand { color: var(--accent-strong); }
 .tr-run { position: absolute; right: 12px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--accent-strong); animation: blink 1s steps(2, start) infinite; }
 .tr-empty { margin: 0; padding: 4px 10px; font-size: 13px; color: var(--ink-soft); }
 .tr-help svg { width: 17px; height: 17px; }
+.tr-who { color: var(--accent-strong); font-weight: 600; }
 
 /* Guides «Как пользоваться»: a real screenshot with frames, thin arrows and numbered labels; the text on the side.
    The marks keep one colour in every theme, so they read the same on the light screenshots. */
