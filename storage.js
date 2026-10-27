@@ -36,7 +36,7 @@ const TRANSCRIPTS_DIR = 'Транскрибации';
 // calendar: a new or changed event; assistant: a message sent to the assistant;
 // tasks: a new task, one moved to another column, a new subtask or a subtask ticked off;
 // transcribe: a file turned into text, its short summary, its text or timings copied, subtitles or text saved to a file.
-const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks', 'transcribe'];
+const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks', 'transcribe', 'screenshots'];
 const NAME_MAX = 32;
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
@@ -485,6 +485,7 @@ class Store {
   recordCopy() { return this.run(() => this.bump('copied', 1)); }
   recordAssistant() { return this.run(() => this.bump('assistant', 1)); }
   recordTranscribe() { return this.run(() => this.bump('transcribe', 1)); }
+  recordScreenshot() { return this.run(() => this.bump('screenshots', 1)); }
 
   activityView() { return { since: this.activity.since, days: this.activity.days }; }
 

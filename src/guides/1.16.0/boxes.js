@@ -1,0 +1,3 @@
+// Made by tools/guide-shots/run.js: where the buttons are on each screenshot of this guide (pixels of 1280 × 820).
+window.GUIDE_BOXES = window.GUIDE_BOXES || {};
+window.GUIDE_BOXES["1.16.0"] = {"01-where":{"section":[10,123,215,43],"capture":[264,139,120,38],"key":[755,140,85,37],"help":[548,139,145,38]},"02-tools":{"tools":[465,224,786,63],"pressure":[711,307,159,20],"color":[513,303,30,28],"undo":[1168,236,71,38]},"03-text":{"text":[602,570,301,56],"tool":[809,236,60,38]},"04-focus":{"tool":[699,236,102,38],"blur":[711,307,181,20],"image":[538,365,640,280],"copy":[1100,299,139,35]},"05-history":{"history":[264,223,180,507],"copy":[408,464,30,30],"remove":[272,471,56,22],"undo":[517,738,246,60]}};

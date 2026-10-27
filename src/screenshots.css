@@ -1,10 +1,451 @@
-.capture-nav{display:flex;align-items:center;gap:9px;width:100%;margin:9px 0 17px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);text-align:left}
-.capture-nav svg{width:18px;height:18px;flex:none}.capture-nav kbd{margin-left:auto;font-size:11px;color:var(--ink-soft)}.capture-nav:hover,.capture-nav[aria-current=page]{background:var(--accent);color:var(--accent-ink)}
-.capture-app [hidden]{display:none!important}.capture-app .shot-count{color:var(--ink-soft);font-weight:400;margin-left:5px}.capture-app .shot-list{max-height:640px;overflow:auto}.capture-app .shot-options{position:relative}.capture-app .shot-options>[data-action=copy]{margin-left:auto}
-#view-screenshots{min-height:100%}.capture-app{color:var(--ink);font:14px/1.45 var(--font-body);min-width:0}.capture-app *{box-sizing:border-box}.capture-app button,.capture-app input,.capture-app select{font:inherit}.capture-app button,.capture-app select{border:1px solid var(--line);border-radius:9px;padding:8px 10px;background:var(--surface);color:var(--ink);cursor:pointer}.capture-app button:hover{background:var(--surface-2)}.capture-app button:disabled{opacity:.45;cursor:default}.capture-app button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}.capture-app button.primary:hover{background:var(--accent-hover)}
-.capture-app .shot-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:20px}.capture-app h1{margin:0;font-family:var(--font-display);font-size:25px}.capture-app .shot-sub{color:var(--ink-soft);margin:6px 0 0;font-size:12px}.capture-app .shot-head-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.capture-app .shot-layout{display:grid;grid-template-columns:180px minmax(0,1fr);gap:20px}.capture-app .shot-library{min-width:0}.capture-app .shot-library>p{font-size:12px;color:var(--ink-soft)}.capture-app .shot-card{position:relative;margin:0 0 10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}.capture-app .shot-card.active{border-color:var(--accent-strong);background:var(--surface-2)}.capture-app button.shot-open{display:block;border:0;background:transparent;padding:7px;width:100%;text-align:left}.capture-app .shot-open img{width:100%;aspect-ratio:1.65;object-fit:contain;border-radius:5px;display:block;background:var(--bg)}.capture-app .shot-open span{display:block;font-size:11px;margin-top:6px;padding-right:32px;min-height:30px;overflow-wrap:anywhere}.capture-app button.shot-copy{position:absolute;bottom:6px;right:5px;padding:6px;width:30px;height:30px;border:0;background:transparent}.capture-app .shot-copy svg{width:17px;height:17px;display:block}
-.capture-app .shot-work{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}.capture-app .shot-tools,.capture-app .shot-options{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:12px;border-bottom:1px solid var(--line)}.capture-app .shot-tools button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}.capture-app .shot-options{font-size:12px}.capture-app label{display:inline-flex;align-items:center;gap:7px}.capture-app input[type=range]{width:75px;accent-color:var(--accent-strong)}.capture-app input[type=color]{width:30px;height:28px;border:1px solid var(--line);background:var(--surface);padding:2px}.capture-app .shot-swatch{width:19px;height:19px;padding:0;border:2px solid var(--surface);outline:1px solid var(--line);border-radius:50%}.capture-app .shot-undo{margin-left:auto;display:flex;gap:4px}.capture-app .shot-stage{position:relative;display:flex;justify-content:center;align-items:center;padding:18px;background:var(--bg);min-height:290px}.capture-app canvas{display:block;max-width:100%;width:auto;height:auto;max-height:560px;touch-action:none;cursor:crosshair;box-shadow:var(--shadow)}.capture-app .shot-empty{color:var(--ink-soft);text-align:center;max-width:380px;padding:40px 20px}.capture-app .shot-status{font-size:12px;padding:10px 14px;color:var(--ink-soft);min-height:38px;overflow-wrap:anywhere}.capture-app .shot-status.error{color:var(--danger)}.capture-app .shot-tip{padding:0 14px 10px;color:var(--ink-soft);font-size:12px}.capture-app textarea.shot-text{position:absolute;z-index:2;margin:0;border:0;border-radius:0;outline:1px dashed var(--accent-strong);outline-offset:1px;background:transparent;resize:none;overflow:hidden;font-family:'Golos Text','Segoe UI',sans-serif;font-weight:600;white-space:pre-wrap;overflow-wrap:anywhere}.capture-app .shot-conflict{margin:10px 14px}
-.capture-external body{height:auto;min-height:100%;overflow:auto;padding:22px}.capture-app .shot-key-state{color:var(--ink-soft);font-size:12px;width:100%;text-align:right}.capture-app .shot-key-state.error{color:var(--danger)}
-:where(html[data-theme=zaklex]) .capture-app button,:where(html[data-theme=zaklex]) .capture-app .shot-card,:where(html[data-theme=zaklex]) .capture-app .shot-work,:where(html[data-theme=zaklex]) .capture-nav{border-radius:0}
-@media(max-width:800px){.capture-app .shot-layout{grid-template-columns:140px minmax(0,1fr);gap:10px}.capture-app .shot-head-actions{justify-content:flex-start}.capture-app .shot-key-state{text-align:left}.capture-app .shot-tools,.capture-app .shot-options{gap:5px;padding:8px}}
-@media(max-width:560px){.capture-app .shot-layout{display:flex;flex-direction:column-reverse}.capture-app .shot-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.capture-app .shot-stage{padding:8px}.capture-external body{padding:12px}}
+.capture-nav {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 9px 0 17px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+}
+.capture-nav svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.capture-nav kbd {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.capture-nav:hover,
+.capture-nav[aria-current='page'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.capture-app [hidden] {
+  display: none !important;
+}
+.capture-app .shot-count {
+  color: var(--ink-soft);
+  font-weight: 400;
+  margin-left: 5px;
+}
+.capture-app .shot-list {
+  max-height: 640px;
+  overflow: auto;
+}
+.capture-app .shot-options {
+  position: relative;
+}
+.capture-app .shot-options > [data-action='copy'] {
+  margin-left: auto;
+}
+.capture-shortcut-notice {
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink);
+  border: 1px solid var(--accent-strong);
+  background: var(--surface);
+  border-radius: 8px;
+}
+.capture-app .shot-capture-icon {
+  display: none;
+}
+.capture-app button.shot-delete {
+  display: block;
+  margin: 0 40px 7px 7px;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+.capture-app button.shot-delete:hover {
+  background: var(--surface-2);
+  color: var(--danger);
+}
+.capture-app .shot-toast {
+  position: fixed;
+  z-index: 10000;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: var(--toast-bg);
+  color: var(--toast-ink);
+  border: 1px solid var(--line);
+  box-shadow: var(--pop-shadow);
+  padding: 10px 15px;
+  border-radius: 10px;
+}
+.capture-app .shot-toast button {
+  background: transparent;
+  color: inherit;
+  border-color: currentColor;
+}
+#view-screenshots {
+  min-height: 100%;
+}
+.capture-app {
+  color: var(--ink);
+  font: 14px/1.45 var(--font-body);
+  min-width: 0;
+}
+.capture-app * {
+  box-sizing: border-box;
+}
+.capture-app button,
+.capture-app input,
+.capture-app select {
+  font: inherit;
+}
+.capture-app button,
+.capture-app select {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.capture-app button:hover {
+  background: var(--surface-2);
+}
+.capture-app button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.capture-app button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.capture-app button.primary:hover {
+  background: var(--accent-hover);
+}
+.capture-app .shot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.capture-app h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 25px;
+}
+.capture-app .shot-sub {
+  color: var(--ink-soft);
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.capture-app .shot-head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.capture-app .shot-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 20px;
+}
+.capture-app .shot-library {
+  min-width: 0;
+}
+.capture-app .shot-library > p {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.capture-app .shot-card {
+  position: relative;
+  margin: 0 0 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.capture-app .shot-card.active {
+  border-color: var(--accent-strong);
+  background: var(--surface-2);
+}
+.capture-app button.shot-open {
+  display: block;
+  border: 0;
+  background: transparent;
+  padding: 7px;
+  width: 100%;
+  text-align: left;
+}
+.capture-app .shot-open img {
+  width: 100%;
+  aspect-ratio: 1.65;
+  object-fit: contain;
+  border-radius: 5px;
+  display: block;
+  background: var(--bg);
+}
+.capture-app .shot-open span {
+  display: block;
+  font-size: 11px;
+  margin-top: 6px;
+  padding-right: 32px;
+  min-height: 30px;
+  overflow-wrap: anywhere;
+}
+.capture-app button.shot-copy {
+  position: absolute;
+  bottom: 6px;
+  right: 5px;
+  padding: 6px;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+}
+.capture-app .shot-copy svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+.capture-app .shot-work {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.capture-app .shot-tools,
+.capture-app .shot-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.capture-app .shot-tools button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.capture-app .shot-options {
+  font-size: 12px;
+}
+.capture-app label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.capture-app input[type='range'] {
+  width: 75px;
+  accent-color: var(--accent-strong);
+}
+.capture-app input[type='color'] {
+  width: 30px;
+  height: 28px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 2px;
+}
+.capture-app .shot-swatch {
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: 2px solid var(--surface);
+  outline: 1px solid var(--line);
+  border-radius: 50%;
+}
+.capture-app .shot-undo {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.capture-app .shot-stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 18px;
+  background: var(--bg);
+  min-height: 290px;
+}
+.capture-app canvas {
+  display: block;
+  max-width: 100%;
+  width: auto;
+  height: auto;
+  max-height: 560px;
+  touch-action: none;
+  cursor: crosshair;
+  box-shadow: var(--shadow);
+}
+.capture-app .shot-empty {
+  color: var(--ink-soft);
+  text-align: center;
+  max-width: 380px;
+  padding: 40px 20px;
+}
+.capture-app .shot-status {
+  font-size: 12px;
+  padding: 10px 14px;
+  color: var(--ink-soft);
+  min-height: 38px;
+  overflow-wrap: anywhere;
+}
+.capture-app .shot-status.error {
+  color: var(--danger);
+}
+.capture-app .shot-tip {
+  padding: 0 14px 10px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+.capture-app textarea.shot-text {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 1px dashed var(--accent-strong);
+  outline-offset: 1px;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  font-family: 'Golos Text', 'Segoe UI', sans-serif;
+  font-weight: 600;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.capture-app .shot-conflict {
+  margin: 10px 14px;
+}
+.capture-external body {
+  height: auto;
+  min-height: 100%;
+  overflow: auto;
+  padding: 22px;
+}
+.capture-app .shot-key-state {
+  color: var(--ink-soft);
+  font-size: 12px;
+  width: 100%;
+  text-align: right;
+}
+.capture-app .shot-key-state.error {
+  color: var(--danger);
+}
+:where(html[data-theme='zaklex']) .capture-app button,
+:where(html[data-theme='zaklex']) .capture-app .shot-card,
+:where(html[data-theme='zaklex']) .capture-app .shot-work,
+:where(html[data-theme='zaklex']) .capture-nav {
+  border-radius: 0;
+}
+/* Zaklex uses the brand palette and hard shadows, with cream small text. */
+:where(html[data-theme='zaklex']) .capture-app button.shot-capture {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  background: var(--zx-red);
+  color: var(--zx-paper);
+  box-shadow: 4px 4px 0 var(--zx-cyan);
+  border: 0;
+  border-radius: 0;
+}
+:where(html[data-theme='zaklex']) .capture-app button.shot-capture:hover {
+  background: var(--zx-deep);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-capture-icon {
+  display: block;
+  font-size: 30px;
+  line-height: 1;
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-capture-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-sub,
+:where(html[data-theme='zaklex']) .capture-app .shot-library > p,
+:where(html[data-theme='zaklex']) .capture-app .shot-status,
+:where(html[data-theme='zaklex']) .capture-app .shot-tip,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-state,
+:where(html[data-theme='zaklex']) .capture-app .shot-count,
+:where(html[data-theme='zaklex']) .capture-app button.shot-delete {
+  color: var(--zx-paper);
+}
+:where(html[data-theme='zaklex']) .capture-app button.shot-delete:hover {
+  color: var(--zx-paper);
+  background: var(--zx-deep);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-status.error,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-state.error {
+  border-left: 4px solid var(--zx-red);
+  padding-left: 10px;
+  color: var(--zx-paper);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-work {
+  box-shadow: 5px 5px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-card.active {
+  box-shadow: 3px 3px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-stage {
+  background-image: var(--zx-dots);
+  background-size: 12px 12px;
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-toast {
+  border-radius: 0;
+  box-shadow: 5px 5px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-shortcut-notice {
+  color: var(--zx-paper);
+  border-radius: 0;
+  border-color: var(--zx-cyan);
+}
+@media (max-width: 800px) {
+  .capture-app .shot-layout {
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .capture-app .shot-head-actions {
+    justify-content: flex-start;
+  }
+  .capture-app .shot-key-state {
+    text-align: left;
+  }
+  .capture-app .shot-tools,
+  .capture-app .shot-options {
+    gap: 5px;
+    padding: 8px;
+  }
+}
+@media (max-width: 560px) {
+  .capture-app .shot-layout {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .capture-app .shot-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .capture-app .shot-stage {
+    padding: 8px;
+  }
+  .capture-external body {
+    padding: 12px;
+  }
+}

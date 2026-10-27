@@ -29,6 +29,7 @@
         <button type="button" class="nav-icon" data-page="generator" title="Генератор (скоро)" aria-label="Генератор (скоро)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg><span class="nav-badge" data-badge="generator" hidden></span></button>
       </div>
       <button type="button" class="capture-nav" data-page="screenshots" title="Снимки экрана · Alt + Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg><span>Снимки</span><kbd>Alt + Z</kbd></button>
+      <p id="capture-shortcut-notice" class="capture-shortcut-notice" role="status" hidden><span></span></p>
       <div class="upcoming" id="upcoming" aria-labelledby="upcoming-title">
         <p class="side-h" id="upcoming-title">Ближайшие дела</p>
         <div class="up-list" id="up-list"></div>
@@ -639,7 +640,7 @@
           <section class="card set-card" aria-labelledby="set-keys-title">
             <h2 class="card-title" id="set-keys-title">Горячие клавиши</h2>
             <dl class="shortcuts">
-              <dt><kbd>Alt</kbd> + <kbd>Z</kbd></dt><dd>Снимок области экрана, даже когда открыта другая программа. В разделе «Снимки» можно выбрать Alt + V или Alt + B.</dd>
+              <dt><kbd id="capture-settings-key">Alt + Z</kbd></dt><dd>Снимок области экрана, даже когда открыта другая программа. Сочетание можно изменить в разделе «Снимки».</dd>
               <dt>Во время захвата</dt><dd>Потянуть мышью — область; Shift — квадрат; правая кнопка — весь текущий экран; Esc — отменить.</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>T</kbd></dt><dd>Новая вкладка</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>W</kbd></dt><dd>Закрыть вкладку</dd>
@@ -753,6 +754,7 @@
 
 <script src="guides/guides.js"></script>
 <script src="guides/1.15.0/boxes.js"></script>
+<script src="guides/1.16.0/boxes.js"></script>
 <script src="screenshots.js"></script>
 <script src="app.js"></script>
 </body>

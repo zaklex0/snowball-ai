@@ -238,6 +238,21 @@ function createWindow(opts) {
   w.on('maximize', rememberBounds);
   w.on('unmaximize', rememberBounds);
   w.on('close', () => { rememberBounds(); saveSettings(true); });
+  // Screenshot windows belong to the app, and must not outlive its last regular window.
+  w.on('close', event => {
+    if (w.__captureCloseReady || liveWins().length !== 1 || !captures || !captures.hasAuxiliary()) return;
+    event.preventDefault();
+    if (w.__captureClosing) return;
+    w.__captureClosing = true;
+    captures.closeAuxiliary().then(() => {
+      w.__captureCloseReady = true;
+      w.close();
+    }).catch(error => {
+      w.__captureClosing = false;
+      showWin(w);
+      dialog.showErrorBox(APP_TITLE, error.message);
+    });
+  });
 
   w.on('focus', async () => {
     w.flashFrame(false);
@@ -446,7 +461,7 @@ function syncOthers(r, except) {
   broadcast('sync', data, except);
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), captureShortcut: settings.captureShortcut || 'Alt+Z', tabs: tabsSetting(), assistant: assistantInfo() };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), captureShortcut: settings.captureShortcut || 'Alt+Z', captureNotice: captures ? captures.state().shortcutNotice : '', tabs: tabsSetting(), assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -2461,7 +2476,8 @@ if (!app.requestSingleInstanceLock()) {
     }
     pendingArchive = archiveFromArgs(process.argv);
     captures = setupScreenshots({ dir: () => store.dir, theme: () => settings.theme || 'system', key: () => settings.captureShortcut,
-      saveKey: key => { settings.captureShortcut = key; saveSettings(); } });
+      saveKey: key => { settings.captureShortcut = key; saveSettings(); },
+      record: async () => { await store.recordScreenshot(); broadcast('sync', { activity: store.activityView() }); } });
     createWindow();
     setupUpdates();
     setTimeout(autoArchiveTasks, 5000);

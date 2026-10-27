@@ -13,7 +13,7 @@
   var VIDEO_EXT = ["mp4", "webm", "mov", "m4v", "ogv", "mkv"];
   var AUDIO_EXT = ["mp3", "wav", "ogg", "m4a", "flac", "aac", "opus"];
   // Kinds of actions counted on the statistics page (storage.js counts them).
-  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks", "transcribe"];
+  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks", "transcribe", "screenshots"];
   // How the statistics page groups them in "Что вы чаще всего делаете".
   var USE_GROUPS = [
     { name: "Промты: новые и правки", keys: ["created", "edited"], icon: "pencil" },
@@ -21,6 +21,7 @@
     { name: "Задачи", keys: ["tasks"], icon: "tasks" },
     { name: "Ассистент", keys: ["assistant"], icon: "spark" },
     { name: "Транскрибация", keys: ["transcribe"], icon: "wave" },
+    { name: "Снимки экрана", keys: ["screenshots"], icon: "window" },
     { name: "Копирование промтов", keys: ["copied"], icon: "copy" },
     { name: "Файлы к промтам", keys: ["files"], icon: "clip" }
   ];
@@ -1251,8 +1252,12 @@
   function renderCaptureKey() {
     var button = document.querySelector('.capture-nav'), key = ((state.info && state.info.captureShortcut) || 'Alt+Z').replace('+', ' + ');
     if (button) { button.querySelector('kbd').textContent = key; button.title = 'Снимки экрана · ' + key; }
+    var label = $('capture-settings-key');
+    if (label) label.textContent = key;
+    var notice = $('capture-shortcut-notice');
+    if (notice) { notice.hidden = !(state.info && state.info.captureNotice); notice.querySelector('span').textContent = (state.info && state.info.captureNotice) || ''; }
   }
-  api.onCaptureChanged(function (value) { if (value && state.info) state.info.captureShortcut = value.shortcut; renderCaptureKey(); });
+  api.onCaptureChanged(function (value) { if (value && state.info) { state.info.captureShortcut = value.shortcut; state.info.captureNotice = value.shortcutNotice; } renderCaptureKey(); });
   function badgeCounts() {
     var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
     return {
@@ -4969,11 +4974,12 @@
         last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () { gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close(); setPage(g.section); } }, "Открыть раздел «" + g.title + "»")
           : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
   }
-  Array.prototype.forEach.call(document.querySelectorAll("[data-guide]"), function (b) {
-    var g = guideOfSection(b.dataset.guide);
-    if (!g) { b.hidden = true; return; }
-    b.addEventListener("click", function () { openGuide(g); });
+  // Delegation also covers guide buttons in sections mounted after the app starts.
+  document.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-guide]');
+    if (button) { var g = guideOfSection(button.dataset.guide); if (g) openGuide(g); }
   });
+  api.onCaptureGuide(function () { var g = guideOfSection('screenshots'); if (g) openGuide(g); });
 
   // The page in «Настройки» → «Обновление»: the guides of this version and the earlier ones, each folded until opened
   // (the newest one is open); a screenshot is drawn only when its guide is unfolded.

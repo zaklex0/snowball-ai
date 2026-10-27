@@ -1,7 +1,7 @@
 {
   "name": "snowball",
   "productName": "Snowball.ai",
-  "version": "1.16.0",
+  "version": "1.16.1",
   "description": "Snowball.ai — система хранения информации",
   "main": "main.js",
   "author": "Snowball.ai",

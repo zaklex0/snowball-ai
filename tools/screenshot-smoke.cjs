@@ -3,7 +3,7 @@
 const fs = require('fs'), path = require('path'), os = require('os'), assert = require('node:assert/strict'), { spawn } = require('child_process');
 const { connect } = require('./guide-shots/cdp');
 const root = path.resolve(__dirname, '..'), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'snowball-shot-smoke-')), profile = path.join(tmp, 'profile'), data = path.join(tmp, 'data');
-fs.mkdirSync(profile); fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ dataDir: data, theme: 'light', lastVersion: '1.16.0', bounds: { width: 1280, height: 900 } }));
+fs.mkdirSync(profile); fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ dataDir: data, theme: 'light', lastVersion: '1.16.1', bounds: { width: 1280, height: 900 } }));
 const appPath = process.argv[3] ? path.resolve(process.argv[3]) : root;
 const child = spawn(require('electron'), [appPath, '--inspect=9245', '--remote-debugging-port=9345', '--user-data-dir=' + profile], { cwd: root, stdio: 'ignore', windowsHide: true });
 process.on('exit', () => { try { child.kill(); } catch {} });
@@ -58,11 +58,14 @@ async function draw(page, tool, from, to) {
   const alt = await page.ev("window.vsApi.captureShortcut('Alt+B')"); assert.equal(alt.ok, true, alt.error);
   assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+B')"), true);
   assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+Z')"), false);
+  assert.equal(await page.ev("document.querySelector('#capture-settings-key').textContent"), 'Alt + B');
   await main.ev("shotTestElectron.globalShortcut.register('Alt+V',()=>{});true");
   assert.equal((await page.ev("window.vsApi.captureShortcut('Alt+V')")).ok, false);
   assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+B')"), true);
   await main.ev("shotTestElectron.globalShortcut.unregister('Alt+V');true");
-  // Real desktop capture: cover every display, then drag a square in the overlay.
+  // Use synthetic screen sources in this regression suite: user activity must never enter artifacts.
+  // The overlay, cropping, multi-monitor geometry and window lifecycle still run in real Electron.
+  await main.ev(`shotTestElectron.desktopCapturer.getSources=async()=>shotTestElectron.screen.getAllDisplays().map(d=>({display_id:String(d.id),thumbnail:shotTestElectron.nativeImage.createFromPath(${JSON.stringify(path.join(tmp,'fixture-0.png'))}).resize({width:Math.round(d.size.width*d.scaleFactor),height:Math.round(d.size.height*d.scaleFactor)})}));true`);
   await main.ev("(async()=>{global.shotCovers=[];for(const d of shotTestElectron.screen.getAllDisplays()){const w=new shotTestElectron.BrowserWindow({...d.bounds,frame:false,skipTaskbar:true,alwaysOnTop:true,enableLargerThanScreen:true,webPreferences:{sandbox:true}});w.__snowCapture='fixture';await w.loadURL('data:text/html,<body style=\"margin:0;background:rgb(45,105,85);color:white;font:48px sans-serif;padding:70px\">Snowball capture test</body>');w.setBounds(d.bounds);w.show();shotCovers.push(w);}return true;})()");
   const started = await page.ev('window.vsApi.captureStart()'); assert.equal(started.ok, true, started.error);
   const overlay = await connect(9345, t => /capture-overlay\.html/.test(t.url));
@@ -82,6 +85,9 @@ async function draw(page, tool, from, to) {
   await page.sleep(150);
   assert.equal((await page.ev('window.vsApi.captureList()')).items.length, 3);
   assert.equal(await main.ev("shotTestElectron.BrowserWindow.getAllWindows().filter(w=>w.__snowCapture==='overlay').length"), 0);
+  if (!await main.ev("shotTestElectron.BrowserWindow.getAllWindows().find(w=>!w.__snowCapture).isVisible()")) {
+    throw Error('Window visibility: '+JSON.stringify(await main.ev("shotTestElectron.BrowserWindow.getAllWindows().map(w=>({type:w.__snowCapture,url:w.webContents.getURL(),visible:w.isVisible(),minimized:w.isMinimized(),bounds:w.getBounds()}))")));
+  }
   assert.equal((await page.ev('window.vsApi.captureStart()')).ok, true);
   const fullOverlay = await connect(9345, t => /capture-overlay\.html/.test(t.url));
   await fullOverlay.until("document.querySelector('#screen').complete && document.querySelector('#screen').naturalWidth>0");
@@ -95,20 +101,63 @@ async function draw(page, tool, from, to) {
   await page.ev("window.vsApi.setTheme('zaklex')");
   await editor.until("document.documentElement.dataset.theme==='zaklex'");
   const out = process.argv[2] || tmp; fs.mkdirSync(out, { recursive: true });
+  for (const theme of ['system', 'light', 'dark', 'white', 'black', 'zaklex']) {
+    await page.ev(`document.querySelector('button[data-theme="${theme}"]').click()`); await page.sleep(150);
+    const bg = "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()";
+    assert.equal(await page.ev(bg), await editor.ev(bg), theme + ' differs between windows');
+    if (theme === 'zaklex') {
+      assert.deepEqual(await editor.ev("(()=>{const b=document.querySelector('.shot-capture'),r=b.getBoundingClientRect();return [r.width,r.height,getComputedStyle(b).backgroundColor,getComputedStyle(document.querySelector('.shot-tip')).color]})()"), [42,42,'rgb(225, 51, 43)','rgb(240, 227, 206)']);
+    }
+    for (const [name,target] of [['main',page],['editor',editor]]) { const png=await target.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(out,`theme-${theme}-${name}.png`),Buffer.from(png.result.data,'base64')); }
+  }
   for (const [name, target] of [['screenshots-zaklex', editor], ['screenshots-light', page]]) {
-    if (name === 'screenshots-light') { await page.ev("window.vsApi.setTheme('light')"); await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`); }
+    if (name === 'screenshots-light') { await page.ev("document.querySelector('button[data-theme=light]').click()"); await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`); }
     await target.sleep(250); const png = await target.send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(png.result.data, 'base64'));
   }
   // Complete real backup through the main app; the immutable original and metadata must be there.
   const backup = path.join(tmp, 'backup.snowball'); await main.ev(`shotTestElectron.dialog.showSaveDialog=async()=>({canceled:false,filePath:${JSON.stringify(backup)}});true`);
   const backupResult = await page.ev('window.vsApi.backupExport()'); assert.equal(backupResult.ok, true, backupResult.error); assert.equal(backupResult.counts.screenshots, 4);
   const { extractZip } = require('../archive'); const unpacked = path.join(tmp, 'unpacked'); await extractZip(backup, unpacked); assert.equal(fs.readdirSync(path.join(unpacked, 'screenshots')).length, 4);
+  // Delete goes through shell.trashItem; undo restores the exact bytes and annotations.
+  const original = fs.readFileSync(path.join(data,'Снимки',ids[1],'original.png'));
+  await page.ev(`document.querySelector('[data-id="${ids[1]}"] .shot-delete').click()`);
+  await page.until("!document.querySelector('.shot-toast').hidden && document.querySelector('.shot-count').textContent==='3'");
+  assert.equal(fs.existsSync(path.join(data,'Снимки',ids[1])), false);
+  await page.ev("document.querySelector('.shot-toast button').click()");
+  await page.until("document.querySelector('.shot-count').textContent==='4'");
+  assert.deepEqual(fs.readFileSync(path.join(data,'Снимки',ids[1],'original.png')),original);
+  const deleted = await page.ev(`window.vsApi.captureDelete(${JSON.stringify(ids[1])},${JSON.stringify(list.token)})`); assert.equal(deleted.ok,true,deleted.error);
+  await page.sleep(7150);
+  assert.equal((await page.ev(`window.vsApi.captureRestore(${JSON.stringify(deleted.undo)},${JSON.stringify(list.token)})`)).ok,false);
+  await main.ev('shotTestElectron.dialog.showMessageBox=async()=>({response:0});true');
+  assert.equal((await page.ev(`window.vsApi.archiveOpen(${JSON.stringify(backup)})`)).ok,true);
+  assert.equal((await page.ev('window.vsApi.captureList()')).items.length,4);
+  const activity = (await page.ev('window.vsApi.load()')).activity;
+  assert.equal(Object.values(activity.days).reduce((n,d)=>n+(d.screenshots||0),0),5);
+  await page.ev("document.querySelector('[data-guide=screenshots]').click()");
+  await page.until("!!document.querySelector('dialog.guide-dlg[open]')");
+  assert.equal(await page.ev("document.querySelector('dialog.guide-dlg img').complete && document.querySelector('dialog.guide-dlg img').naturalWidth>0"),true);
+  const guidePng=await page.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(out,'screenshots-guide.png'),Buffer.from(guidePng.result.data,'base64'));
+  await page.ev("document.querySelector('dialog.guide-dlg').close()");
+  await editor.ev("document.querySelector('[data-guide=screenshots]').click()");
+  await page.until("!!document.querySelector('dialog.guide-dlg[open]')");
+  await page.ev("document.querySelector('dialog.guide-dlg').close()");
   const nextDir = path.join(tmp, 'moved');
   await main.ev(`shotTestElectron.dialog.showOpenDialog=async()=>({canceled:false,filePaths:[${JSON.stringify(nextDir)}]});true`);
   const moved = await page.ev('window.vsApi.changeDataDir()'); assert.equal(moved.ok, true, moved.error);
   const movedList = await page.ev('window.vsApi.captureList()'); assert.equal(movedList.items.length, 4); assert.notEqual(movedList.token, list.token);
   assert.equal((await page.ev(`window.vsApi.captureSave(${JSON.stringify(ids[0])},${JSON.stringify(list.token)},{revision:0,ops:[],blur:0})`)).ok, false);
   assert.equal(fs.readdirSync(path.join(nextDir, 'Снимки')).length, 4);
-  console.log(JSON.stringify({ result: 'PASS', app: appPath, scenarios: ['import', 'marker', 'rectangle', 'focus', 'auto-fit text', 'persistent annotations', 'per-card native clipboard', 'revision conflict', 'global shortcut registration and conflicts', 'real desktop capture + Shift square', 'Escape cancellation', 'right click full monitor', 'standalone editor', 'light/Zaklex themes', 'complete backup', 'data folder migration and stale-write rejection'], screenshots: out, profile }));
-  await main.ev('shotTestElectron.clipboard.write(shotOldClipboard);true'); process.exit(0);
+  await editor.ev(`window.screenshotEditor.refresh().then(()=>window.screenshotEditor.open(${JSON.stringify(ids[0])}))`);
+  const beforeClose = JSON.parse(fs.readFileSync(path.join(nextDir,'Снимки',ids[0],'meta.json'),'utf8')).ops.length;
+  await draw(editor,'pen',[.05,.05],[.2,.1]);
+  const exited = new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('App stayed alive with only the screenshot editor')),10000);child.once('exit',()=>{clearTimeout(timeout);resolve();});});
+  await main.ev('shotTestElectron.clipboard.write(shotOldClipboard);setTimeout(()=>shotTestElectron.BrowserWindow.getAllWindows().find(w=>!w.__snowCapture).close(),150);true');
+  // Detach before shutdown: once the Node context is gone its inspector no longer answers evaluations.
+  main.close();
+  await exited;
+  main = null;
+  assert.equal(JSON.parse(fs.readFileSync(path.join(nextDir,'Снимки',ids[0],'meta.json'),'utf8')).ops.length,beforeClose+1);
+  console.log(JSON.stringify({ result: 'PASS', app: appPath, scenarios: ['capture and editing', 'native clipboard', 'conflicts and dynamic shortcut labels', 'cancel restores main window', 'six themes in both windows', 'Recycle Bin deletion + undo + expiry', 'backup restore', 'statistics', 'guide opens', 'data migration', 'main closes editor and saves pending marks'], screenshots: out, profile }));
+  process.exit(0);
 })().catch(async e => { console.error(e.stack); if(main) await main.ev('if(global.shotCovers)shotCovers.forEach(w=>{if(!w.isDestroyed())w.destroy()});if(global.shotOldClipboard)shotTestElectron.clipboard.write(shotOldClipboard);true').catch(()=>{}); process.exit(1); });

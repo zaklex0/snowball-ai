@@ -4,6 +4,10 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('vsApi', {
   captureList: () => ipcRenderer.invoke('capture-list'),
+  captureDelete: (id, token) => ipcRenderer.invoke('capture-delete', id, token),
+  captureRestore: (undo, token) => ipcRenderer.invoke('capture-restore', undo, token),
+  captureGuide: () => ipcRenderer.invoke('capture-guide'),
+  onCaptureGuide: fn => { const f = () => fn(); ipcRenderer.on('capture-guide', f); return () => ipcRenderer.removeListener('capture-guide', f); },
   captureGet: (id, token) => ipcRenderer.invoke('capture-get', id, token),
   captureSave: (id, token, value) => ipcRenderer.invoke('capture-save', id, token, value),
   captureCopy: (id, token, bytes) => ipcRenderer.invoke('capture-copy', id, token, bytes),

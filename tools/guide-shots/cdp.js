@@ -22,12 +22,12 @@ async function connect(port, pick) {
     return r.result && r.result.result ? r.result.result.value : undefined;
   };
   const until = async (expr, ms) => { for (let i = 0; i < (ms || 20000) / 200; i++) { if (await ev(expr)) return true; await sleep(200); } throw new Error('Timed out: ' + expr); };
-  return { send, ev, until, sleep };
+  return { send, ev, until, sleep, close: () => ws.close() };
 }
 
 // shot(name, targets): hides the notifications, photographs the window and measures the boxes of the targets.
 // A target is a CSS selector or { sel, text } — the first element of sel whose text contains text.
-function shotter(page, dir) {
+function shotter(page, dir, format = 'png') {
   const all = {};
   const shot = async (name, targets) => {
     await page.ev(`(() => { const t = document.getElementById('toast'), u = document.getElementById('utoast'); if (t) t.classList.remove('show'); if (u) u.hidden = true; return 1; })()`);
@@ -41,8 +41,8 @@ function shotter(page, dir) {
       return out; })()`);
     const missing = Object.keys(boxes).filter((k) => !boxes[k]);
     if (missing.length) throw new Error(name + ': not found ' + missing.join(', '));
-    const r = await page.send('Page.captureScreenshot', { format: 'png' });
-    fs.writeFileSync(path.join(dir, name + '.png'), Buffer.from(r.result.data, 'base64'));
+    const r = await page.send('Page.captureScreenshot', { format, ...(format === 'webp' ? { quality: 82 } : {}) });
+    fs.writeFileSync(path.join(dir, name + '.' + format), Buffer.from(r.result.data, 'base64'));
     all[name] = boxes;
     console.log('shot', name);
   };
