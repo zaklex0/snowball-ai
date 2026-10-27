@@ -684,6 +684,9 @@ h1 .brand { color: var(--accent-strong); }
 .legend { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-soft); }
 .legend i { width: 11px; height: 11px; border-radius: 3px; background: var(--heat-0); display: block; }
 .legend i.l0 { box-shadow: inset 0 0 0 1px var(--line); }
+.bd-groups { display: grid; gap: 14px; }
+.bd-group { display: grid; gap: 8px; }
+.bd-label { font-size: 12.5px; font-weight: 600; color: var(--ink-soft); }
 .breakdown { display: flex; flex-wrap: wrap; gap: 8px; }
 .top-list { display: grid; gap: 10px; }
 .top-row { display: grid; grid-template-columns: 26px minmax(120px, 1fr) minmax(150px, 1.1fr); align-items: center; gap: 12px; }

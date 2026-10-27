@@ -1444,12 +1444,16 @@
       metric("Дней подряд", fmtNum(s.current), "Лучшая серия: " + fmtNum(s.best)),
       metric("Промтов в базе", fmtNum(total))
     );
+    // Under the graph: what was done today (the day that is still going) and over the year.
     var chip = function (label, n) { return h("span", { class: "bchip" }, label + " ", h("b", { text: fmtNum(n) })); };
+    var CHIPS = [["Создано промтов", "created"], ["Правок", "edited"], ["Прикреплено файлов", "files"], ["Скопировано", "copied"],
+      ["Дел в календаре", "calendar"], ["Действий с задачами", "tasks"], ["Сообщений ассистенту", "assistant"], ["В транскрибации", "transcribe"], ["Снимков", "screenshots"]];
+    var todayDay = ((state.activity && state.activity.days) || {})[dayKey(today())] || {};
+    var todayChips = CHIPS.filter(function (c) { return todayDay[c[1]]; }).map(function (c) { return chip(c[0], todayDay[c[1]]); });
+    var group = function (name, kids) { return h("div", { class: "bd-group" }, h("span", { class: "bd-label", text: name }), h("div", { class: "breakdown" }, kids)); };
     els.breakdown.replaceChildren(
-      chip("Создано промтов", s.by.created), chip("Правок", s.by.edited),
-      chip("Прикреплено файлов", s.by.files), chip("Скопировано", s.by.copied),
-      chip("Дел в календаре", s.by.calendar), chip("Действий с задачами", s.by.tasks), chip("Сообщений ассистенту", s.by.assistant),
-      chip("В транскрибации", s.by.transcribe));
+      group("Сегодня, " + fmtDay(today(), true), todayChips.length ? todayChips : [h("span", { class: "muted", text: "Пока без действий" })]),
+      group("За год", CHIPS.filter(function (c) { return c[1] !== "screenshots" || s.by.screenshots; }).map(function (c) { return chip(c[0], s.by[c[1]]); })));
     renderTopUse(s);
     renderHeat();
     fillAvatar(els.statsAvatar, p.avatar, p.name);
