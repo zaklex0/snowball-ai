@@ -75,7 +75,7 @@
     badges: Array.prototype.slice.call(document.querySelectorAll(".nav-badge[data-badge]")), homeGrid: $("home-grid"), homeTitle: $("home-title"), homeDate: $("home-date"),
     views: {
       prompts: $("view-prompts"), generator: $("view-generator"), calendar: $("view-calendar"), assistant: $("view-assistant"),
-      tasks: $("view-tasks"), stats: $("view-stats"), home: $("view-home"), transcribe: $("view-transcribe")
+      tasks: $("view-tasks"), stats: $("view-stats"), home: $("view-home"), transcribe: $("view-transcribe"), screenshots: $("view-screenshots")
     },
     trMain: $("tr-main"), trList: $("tr-list"), trSearch: $("tr-search"),
     sideAvatar: $("side-avatar"), sideName: $("side-name"),
@@ -911,10 +911,11 @@
     tasks: { name: "Задачи", icon: "tasks", beta: true },
     assistant: { name: "LLM", icon: "chat", many: true },
     transcribe: { name: "Транскрибация", icon: "wave" },
+    screenshots: { name: "Снимки", icon: "window" },
     generator: { name: "Генератор", icon: "spark" },
     stats: { name: "Статистика", icon: "stats" }
   };
-  var TAB_ORDER = ["home", "prompts", "calendar", "tasks", "assistant", "transcribe", "generator", "stats"];
+  var TAB_ORDER = ["home", "prompts", "calendar", "tasks", "assistant", "transcribe", "screenshots", "generator", "stats"];
   var tabs = { list: [], active: -1, seq: 0 };
   // The first window is the main one: its tabs are remembered. A window opened from a moved tab gets its tabs in the address
   // (?tabs=[…]) and does not remember them; if the main window is closed, the next one becomes main ('window-main').
@@ -1228,6 +1229,7 @@
     openTab(page);
   }
   function renderChrome() {
+    renderCaptureKey();
     var p = state.profile || {};
     [els.sideAvatar, els.menuAvatar, els.statsAvatar].forEach(function (el) { fillAvatar(el, p.avatar, p.name); });
     els.sideName.textContent = displayName();
@@ -1242,9 +1244,15 @@
     renderUpcoming();
     renderBadges();
     if (state.page === "home") renderHome();
+    if (state.page === "screenshots" && window.SnowCapture && !window.screenshotEditor) window.screenshotEditor = window.SnowCapture.mount($("screenshots-root"), api);
   }
 
   // The small counters on the section icons: what is left for today, tasks not done yet, answers not read yet.
+  function renderCaptureKey() {
+    var button = document.querySelector('.capture-nav'), key = ((state.info && state.info.captureShortcut) || 'Alt+Z').replace('+', ' + ');
+    if (button) { button.querySelector('kbd').textContent = key; button.title = 'Снимки экрана · ' + key; }
+  }
+  api.onCaptureChanged(function (value) { if (value && state.info) state.info.captureShortcut = value.shortcut; renderCaptureKey(); });
   function badgeCounts() {
     var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
     return {
@@ -1275,6 +1283,7 @@
       { page: "tasks", title: "Задачи", text: n.tasks ? n.tasks + " " + plural(n.tasks, "задача не готова", "задачи не готовы", "задач не готово") + (doing ? ", в процессе " + doing : "") : "Все задачи готовы" },
       { page: "assistant", title: "LLM", text: n.assistant ? "Новых ответов: " + n.assistant : hist.list.length + " " + plural(hist.list.length, "разговор", "разговора", "разговоров") + " в истории" },
       { page: "transcribe", title: "Транскрибация", text: tr.busy ? "Идёт расшифровка…" : tr.list.length ? tr.list.length + " " + plural(tr.list.length, "расшифровка", "расшифровки", "расшифровок") + " в истории" : "Текст и субтитры из аудио и видео" },
+      { page: "screenshots", title: "Снимки", text: ((state.info && state.info.captureShortcut) || 'Alt+Z').replace('+', ' + ') + " · Захват экрана, пометки и история" },
       { page: "generator", title: "Генератор", text: "Картинки и видео — скоро" }
     ];
     els.homeGrid.replaceChildren.apply(els.homeGrid, tiles.map(function (t) {
@@ -1651,6 +1660,7 @@
       if (x.chats) parts.push("разговоров " + x.chats);
       if (x.events) parts.push("дел в календаре " + x.events);
       if (x.transcripts) parts.push("расшифровок " + x.transcripts);
+      if (x.screenshots) parts.push("снимков " + x.screenshots);
       backupMessage(parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
         : "Всё из этой копии уже есть в программе, ничего добавлять не пришлось.");
       return;

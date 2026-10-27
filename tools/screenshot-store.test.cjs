@@ -1,0 +1,35 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs/promises'), os = require('os'), path = require('path');
+const { ScreenshotStore, annotations, cropRect, pngSize } = require('../screenshot-store');
+const { writeZip, extractZip } = require('../archive');
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9hoAAAAASUVORK5CYII=', 'base64');
+test('immutable originals, atomic revisions, concurrent windows, restart, ZIP restore and no overwrite', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-shot-unit-')), store = new ScreenshotStore(dir);
+  const a = await store.add(png), b = await store.add(png);
+  assert.equal((await store.list()).length, 2);
+  await assert.rejects(store.get('../secret'));
+  const ops = [{ type: 'marker', color: '#ff0000', width: 3, pressure: 70, points: [{ x: .5, y: .5 }] }];
+  const results = await Promise.allSettled([store.save(a.id, { revision: 0, ops, blur: 15 }), store.save(a.id, { revision: 0, ops: [], blur: 0 })]);
+  assert.equal(results[0].status, 'fulfilled'); assert.equal(results[1].status, 'rejected');
+  assert.deepEqual(await fs.readFile(path.join(store.folder(a.id), 'original.png')), png);
+  const reopened = new ScreenshotStore(dir); assert.deepEqual((await reopened.get(a.id)).ops, ops);
+  const pack = await reopened.backupEntries(); assert.equal(pack.count, 2);
+  const zip = path.join(dir, 'copy.snowball'), unpacked = path.join(dir, 'unpacked');
+  await writeZip(zip, pack.entries); await extractZip(zip, unpacked);
+  const target = new ScreenshotStore(path.join(dir, 'restored')); assert.equal(await target.merge(path.join(unpacked, 'screenshots')), 2);
+  await target.save(a.id, { revision: 1, ops: [], blur: 20 });
+  assert.equal(await target.merge(path.join(unpacked, 'screenshots')), 0); assert.equal((await target.get(a.id)).blur, 20);
+  assert.equal((await target.get(b.id)).width, 1);
+});
+test('untrusted dimensions, annotation limits and DPI independent crops', () => {
+  assert.throws(() => pngSize(Buffer.from('hello')));
+  const enormous = Buffer.from(png); enormous.writeUInt32BE(50000, 16); assert.throws(() => pngSize(enormous));
+  assert.throws(() => annotations([{ type: 'text', color: 'url(evil)', a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }], 10, 10));
+  assert.throws(() => annotations([{ type: 'pen', color: '#123456', points: [{ x: NaN, y: 0 }] }], 10, 10));
+  assert.throws(() => annotations(new Array(1501), 10, 10));
+  assert.deepEqual(cropRect({ x: .25, y: .1, w: .5, h: .5 }, 3840, 2160), { x: 960, y: 216, width: 1920, height: 1080 });
+  assert.deepEqual(cropRect({ x: 0, y: 0, w: 1, h: 1 }, 2560, 1440), { x: 0, y: 0, width: 2560, height: 1440 });
+  assert.throws(() => cropRect({ x: 0, y: 0, w: 0, h: 1 }, 100, 100));
+});

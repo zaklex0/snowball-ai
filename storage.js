@@ -1183,6 +1183,8 @@ async function copyDataTo(fromDir, toDir) {
   if (await exists(chatFiles)) await fsp.cp(chatFiles, path.join(toDir, CHAT_FILES_DIR), { recursive: true, force: false, errorOnExist: false });
   const transcripts = path.join(fromDir, TRANSCRIPTS_DIR);
   if (await exists(transcripts)) await fsp.cp(transcripts, path.join(toDir, TRANSCRIPTS_DIR), { recursive: true, force: false, errorOnExist: false });
+  const shots = path.join(fromDir, 'Снимки');
+  if (await exists(shots)) await fsp.cp(shots, path.join(toDir, 'Снимки'), { recursive: true, force: false, errorOnExist: false });
 }
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }

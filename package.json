@@ -1,7 +1,7 @@
 {
   "name": "snowball",
   "productName": "Snowball.ai",
-  "version": "1.15.4",
+  "version": "1.16.0",
   "description": "Snowball.ai — система хранения информации",
   "main": "main.js",
   "author": "Snowball.ai",
@@ -40,6 +40,9 @@
       "preload.js",
       "storage.js",
       "archive.js",
+      "screenshots.js",
+      "screenshot-store.js",
+      "capture-preload.js",
       "CHANGELOG.md",
       "src/**/*",
       "assets/icon.png",

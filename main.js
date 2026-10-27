@@ -9,6 +9,7 @@ const { toFile } = require('openai');
 const os = require('os');
 const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, sanitizeName } = require('./storage');
 const { writeZip, extractZip } = require('./archive');
+const setupScreenshots = require('./screenshots');
 
 const APP_TITLE = 'Snowball.ai';
 // Names used by earlier versions (newest first). Their data folder and settings are moved over on first start.
@@ -20,7 +21,7 @@ const SIDEBAR_WIDTH = 236;   // .side in styles.css; a window with one moved tab
 // "zaklex" is a dark theme in the SHAPE MOTION style (src/theme-zaklex.css).
 const THEMES = ['system', 'light', 'dark', 'white', 'black', 'zaklex'];
 // What a tab on top of the window can show. LLM ("assistant") tabs may be open many times, one conversation each.
-const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'transcribe', 'generator', 'stats'];
+const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'transcribe', 'screenshots', 'generator', 'stats'];
 
 // Prompts a fresh install starts with (only when the data folder has no prompts.json yet).
 // Empty for now; example prompts for each type can go here later.
@@ -29,6 +30,7 @@ const SEED = () => [];
 let win = null;   // the main window: its size, place and tabs are remembered; other windows come from moved tabs
 let store = null;
 let settings = {};
+let captures = null;
 let firstRunNotice = null;
 
 /* ---------- settings ---------- */
@@ -148,7 +150,7 @@ function visibleBounds(b) {
 }
 
 /* ---------- windows ---------- */
-const liveWins = () => BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+const liveWins = () => BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed() && !w.__snowCapture);
 // The window the user works in now: dialogs open over it, a click on a notification brings it back.
 function activeWin() { const f = BrowserWindow.getFocusedWindow(); return f && !f.isDestroyed() ? f : win; }
 function showWin(w) { if (!w || w.isDestroyed()) return; if (w.isMinimized()) w.restore(); w.show(); w.focus(); }
@@ -157,6 +159,7 @@ function broadcast(channel, data, except) {
 }
 // Background and the colour of the Windows buttons, in every window.
 function paintWindows() {
+  if (captures) captures.theme();
   liveWins().forEach((w) => {
     w.setBackgroundColor(bgColor());
     if (IS_WIN) { try { w.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } }
@@ -443,7 +446,7 @@ function syncOthers(r, except) {
   broadcast('sync', data, except);
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), tabs: tabsSetting(), assistant: assistantInfo() };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), captureShortcut: settings.captureShortcut || 'Alt+Z', tabs: tabsSetting(), assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -618,6 +621,8 @@ handle('change-data-dir', async () => {
   if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
   const dir = r.filePaths[0];
   if (path.resolve(dir).toLowerCase() === path.resolve(store.dir).toLowerCase()) return { ok: true, canceled: true };
+  await captures.pause();
+  try {
   let mode;
   if (await hasData(dir)) {
     mode = 'opened';
@@ -632,6 +637,7 @@ handle('change-data-dir', async () => {
   settings.dataDir = dir;
   saveSettings(true);
   return ok({ info: info(), mode, oldDir });
+  } finally { captures.resume(); }
 });
 
 /* ---------- backup and sharing ---------- */
@@ -656,6 +662,10 @@ handle('backup-export', async () => {
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
   await store.queue;
   const pack = store.packEntries('backup', null);
+  await captures.flush();
+  const shots = await captures.backup();
+  pack.entries.push(...shots.entries);
+  pack.counts.screenshots = shots.count;
   const look = {};
   SETTINGS_IN_BACKUP.forEach((k) => { if (settings[k] !== undefined) look[k] = settings[k]; });
   await writeZip(r.filePath, [manifest('backup', pack.counts)].concat(pack.entries, [{ name: 'settings.json', data: JSON.stringify(look, null, 2) }]));
@@ -710,6 +720,7 @@ async function openArchive(file) {
     if (answer.response !== 0) return { ok: true, canceled: true };
     const res = await store.mergeFrom(tmp, kind);
     if (kind === 'backup') {
+      res.screenshots = await captures.merge(path.join(tmp, 'screenshots'));
       let look = null;
       try { look = JSON.parse(await fsp.readFile(path.join(tmp, 'settings.json'), 'utf8')); } catch (e) { look = null; }
       if (look && typeof look === 'object') {
@@ -2449,6 +2460,8 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     pendingArchive = archiveFromArgs(process.argv);
+    captures = setupScreenshots({ dir: () => store.dir, theme: () => settings.theme || 'system', key: () => settings.captureShortcut,
+      saveKey: key => { settings.captureShortcut = key; saveSettings(); } });
     createWindow();
     setupUpdates();
     setTimeout(autoArchiveTasks, 5000);
