@@ -3840,6 +3840,12 @@
 
   /* The whole task: a panel on the right over the board, like in Notion. Every change is saved at once.
      A re-render while the user types in a field of the panel is skipped (force: our own save asked for it). */
+  // Once a minute the "в работе уже …" / "ждёт …" line of an open task moves on by itself (only the timeline is redrawn)
+  setInterval(function () {
+    var p = els.tpanel, t = tb.open && state.page === "tasks" && !p.hidden ? findTask(tb.open) : null;
+    var old = t && t.status !== "done" ? p.querySelector(".tl-total") : null;
+    if (old) old.parentNode.replaceWith(taskTimeline(t));
+  }, 60 * 1000);
   function openTask(id) { tb.open = id; renderTasks(); renderTaskPanel(true); }
   function closeTask() {
     var a = document.activeElement;
