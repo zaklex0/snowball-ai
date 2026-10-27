@@ -4675,13 +4675,12 @@
         h("p", { text: "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама. Файл — до 2 ГБ, длина любая: на расшифровку уходят только куски с речью." })),
       h("button", { type: "button", class: "btn btn-primary", onclick: trPick }, "Выбрать файл…"));
   }
-  // «Новая транскрибация» above the history: back to the start and straight to choosing a file. A file can also be
-  // dropped anywhere on the page, the open transcription stays in the history.
+  // «Новая транскрибация» above the history: back to the start screen (the file is chosen with «Выбрать файл…» or
+  // dropped anywhere on the page); the open transcription stays in the history.
   function trNew() {
     if (tr.busy) { toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
     tr.open = null; tr.file = null; tr.error = ""; tr.subs = null;
     render();
-    trPick();
   }
   // The model list: a button and a menu like «Модель» in LLM. Next to every model a «!»: hovering it (or focusing it with
   // Tab) shows when to pick this model, so nobody has to open the guide for it.
