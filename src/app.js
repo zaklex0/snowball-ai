@@ -1250,14 +1250,15 @@
 
   // The small counters on the section icons: what is left for today, tasks not done yet, answers not read yet.
   function renderCaptureKey() {
-    var button = document.querySelector('.capture-nav'), key = ((state.info && state.info.captureShortcut) || 'Alt+Z').replace('+', ' + ');
+    var button = document.querySelector('.capture-nav'), key = window.SnowShortcut.format(state.info && state.info.captureShortcut);
     if (button) { button.querySelector('kbd').textContent = key; button.title = 'Снимки экрана · ' + key; }
     var label = $('capture-settings-key');
     if (label) label.textContent = key;
     var notice = $('capture-shortcut-notice');
     if (notice) { notice.hidden = !(state.info && state.info.captureNotice); notice.querySelector('span').textContent = (state.info && state.info.captureNotice) || ''; }
   }
-  api.onCaptureChanged(function (value) { if (value && state.info) { state.info.captureShortcut = value.shortcut; state.info.captureNotice = value.shortcutNotice; } renderCaptureKey(); });
+  window.SnowShortcut.mount($('capture-settings-control'), api);
+  api.onCaptureChanged(function (value) { if (value && state.info) { state.info.captureShortcut = value.shortcut; state.info.captureNotice = value.shortcutNotice; } renderCaptureKey(); if (state.page === 'home') renderHome(); });
   function badgeCounts() {
     var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
     return {
@@ -1288,7 +1289,7 @@
       { page: "tasks", title: "Задачи", text: n.tasks ? n.tasks + " " + plural(n.tasks, "задача не готова", "задачи не готовы", "задач не готово") + (doing ? ", в процессе " + doing : "") : "Все задачи готовы" },
       { page: "assistant", title: "LLM", text: n.assistant ? "Новых ответов: " + n.assistant : hist.list.length + " " + plural(hist.list.length, "разговор", "разговора", "разговоров") + " в истории" },
       { page: "transcribe", title: "Транскрибация", text: tr.busy ? "Идёт расшифровка…" : tr.list.length ? tr.list.length + " " + plural(tr.list.length, "расшифровка", "расшифровки", "расшифровок") + " в истории" : "Текст и субтитры из аудио и видео" },
-      { page: "screenshots", title: "Снимки", text: ((state.info && state.info.captureShortcut) || 'Alt+Z').replace('+', ' + ') + " · Захват экрана, пометки и история" },
+      { page: "screenshots", title: "Снимки", text: window.SnowShortcut.format(state.info && state.info.captureShortcut) + " · Захват экрана, пометки и история" },
       { page: "generator", title: "Генератор", text: "Картинки и видео — скоро" }
     ];
     els.homeGrid.replaceChildren.apply(els.homeGrid, tiles.map(function (t) {

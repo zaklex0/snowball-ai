@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureStart: () => ipcRenderer.invoke('capture-start'),
   captureImport: () => ipcRenderer.invoke('capture-import'),
   captureShortcut: (key) => ipcRenderer.invoke('capture-shortcut', key),
+  captureState: () => ipcRenderer.invoke('capture-state'),
+  captureRecording: (begin) => ipcRenderer.invoke('capture-recording', begin),
   onCaptureChanged: (fn) => {
     const f = (_e, value) => fn(value);
     ipcRenderer.on('capture-changed', f);

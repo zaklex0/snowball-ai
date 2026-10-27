@@ -2476,7 +2476,8 @@ if (!app.requestSingleInstanceLock()) {
     }
     pendingArchive = archiveFromArgs(process.argv);
     captures = setupScreenshots({ dir: () => store.dir, theme: () => settings.theme || 'system', key: () => settings.captureShortcut,
-      saveKey: key => { settings.captureShortcut = key; saveSettings(); },
+      initialized: () => !!settings.captureShortcutInitialized,
+      saveKey: key => { settings.captureShortcut = key; settings.captureShortcutInitialized = true; saveSettings(true); },
       record: async () => { await store.recordScreenshot(); broadcast('sync', { activity: store.activityView() }); } });
     createWindow();
     setupUpdates();

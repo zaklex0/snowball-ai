@@ -5,11 +5,11 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
-  { version: "1.16.0", updated: "1.16.1", section: "screenshots", title: "Снимки", steps: [
+  { version: "1.16.0", updated: "1.16.2", section: "screenshots", title: "Снимки", steps: [
     { title: "Где найти и как снять", lead: "Снимки открываются отдельным разделом. Захват работает и поверх других программ.", frames: [{ shot: "01-where", points: [
       { box: "section", at: [110, 260], label: "Снимки", text: "Кнопка под иконками слева открывает историю и редактор." },
       { box: "capture", at: [420, 320], label: "Снять область", text: "Нажмите кнопку или выбранные горячие клавиши. Потяните мышью по экрану; Shift делает квадрат, правая кнопка снимает весь монитор, Esc отменяет." },
-      { box: "key", at: [1060, 320], label: "Клавиши", text: "По умолчанию Alt + Z. Если занято, Snowball попробует Alt + V и Alt + B и сообщит, что включено. Здесь сочетание можно поменять." }
+      { box: "key", at: [1060, 380], label: "Ваши клавиши", text: "Нажмите «Изменить», затем Ctrl или Alt и одну клавишу, отпустите их. Esc отменяет. Русская раскладка не мешает. Эта же настройка есть в «Настройках» → «Горячие клавиши». «Сбросить на Alt + Z» возвращает исходный вариант. Только при первом запуске, если Alt + Z занято, программа попробует Alt + V и Alt + B. Ваш выбор сам не меняется." }
     ] }] },
     { title: "Пометки и маркер", lead: "Выберите инструмент и рисуйте на снимке. Изменения сохраняются сами.", frames: [{ shot: "02-tools", points: [
       { box: "tools", at: [640, 400], label: "Инструменты", text: "Перо, маркер, прямоугольная рамка, подсветка и текст." },

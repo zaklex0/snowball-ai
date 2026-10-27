@@ -9,6 +9,7 @@ module.exports = async function ({ main, page, shot }) {
   await ev("document.querySelectorAll('dialog[open]').forEach(d=>d.close())");
   await click('.capture-nav');
   await until('!!window.screenshotEditor');
+  await until("!!document.querySelector('.shot-key .capture-shortcut-change') && document.querySelector('.shot-key-state').textContent.length > 0");
   await shot('01-where', { section: '.capture-nav', capture: '[data-action=capture]', key: '.shot-key', help: '[data-guide=screenshots]' });
   // Add two harmless fixtures via the real import handler.
   for (let i = 1; i <= 2; i++) {

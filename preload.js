@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureStart: () => ipcRenderer.invoke('capture-start'),
   captureImport: () => ipcRenderer.invoke('capture-import'),
   captureShortcut: key => ipcRenderer.invoke('capture-shortcut', key),
+  captureState: () => ipcRenderer.invoke('capture-state'),
+  captureRecording: begin => ipcRenderer.invoke('capture-recording', begin),
   onCaptureChanged: fn => { const f = (_e, value) => fn(value); ipcRenderer.on('capture-changed', f); return () => ipcRenderer.removeListener('capture-changed', f); },
   onCaptureOpen: fn => { const f = (_e, id) => fn(id); ipcRenderer.on('capture-open', f); return () => ipcRenderer.removeListener('capture-open', f); },
   onCaptureTheme: fn => { const f = (_e, theme) => fn(theme); ipcRenderer.on('capture-theme', f); return () => ipcRenderer.removeListener('capture-theme', f); },

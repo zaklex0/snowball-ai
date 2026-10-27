@@ -15,13 +15,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { ScreenshotStore, pngSize, cropRect, discardUndo } = require('./screenshot-store');
 const SHORTCUTS = ['Alt+Z', 'Alt+V', 'Alt+B'];
+const shortcut = require('./src/capture-shortcut');
 
 module.exports = function setupScreenshots(options) {
   let storage = new ScreenshotStore(options.dir()),
     token = crypto.randomUUID(),
     blocked = false;
-  let key = SHORTCUTS.includes(options.key()) ? options.key() : 'Alt+Z',
+  let key = options.key() || 'Alt+Z',
     registered = false;
+  let recording = null;
   let session = null,
     editor = null,
     busy = false,
@@ -36,6 +38,7 @@ module.exports = function setupScreenshots(options) {
     token,
     shortcut: key,
     shortcutActive: registered,
+    shortcutRecording: !!recording,
     shortcutNotice,
     theme: options.theme(),
   });
@@ -210,24 +213,41 @@ module.exports = function setupScreenshots(options) {
     }
   }
   function register(next) {
-    if (!SHORTCUTS.includes(next)) throw Error('Выберите Alt + Z, Alt + V или Alt + B.');
+    next = shortcut.normalize(next);
     if (next === key && registered) return;
     const success = globalShortcut.register(next, () => {
       start(null).catch((e) => dialog.showErrorBox('Снимки — Snowball.ai', e.message));
     });
-    if (!success)
-      throw Error(
-        next.replace('+', ' + ') + ' уже занято другой программой. Выберите другое сочетание.',
-      );
+    if (!success) throw Error('Это сочетание занято другой программой');
     if (registered) globalShortcut.unregister(key);
     key = next;
     registered = true;
-    options.saveKey(key);
+  }
+  function unavailable() {
+    return (
+      shortcut.format(key) +
+      ' занято другой программой. Выберите другое сочетание в «Снимках» или в «Настройках» → «Горячие клавиши».'
+    );
+  }
+  function endRecording(restore = true) {
+    if (!recording) return;
+    clearTimeout(recording.timeout);
+    recording.window.removeListener('closed', recording.cancel);
+    recording.window.removeListener('blur', recording.cancel);
+    recording = null;
+    if (restore && !registered) {
+      try {
+        register(key);
+      } catch (_) {
+        shortcutNotice = unavailable();
+      }
+    }
     changed();
   }
-  // Try the preferred key first, then the remaining keys. Tell the main window about a fallback.
+  // Legacy saved choices are kept. Only a fresh installation tries alternatives automatically.
   const preferred = key;
-  for (const candidate of [preferred, ...SHORTCUTS.filter((k) => k !== preferred)]) {
+  const firstLaunch = !options.key() && !options.initialized();
+  for (const candidate of firstLaunch ? SHORTCUTS : [preferred]) {
     try {
       register(candidate);
       break;
@@ -236,14 +256,30 @@ module.exports = function setupScreenshots(options) {
     }
   }
   if (!registered)
-    shortcutNotice =
-      'Все сочетания для снимков заняты. Откройте «Снимки», чтобы выбрать клавиши после их освобождения.';
+    shortcutNotice = firstLaunch
+      ? 'Все сочетания для снимков заняты. Выберите другое сочетание в «Снимках» или в «Настройках» → «Горячие клавиши».'
+      : unavailable();
   else if (key !== preferred)
     shortcutNotice =
-      preferred.replace('+', ' + ') +
+      shortcut.format(preferred) +
       ' занято другой программой. Для снимков включено ' +
-      key.replace('+', ' + ') +
+      shortcut.format(key) +
       '.';
+  options.saveKey(key);
+  handle('capture-state', async () => state());
+  handle('capture-recording', async (w, begin) => {
+    if (recording && recording.window !== w) throw Error('Сочетание уже меняется в другом окне.');
+    if (begin && !recording) {
+      if (registered) globalShortcut.unregister(key);
+      registered = false;
+      const cancel = () => endRecording();
+      recording = { window: w, cancel, timeout: setTimeout(cancel, 60000) };
+      w.once('closed', cancel);
+      w.once('blur', cancel);
+      changed();
+    } else if (!begin) endRecording();
+    return state();
+  });
   handle('capture-list', async () => ({ ...state(), items: await storage.list() }));
   handle('capture-guide', async () => {
     const main = windows().find((w) => !w.__snowCapture);
@@ -309,9 +345,15 @@ module.exports = function setupScreenshots(options) {
     await options.record();
     return {};
   });
-  handle('capture-shortcut', async (_w, next) => {
-    register(next);
-    shortcutNotice = '';
+  handle('capture-shortcut', async (w, next) => {
+    if (recording && recording.window !== w) throw Error('Сочетание уже меняется в другом окне.');
+    try {
+      register(next);
+      shortcutNotice = '';
+      options.saveKey(key);
+    } finally {
+      endRecording();
+    }
     changed();
     return state();
   });
@@ -372,6 +414,7 @@ module.exports = function setupScreenshots(options) {
   screen.on('display-removed', () => closeCapture());
   screen.on('display-metrics-changed', () => closeCapture());
   app.on('will-quit', () => {
+    endRecording(false);
     globalShortcut.unregisterAll();
     closeCapture(false);
   });
