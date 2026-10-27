@@ -5,7 +5,7 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
-  { version: "1.16.0", updated: "1.16.4", section: "screenshots", title: "Снимки", steps: [
+  { version: "1.16.0", updated: "1.16.12", section: "screenshots", title: "Снимки", steps: [
     { title: "Где найти и как снять", lead: "Снимки открываются отдельным разделом. Захват работает и поверх других программ.", frames: [{ shot: "01-where", points: [
       { box: "section", at: [110, 260], label: "Снимки", text: "Кнопка под иконками слева открывает историю и редактор." },
       { box: "capture", at: [420, 320], label: "Снять область", text: "Нажмите кнопку или выбранные горячие клавиши. Потяните мышью по экрану; Shift делает квадрат, правая кнопка снимает весь монитор, Esc отменяет." },
@@ -14,6 +14,7 @@ window.GUIDES = [
     { title: "Пометки и маркер", lead: "Выберите инструмент и рисуйте на снимке. Изменения сохраняются сами.", frames: [{ shot: "02-tools", points: [
       { box: "tools", at: [640, 400], label: "Инструменты", text: "Перо, маркер, прямоугольная рамка, подсветка и текст." },
       { box: "pressure", at: [1000, 460], label: "Нажим", text: "Меняет насыщенность маркера от прозрачного до плотного. Толщина регулируется отдельно." },
+      { box: "brush", at: [1090, 600], label: "Размер кисти", text: "Круг на снимке показывает размер пера или маркера. При изменении толщины он сразу меняется вместе с ползунком." },
       { box: "color", at: [550, 540], label: "Цвет", text: "Выберите любой цвет. Стрелки в конце панели отменяют и возвращают последнюю пометку." }
     ] }] },
     { title: "Текст в прямоугольнике", lead: "Сначала задайте область, затем напишите текст прямо на снимке.", frames: [{ shot: "03-text", points: [

@@ -378,6 +378,16 @@
   cursor: crosshair;
   box-shadow: var(--shadow);
 }
+.capture-app .shot-brush-preview {
+  position: absolute;
+  z-index: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--brush-preview-color);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brush-preview-color) var(--brush-preview-alpha), transparent);
+  box-shadow: 0 0 0 1px white, 0 0 0 2px rgba(0, 0, 0, .75);
+  pointer-events: none;
+}
 .capture-app .shot-empty {
   color: var(--ink-soft);
   text-align: center;

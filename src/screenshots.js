@@ -245,6 +245,7 @@
               Выделите участок экрана — здесь откроется редактор.
             </p>
             <canvas hidden aria-label="Снимок: рисуйте выбранным инструментом"></canvas>
+            <div class="shot-brush-preview" hidden aria-hidden="true"></div>
           </div>
           <button class="shot-conflict" hidden>Открыть сохранённую версию заново</button>
         </div>
@@ -283,7 +284,8 @@
       pressure = 35,
       drawing = null,
       cropSelection = null,
-      textEdit = null;
+      textEdit = null,
+      previewPoint = { x: 0.5, y: 0.5 };
     let timer = null,
       loading = 0,
       opening = false,
@@ -326,11 +328,38 @@
       canvas.style.width = Math.max(1, Math.floor(canvas.width * scale)) + 'px';
       canvas.style.height = Math.max(1, Math.floor(canvas.height * scale)) + 'px';
       positionText();
+      updateBrushPreview();
+    }
+    // Show the stroke footprint at the canvas zoom while the size slider has focus.
+    function updateBrushPreview() {
+      const preview = $('.shot-brush-preview');
+      const active = current && !canvas.hidden && (tool === 'pen' || tool === 'marker');
+      preview.hidden = !active;
+      if (!active) return;
+      const canvasRect = canvas.getBoundingClientRect();
+      const stageRect = $('.shot-stage').getBoundingClientRect();
+      const stroke = width * (tool === 'marker' ? 5 : 1);
+      const diameter = stroke * canvasRect.width / canvas.width;
+      preview.style.width = diameter + 'px';
+      preview.style.height = diameter + 'px';
+      preview.style.left = canvasRect.left - stageRect.left + previewPoint.x * canvasRect.width + 'px';
+      preview.style.top = canvasRect.top - stageRect.top + previewPoint.y * canvasRect.height + 'px';
+      preview.style.setProperty('--brush-preview-color', color);
+      preview.style.setProperty('--brush-preview-alpha', tool === 'marker' ? pressure + '%' : '18%');
+    }
+    function moveBrushPreview(e) {
+      const rect = canvas.getBoundingClientRect();
+      previewPoint = {
+        x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+        y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+      };
+      updateBrushPreview();
     }
     function sizeCanvas(s) {
       const view = viewOf(s);
       canvas.width = view.width;
       canvas.height = view.height;
+      previewPoint = { x: 0.5, y: 0.5 };
       $('.shot-size').textContent = view.width + ' × ' + view.height;
       fitCanvas();
     }
@@ -355,6 +384,7 @@
       $('[data-action="reset-crop"]').hidden = !current?.crop;
       $('.shot-pressure-label').hidden = tool !== 'marker';
       $('.shot-blur-label').hidden = tool !== 'focus';
+      updateBrushPreview();
       for (const [id, card] of cards) card.classList.toggle('active', id === current?.id);
     }
     function rendered(s) {
@@ -637,6 +667,7 @@
     };
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !current || opening) return;
+      moveBrushPreview(e);
       finishText();
       if (tool !== 'crop' && current.ops.length >= 1500) {
         status('На снимке уже много пометок. Скопируйте результат и начните новый снимок.', true);
@@ -656,6 +687,7 @@
       render();
     });
     canvas.addEventListener('pointermove', (e) => {
+      moveBrushPreview(e);
       if (!drawing) return;
       const p = point(e);
       if (drawing.points) {
@@ -739,14 +771,17 @@
     $('[data-action="reset-crop"]').addEventListener('click', () => run(() => changeCrop(null)));
     $('.shot-color').addEventListener('input', (e) => {
       color = e.target.value;
+      updateBrushPreview();
     });
     $('.shot-width').addEventListener('input', (e) => {
       width = +e.target.value;
       $('.shot-width-out').textContent = width;
+      updateBrushPreview();
     });
     $('.shot-pressure').addEventListener('input', (e) => {
       pressure = +e.target.value;
       $('.shot-pressure-out').textContent = pressure + '%';
+      updateBrushPreview();
     });
     $('.shot-blur').addEventListener('input', (e) => {
       $('.shot-blur-out').textContent = e.target.value + '%';

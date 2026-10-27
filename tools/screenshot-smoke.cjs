@@ -36,6 +36,23 @@ async function draw(page, tool, from, to) {
   await page.ev('window.screenshotEditor.refresh()');
   let list = await page.ev('window.vsApi.captureList()'); const ids = list.items.map(s => s.id);
   await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`);
+  // The ring follows the pointer and uses the exact scaled stroke footprint, including the marker's 5× width.
+  const preview = () => page.ev("(() => {const c=document.querySelector('.shot-stage canvas'),r=c.getBoundingClientRect(),p=document.querySelector('.shot-brush-preview'),b=p.getBoundingClientRect();return {visible:!p.hidden,diameter:b.width,scale:r.width/c.width,x:b.left+b.width/2,center:r.left+r.width/2,alpha:p.style.getPropertyValue('--brush-preview-alpha')}})()");
+  let brush = await preview();
+  assert.equal(brush.visible, true);
+  assert.ok(Math.abs(brush.diameter - 5 * brush.scale) < 1 && Math.abs(brush.x - brush.center) < 1);
+  const brushCanvas = await page.ev("(()=>{const r=document.querySelector('.shot-stage canvas').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}})()");
+  await mouse(page, 'mouseMoved', brushCanvas.x + brushCanvas.w * .7, brushCanvas.y + brushCanvas.h * .3);
+  brush = await preview(); assert.ok(Math.abs(brush.x - (brushCanvas.x + brushCanvas.w * .7)) < 1);
+  await page.ev("document.querySelector('.shot-width').value=20;document.querySelector('.shot-width').dispatchEvent(new Event('input',{bubbles:true}))");
+  brush = await preview(); assert.ok(Math.abs(brush.diameter - 20 * brush.scale) < 1 && Math.abs(brush.x - (brushCanvas.x + brushCanvas.w * .7)) < 1);
+  await page.ev("document.querySelector('[data-tool=marker]').click()");
+  brush = await preview(); assert.ok(Math.abs(brush.diameter - 100 * brush.scale) < 1);
+  await page.ev("document.querySelector('.shot-pressure').value=60;document.querySelector('.shot-pressure').dispatchEvent(new Event('input',{bubbles:true}))");
+  assert.equal((await preview()).alpha, '60%');
+  await page.ev("document.querySelector('[data-tool=rect]').click()");
+  assert.equal((await preview()).visible, false);
+  await page.ev("document.querySelector('.shot-width').value=5;document.querySelector('.shot-width').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('.shot-pressure').value=35;document.querySelector('.shot-pressure').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-tool=pen]').click()");
   await draw(page, 'marker', [.1, .2], [.5, .2]);
   await draw(page, 'rect', [.05, .1], [.45, .6]);
   await draw(page, 'focus', [.05, .1], [.45, .6]);

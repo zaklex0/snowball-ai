@@ -44,7 +44,9 @@ module.exports = async function ({ main, page, shot }) {
   }
   await draw('marker', .08, .47, .59, .47);
   await ev('window.screenshotEditor.flush()');
-  await guideShot('02-tools', { tools: '.shot-tools', pressure: '.shot-pressure-label', color: '.shot-color', undo: '.shot-undo' });
+  await ev("document.querySelector('.shot-width').value=12;document.querySelector('.shot-width').dispatchEvent(new Event('input',{bubbles:true}))");
+  await guideShot('02-tools', { tools: '.shot-tools', pressure: '.shot-pressure-label', color: '.shot-color', brush: '.shot-brush-preview', undo: '.shot-undo' });
+  await ev("document.querySelector('.shot-width').value=5;document.querySelector('.shot-width').dispatchEvent(new Event('input',{bubbles:true}))");
   await draw('text', .1, .73, .57, .93);
   await page.send('Input.insertText', { text: 'Проверить сегодня' });
   await guideShot('03-text', { text: '.shot-text', tool: '[data-tool=text]' });
