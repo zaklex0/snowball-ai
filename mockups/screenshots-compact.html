@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет компактных «Снимков» — Snowball.ai</title>
+<!-- A mockup only: the «Снимки» editor window of 1.16.13 with the capture buttons made compact so the picture moves up.
+     Three tabs: how it is now, variant A (one slim row on top), variant B (everything in the left column).
+     Numbered marks match the explanations on the right. Not loaded by the app. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<style>
+  /* The program's colours (copied from src/styles.css, so the mockup also opens on its own) */
+  :root {
+    --bg: #FCEEE4; --titlebar: #F9E3D4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7;
+    --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --accent-ink: #3F251C; --accent-strong: #BF603D;
+    --mark: #2E9A92; --new-bg: #DCEFEA;
+    --shadow: 0 1px 0 rgba(120, 72, 52, .05), 0 22px 44px -28px rgba(150, 85, 55, .38);
+    --pop-shadow: 0 12px 32px -10px rgba(110, 60, 40, .35);
+    --font-display: "Unbounded", "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: #E9DDD4; color: var(--ink); font: 14px/1.45 var(--font-body); padding: 16px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  [hidden] { display: none !important; }
+
+  .page { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; max-width: 1720px; margin: 0 auto; align-items: start; }
+  @media (max-width: 1100px) { .page { grid-template-columns: 1fr; } }
+
+  .switch { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .switch button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 16px; }
+  .switch button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .switch .rec { font-size: 11px; background: var(--new-bg); color: #24675F; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+  .switch button[aria-pressed="true"] .rec { background: #24675F; color: #fff; }
+
+  /* The editor window as in 1.16.13 (title bar of Windows on top) */
+  .win { background: var(--bg); border: 1px solid #D9C4B6; border-radius: 8px; overflow: hidden; box-shadow: 0 30px 60px -30px rgba(80, 40, 20, .45); height: 780px; display: flex; flex-direction: column; }
+  .wbar { height: 30px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12px; background: var(--bg); }
+  .wbar i { width: 12px; height: 12px; border-radius: 3px; background: var(--accent); }
+  .wbar span:last-child { margin-left: auto; letter-spacing: 14px; color: var(--ink-soft); }
+  .body { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 14px 14px; position: relative; }
+
+  .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 6px 12px; white-space: nowrap; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn.sm { padding: 4px 9px; font-size: 13px; }
+  .btn.icon { width: 32px; padding: 4px 0; text-align: center; }
+  .muted { color: var(--ink-soft); font-size: 12px; }
+  kbd { font: 12px var(--font-mono); }
+  h1 { font: 700 26px/1.1 var(--font-display); margin: 0; }
+  h1.small { font-size: 17px; }
+
+  /* shared editor parts */
+  .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 14px; }
+  .lib { min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  .lib strong { font-size: 14px; }
+  .cards { display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+  .card { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px; font-size: 11px; }
+  .card.active { border-color: var(--accent-strong); }
+  .thumb { height: 64px; border-radius: 6px; background: linear-gradient(135deg, #F7E3D6, #EADFD8); margin-bottom: 4px; }
+  .work { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+  .row { display: flex; align-items: center; gap: 5px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .row .btn { padding: 5px 10px; }
+  .row .btn.icon { padding: 5px 0; }
+  .row .muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .tool[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); }
+  .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+  .slider { width: 70px; accent-color: var(--accent-strong); }
+  .swatch { width: 22px; height: 22px; border-radius: 5px; background: #CF4738; border: 2px solid var(--surface); outline: 1px solid var(--line); }
+  .stage { flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; position: relative; }
+  .stage { overflow: hidden; }
+  .shot { height: 100%; max-width: 100%; aspect-ratio: 1388 / 1156; background: #FFF4EC; border: 1px solid var(--line); box-shadow: var(--shadow); padding: 3% 4%; display: flex; flex-direction: column; gap: 4%; }
+  .shot b { font: 700 18px var(--font-display); }
+  .shot .ph { background: #F4E2D6; border-radius: 6px; }
+  .shot .hl { background: #EEE7B8; border-radius: 30px; height: 12%; width: 70%; }
+  .top-edge { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--mark); pointer-events: none; }
+  .top-edge span { position: absolute; right: 8px; top: -22px; background: var(--mark); color: #fff; font-size: 11px; padding: 1px 7px; border-radius: 5px; }
+
+  /* numbered marks */
+  .mk { position: absolute; z-index: 5; width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 12px/22px var(--font-body); text-align: center; box-shadow: 0 0 0 2px var(--surface); pointer-events: none; }
+  .rel { position: relative; }
+
+  /* popover of the shortcut chip and of «?» */
+  .pop { position: absolute; z-index: 10; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--pop-shadow); padding: 12px; width: 280px; display: grid; gap: 8px; }
+  .pop p { margin: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface-2); border-radius: 9px; padding: 5px 10px; }
+  .chip::after { content: "▾"; font-size: 10px; color: var(--ink-soft); }
+
+  /* Variant B: the left column gets the actions */
+  .lib .actions { display: grid; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+  .lib .actions .btn { width: 100%; text-align: left; }
+  .lib .actions .btn.primary { padding: 10px 12px; font-weight: 600; }
+  .lib .actions .chip { width: 100%; justify-content: space-between; }
+
+  /* legend */
+  .legend { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); position: sticky; top: 16px; }
+  .legend h2 { font: 700 16px var(--font-display); margin: 0 0 6px; }
+  .legend ol { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 12px; }
+  .legend li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; }
+  .legend li .n { width: 22px; height: 22px; border-radius: 50%; background: var(--mark); color: #fff; font: 700 12px/22px var(--font-body); text-align: center; }
+  .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 5px; background: var(--new-bg); color: #24675F; margin-left: 4px; }
+  .tag.same { background: var(--surface-2); color: var(--ink-soft); }
+  .gain { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--new-bg); color: #1F5A53; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div>
+    <div class="switch" role="group" aria-label="Вариант">
+      <button type="button" data-v="now" aria-pressed="false">Сейчас (1.16.13)</button>
+      <button type="button" data-v="a" aria-pressed="false">Вариант А: одна строка сверху</button>
+      <button type="button" data-v="b" aria-pressed="true">Вариант Б: всё в левой колонке <span class="rec">советую</span></button>
+    </div>
+
+    <div class="win">
+      <div class="wbar"><i></i><span>Снимки — Snowball.ai</span><span>– ▢ ✕</span></div>
+
+      <!-- NOW: as in 1.16.13 -->
+      <div class="body" data-view="now">
+        <div style="display:flex;justify-content:space-between;padding:10px 0 6px">
+          <div><h1>Снимки</h1><div class="muted">Захват экрана, пометки и ваша история</div><div class="muted">▸ Подсказки по захвату</div></div>
+          <div style="display:grid;gap:6px;align-content:start">
+            <div style="display:flex;gap:6px"><button class="btn primary">Снять область</button><button class="btn">Открыть картинку</button><button class="btn">Как пользоваться</button></div>
+            <div class="muted">Сочетание для снимка</div>
+            <div style="display:flex;gap:6px"><button class="btn sm">Alt + Z</button><button class="btn sm">Изменить</button><button class="btn sm">Сбросить на Alt + Z</button></div>
+          </div>
+        </div>
+        <div class="muted" style="text-align:right;margin-bottom:8px">Alt + Z — работает поверх других окон, пока Snowball открыта</div>
+        <div class="layout">
+          <aside class="lib"><strong>Мои снимки <span class="muted">12</span></strong><span class="muted">Хранятся после перезапуска. У каждого — своя кнопка копирования.</span>
+            <div class="cards"><div class="card active"><div class="thumb"></div>Снимок 27.10, 20:22</div><div class="card"><div class="thumb"></div>Снимок 27.10, 19:49</div><div class="card"><div class="thumb"></div>Снимок 27.10, 16:29</div></div></aside>
+          <section class="work">
+            <div class="row"><button class="btn tool" aria-pressed="true">Перо</button><button class="btn tool">Маркер</button><button class="btn tool">Рамка</button><button class="btn tool">Подсветить</button><button class="btn tool">Текст</button><button class="btn tool">Обрезать</button><button class="btn icon">↶</button><button class="btn icon">↷</button><span class="muted" style="margin-left:auto">1388 × 1156 · Пометки сохраняются автоматически</span></div>
+            <div class="row">Цвет <span class="swatch"></span> Толщина <input class="slider" type="range" value="5" max="30"> 5 <span class="muted">1388 × 1156</span><button class="btn primary sm" style="margin-left:auto">Копировать снимок</button></div>
+            <div class="stage"><div class="shot"><b>Снимки</b><div class="ph" style="height:8%;width:60%"></div><div class="ph" style="height:30%"></div><div class="hl"></div></div></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- A: one slim row on top -->
+      <div class="body" data-view="a" hidden>
+        <div class="rel" style="display:flex;align-items:center;gap:8px;padding:8px 0 10px">
+          <span class="mk" style="left:-8px;top:-2px">1</span>
+          <h1 class="small">Снимки</h1>
+          <span class="rel" style="margin-left:auto;display:flex;gap:6px;align-items:center">
+            <span class="mk" style="left:-26px;top:-4px">2</span>
+            <button class="btn primary">Снять область</button><button class="btn">Открыть картинку</button>
+            <span class="rel"><span class="mk" style="right:-6px;top:-14px">3</span><button class="chip" data-pop="key-a" title="Сочетание для снимка"><kbd>Alt + Z</kbd></button>
+              <div class="pop" id="key-a" style="right:0;top:40px" hidden>
+                <p><strong>Сочетание для снимка</strong></p>
+                <p class="muted">Alt + Z работает поверх других окон, пока Snowball открыта.</p>
+                <div style="display:flex;gap:6px"><button class="btn sm">Изменить</button><button class="btn sm">Сбросить на Alt + Z</button></div>
+              </div></span>
+            <span class="rel"><span class="mk" style="right:-6px;top:-14px">4</span><button class="btn icon" data-pop="help-a" title="Как пользоваться">?</button>
+              <div class="pop" id="help-a" style="right:0;top:40px" hidden>
+                <p><strong>Подсказки по захвату</strong></p>
+                <p class="muted">Потяните мышью — область. Shift — квадрат. Правая кнопка — весь экран. Esc — отмена.</p>
+                <button class="btn sm">Как пользоваться — по шагам</button>
+              </div></span>
+          </span>
+        </div>
+        <div class="layout">
+          <aside class="lib"><strong>Мои снимки <span class="muted">12</span></strong>
+            <div class="cards"><div class="card active"><div class="thumb"></div>Снимок 27.10, 20:22</div><div class="card"><div class="thumb"></div>Снимок 27.10, 19:49</div><div class="card"><div class="thumb"></div>Снимок 27.10, 16:29</div><div class="card"><div class="thumb"></div>Снимок 27.10, 15:11</div></div></aside>
+          <section class="work rel">
+            <span class="mk" style="left:-10px;top:12px">5</span>
+            <div class="row"><button class="btn tool" aria-pressed="true">Перо</button><button class="btn tool">Маркер</button><button class="btn tool">Рамка</button><button class="btn tool">Подсветить</button><button class="btn tool">Текст</button><button class="btn tool">Обрезать</button><span class="sep"></span>
+              <span class="swatch"></span><input class="slider" type="range" value="5" max="30"><span class="muted">5</span><span class="sep"></span><button class="btn icon">↶</button><button class="btn icon">↷</button>
+              <span class="muted" style="margin-left:auto">1388 × 1156 · сохранено</span><button class="btn primary sm">Копировать снимок</button></div>
+            <div class="stage"><div class="shot"><b>Снимки</b><div class="ph" style="height:8%;width:60%"></div><div class="ph" style="height:30%"></div><div class="hl"></div></div></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- B: everything in the left column -->
+      <div class="body" data-view="b" style="padding-top:10px">
+        <div class="layout">
+          <aside class="lib">
+            <div class="actions rel">
+              <span class="mk" style="right:-6px;top:-6px">1</span>
+              <button class="btn primary">＋ Снять область</button>
+              <button class="btn">Открыть картинку</button>
+              <span class="rel"><span class="mk" style="right:-6px;top:-8px">2</span><button class="chip" data-pop="key-b" title="Сочетание для снимка"><span class="muted">Клавиши</span><kbd>Alt + Z</kbd></button>
+                <div class="pop" id="key-b" style="left:0;top:40px" hidden>
+                  <p><strong>Сочетание для снимка</strong></p>
+                  <p class="muted">Alt + Z работает поверх других окон, пока Snowball открыта.</p>
+                  <div style="display:flex;gap:6px"><button class="btn sm">Изменить</button><button class="btn sm">Сбросить на Alt + Z</button></div>
+                </div></span>
+            </div>
+            <strong>Мои снимки <span class="muted">12</span></strong>
+            <div class="cards"><div class="card active"><div class="thumb"></div>Снимок 27.10, 20:22</div><div class="card"><div class="thumb"></div>Снимок 27.10, 19:49</div><div class="card"><div class="thumb"></div>Снимок 27.10, 16:29</div></div>
+          </aside>
+          <section class="work rel">
+            <span class="mk" style="left:-10px;top:12px">3</span>
+            <div class="row"><button class="btn tool" aria-pressed="true">Перо</button><button class="btn tool">Маркер</button><button class="btn tool">Рамка</button><button class="btn tool">Подсветить</button><button class="btn tool">Текст</button><button class="btn tool">Обрезать</button><span class="sep"></span>
+              <span class="swatch"></span><input class="slider" type="range" value="5" max="30"><span class="muted">5</span><span class="sep"></span><button class="btn icon">↶</button><button class="btn icon">↷</button>
+              <span class="muted" style="margin-left:auto">1388 × 1156 · сохранено</span>
+              <span class="rel"><span class="mk" style="left:-12px;top:-12px">4</span><button class="btn icon" data-pop="help-b" title="Как пользоваться">?</button>
+                <div class="pop" id="help-b" style="right:0;top:40px" hidden>
+                  <p><strong>Подсказки по захвату</strong></p>
+                  <p class="muted">Потяните мышью — область. Shift — квадрат. Правая кнопка — весь экран. Esc — отмена.</p>
+                  <button class="btn sm">Как пользоваться — по шагам</button>
+                </div></span>
+              <button class="btn primary sm">Копировать снимок</button></div>
+            <div class="stage"><div class="shot"><b>Снимки</b><div class="ph" style="height:8%;width:60%"></div><div class="ph" style="height:30%"></div><div class="hl"></div></div></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="legend">
+    <section data-legend="now" hidden>
+      <h2>Сейчас</h2>
+      <p class="muted">Шапка раздела с кнопками, сочетанием и подписью занимает примерно 190 точек сверху, и ещё две строки инструментов. Сам снимок начинается почти на середине окна.</p>
+    </section>
+
+    <section data-legend="a" hidden>
+      <h2>Вариант А: одна строка сверху</h2>
+      <p class="muted">Всё, что сейчас в шапке, собрано в одну тонкую строку. Снимок поднимается примерно на 200 точек.</p>
+      <ol>
+        <li><span class="n">1</span><div>Заголовок «Снимки» мелкий, без подписи «Захват экрана, пометки…». <span class="tag">Новое</span></div></li>
+        <li><span class="n">2</span><div>«Снять область» и «Открыть картинку» — справа в той же строке. <span class="tag same">Кнопки те же</span></div></li>
+        <li><span class="n">3</span><div>Сочетание клавиш — одна кнопка «Alt + Z ▾». По клику окошко: «Изменить», «Сбросить на Alt + Z» и подпись «работает поверх других окон». Нажмите в макете. <span class="tag">Новое</span></div></li>
+        <li><span class="n">4</span><div>«?» вместо «Как пользоваться» и «Подсказки по захвату»: по клику — короткие подсказки и кнопка инструкции по шагам. Нажмите в макете. <span class="tag">Новое</span></div></li>
+        <li><span class="n">5</span><div>Две строки инструментов слиты в одну: инструменты, цвет, толщина, отмена, «Копировать снимок». Нажим и блюр появляются в этой же строке у маркера и подсветки. <span class="tag">Новое</span></div></li>
+      </ol>
+      <div class="gain">Снимок начинается примерно на 110 точек от верха окна вместо ~310.</div>
+    </section>
+
+    <section data-legend="b">
+      <h2>Вариант Б: всё в левой колонке</h2>
+      <p class="muted">Шапки нет совсем. Кнопки захвата стоят над «Моими снимками» — там, где история, а редактор начинается сразу сверху. Советую его: места для снимка больше всего, а кнопки захвата рядом с историей, куда снимки и попадают.</p>
+      <ol>
+        <li><span class="n">1</span><div>«Снять область» — крупная главная кнопка слева сверху, под ней «Открыть картинку». <span class="tag same">Кнопки те же</span></div></li>
+        <li><span class="n">2</span><div>Сочетание клавиш — одна строка «Клавиши Alt + Z ▾». По клику окошко: «Изменить», «Сбросить на Alt + Z» и подпись. Нажмите в макете. <span class="tag">Новое</span></div></li>
+        <li><span class="n">3</span><div>Редактор поднят к самому верху окна, две строки инструментов слиты в одну. Нажим и блюр появляются в этой же строке у маркера и подсветки. <span class="tag">Новое</span></div></li>
+        <li><span class="n">4</span><div>«?» вместо «Как пользоваться» и «Подсказки по захвату», рядом с «Копировать снимок». <span class="tag">Новое</span></div></li>
+      </ol>
+      <div class="gain">Снимок начинается примерно на 60 точек от верха окна вместо ~310 — почти на всю высоту окна.</div>
+      <p class="muted" style="margin-top:10px">В главном окне программы (вкладка «Снимки» с левой панелью) будет так же: в колонке «Мои снимки» сверху кнопки захвата.</p>
+    </section>
+  </aside>
+</div>
+
+<script>
+  // Variant switch, popovers and tool buttons. Nothing else works: it is a picture to look at.
+  const show = (v) => {
+    document.querySelectorAll('[data-v]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    document.querySelectorAll('[data-view]').forEach((el) => { el.hidden = el.dataset.view !== v; });
+    document.querySelectorAll('[data-legend]').forEach((el) => { el.hidden = el.dataset.legend !== v; });
+    document.querySelectorAll('.pop').forEach((p) => { p.hidden = true; });
+  };
+  document.querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => show(b.dataset.v)));
+  document.querySelectorAll('[data-view="now"]').forEach((el) => { el.hidden = true; });
+  document.addEventListener('click', (e) => {
+    const opener = e.target.closest('[data-pop]');
+    document.querySelectorAll('.pop').forEach((p) => { if (!p.contains(e.target) && (!opener || p.id !== opener.dataset.pop)) p.hidden = true; });
+    if (opener) { const p = document.getElementById(opener.dataset.pop); p.hidden = !p.hidden; }
+    const tool = e.target.closest('.tool');
+    if (tool) tool.parentElement.querySelectorAll('.tool').forEach((t) => t.setAttribute('aria-pressed', String(t === tool)));
+  });
+</script>
+</body>
+</html>

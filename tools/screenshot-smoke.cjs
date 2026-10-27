@@ -169,7 +169,8 @@ async function draw(page, tool, from, to) {
     const bg = "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()";
     assert.equal(await page.ev(bg), await editor.ev(bg), theme + ' differs between windows');
     if (theme === 'zaklex') {
-      assert.deepEqual(await editor.ev("(()=>{const b=document.querySelector('.shot-capture'),r=b.getBoundingClientRect();return [r.width,r.height,getComputedStyle(b).backgroundColor,getComputedStyle(document.querySelector('.shot-tip')).color]})()"), [42,42,'rgb(225, 51, 43)','rgb(240, 227, 206)']);
+      // The capture button is a full-width red bar at the top of the left column.
+      assert.deepEqual(await editor.ev("(()=>{const b=document.querySelector('.shot-capture'),r=b.getBoundingClientRect(),l=document.querySelector('.shot-library').getBoundingClientRect();return [Math.round(r.width)===Math.round(l.width),getComputedStyle(b).backgroundColor,getComputedStyle(document.querySelector('.shot-tip')).color]})()"), [true,'rgb(225, 51, 43)','rgb(240, 227, 206)']);
     }
     for (const [name,target] of [['main',page],['editor',editor]]) { const png=await target.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(out,`theme-${theme}-${name}.png`),Buffer.from(png.result.data,'base64')); }
   }

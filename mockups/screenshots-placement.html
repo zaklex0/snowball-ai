@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет: где стоит снимок — Snowball.ai</title>
+<!-- A mockup only: where the picture stands inside the «Снимки» editor (new layout with the capture buttons on the left).
+     Now it is centred in the free space, so a wide, low picture leaves an empty band above it.
+     Three variants, each can be checked with a wide, a tall and a small picture. Not loaded by the app. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<style>
+  :root {
+    --bg: #FCEEE4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7;
+    --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --accent-ink: #3F251C; --accent-strong: #BF603D;
+    --mark: #2E9A92; --new-bg: #DCEFEA;
+    --shadow: 0 1px 0 rgba(120, 72, 52, .05), 0 22px 44px -28px rgba(150, 85, 55, .38);
+    --font-display: "Unbounded", "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-body: "Golos Text", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #E9DDD4; color: var(--ink); font: 14px/1.45 var(--font-body); padding: 16px; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .page { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; max-width: 1720px; margin: 0 auto; align-items: start; }
+  @media (max-width: 1100px) { .page { grid-template-columns: 1fr; } }
+  .switch { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+  .switch span.lbl { color: var(--ink-soft); font-size: 12px; margin-right: 4px; min-width: 70px; }
+  .switch button { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 6px 14px; }
+  .switch button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+  .rec { font-size: 11px; background: var(--new-bg); color: #24675F; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
+  button[aria-pressed="true"] .rec { background: #24675F; color: #fff; }
+
+  .win { background: var(--bg); border: 1px solid #D9C4B6; border-radius: 8px; overflow: hidden; box-shadow: 0 30px 60px -30px rgba(80, 40, 20, .45); height: 720px; display: flex; flex-direction: column; margin-top: 10px; }
+  .wbar { height: 30px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 12px; }
+  .wbar i { width: 12px; height: 12px; border-radius: 3px; background: var(--accent); }
+  .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 14px; padding: 6px 14px 14px; }
+  .lib { display: flex; flex-direction: column; gap: 6px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 6px 10px; white-space: nowrap; text-align: left; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; padding: 9px 12px; }
+  .btn.key { background: var(--surface-2); display: flex; justify-content: space-between; font-size: 13px; }
+  .card { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px; font-size: 11px; }
+  .thumb { height: 58px; border-radius: 6px; background: linear-gradient(135deg, #F7E3D6, #EADFD8); margin-bottom: 4px; }
+  .work { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 5px; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .bar .btn { padding: 5px 9px; }
+  .bar .on { background: var(--accent); border-color: var(--accent); }
+  .bar .muted { margin-left: auto; color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+
+  .stage { flex: 1; min-height: 0; display: flex; padding: 10px; background: var(--bg); position: relative; }
+  .stage.center { align-items: center; justify-content: center; overflow: hidden; }
+  .stage.top { align-items: flex-start; justify-content: center; overflow: hidden; }
+  .stage.topleft { align-items: flex-start; justify-content: flex-start; overflow: hidden; }
+  .stage.width { align-items: flex-start; justify-content: center; overflow: auto; }
+
+  /* The picture: a fake screenshot drawn with CSS. Its real size is set from script. */
+  .shot { flex: none; background: #FFF4EC; border: 1px solid var(--line); box-shadow: var(--shadow); padding: 18px 22px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .shot b { font: 700 18px var(--font-display); background: #F2C8BB; border-radius: 20px; padding: 2px 10px; width: fit-content; }
+  .grid { flex: 1; min-height: 40px; background-image: linear-gradient(90deg, var(--surface) 2px, transparent 2px), linear-gradient(var(--surface) 2px, transparent 2px); background-size: 14px 14px; background-color: #F6DCCB; border-radius: 4px; }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; background: #F1EBBE; border-radius: 30px; padding: 8px; }
+  .pills i { font-style: normal; font-size: 11px; background: var(--surface-2); border-radius: 12px; padding: 2px 8px; }
+  .blurry { filter: blur(.6px); }
+  .gap-note { position: absolute; left: 50%; transform: translateX(-50%); background: #fff; border: 1px dashed var(--mark); color: #24675F; font-size: 12px; padding: 2px 10px; border-radius: 6px; }
+
+  .legend { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); position: sticky; top: 16px; }
+  .legend h2 { font: 700 16px var(--font-display); margin: 0 0 6px; }
+  .legend p { margin: 6px 0; }
+  .legend .muted { color: var(--ink-soft); font-size: 13px; }
+  .gain { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--new-bg); color: #1F5A53; font-size: 13px; }
+  .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 5px; background: var(--new-bg); color: #24675F; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div>
+    <div class="switch" role="group" aria-label="Где стоит снимок">
+      <span class="lbl">Где снимок</span>
+      <button data-v="center">Сейчас: посередине</button>
+      <button data-v="top">1. Сверху по центру <span class="rec">советую</span></button>
+      <button data-v="topleft">2. Сверху слева</button>
+      <button data-v="width">3. По ширине, с прокруткой</button>
+    </div>
+    <div class="switch" role="group" aria-label="Какой снимок">
+      <span class="lbl">Какой снимок</span>
+      <button data-s="wide">Широкий и низкий (как у вас)</button>
+      <button data-s="tall">Высокий</button>
+      <button data-s="small">Маленький</button>
+    </div>
+
+    <div class="win">
+      <div class="wbar"><i></i><span>Снимки — Snowball.ai</span></div>
+      <div class="layout">
+        <aside class="lib">
+          <button class="btn primary">＋ Снять область</button>
+          <button class="btn">Открыть картинку</button>
+          <button class="btn key"><span>Клавиши</span><span>Alt + Z ▾</span></button>
+          <strong style="margin-top:8px">Мои снимки <span style="color:var(--ink-soft);font-weight:400">12</span></strong>
+          <div class="card"><div class="thumb"></div>Снимок 27.10, 20:22</div>
+          <div class="card"><div class="thumb"></div>Снимок 27.10, 19:49</div>
+          <div class="card"><div class="thumb"></div>Снимок 27.10, 16:29</div>
+        </aside>
+        <section class="work">
+          <div class="bar"><button class="btn on">Перо</button><button class="btn">Маркер</button><button class="btn">Рамка</button><button class="btn">Подсветить</button><button class="btn">Текст</button><button class="btn">Обрезать</button>
+            <span style="margin-left:6px">Цвет ■ Толщина ━━○</span><span class="muted">Все пометки сохранены</span><button class="btn">?</button><button class="btn primary" style="padding:5px 10px">Копировать снимок</button></div>
+          <div class="stage" id="stage">
+            <div class="shot" id="shot"><b>Активность за год</b><div class="grid"></div><div class="pills"><i>Создано промтов 9</i><i>Правок 3</i><i>Скопировано 3</i><i>Дел в календаре 8</i><i>Сообщений ассистенту 31</i></div></div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <aside class="legend" id="legend"></aside>
+</div>
+
+<script>
+  // Three sizes of a picture (real pixels) and four ways to place it. Only for looking at.
+  const SHOTS = { wide: [1104, 354], tall: [900, 1600], small: [420, 180] };
+  const TEXT = {
+    center: ['Сейчас: посередине', 'Снимок вписывается в свободное место и стоит посередине. Широкий низкий снимок оставляет пустую полосу сверху и снизу — то, что вы отметили. Маленький снимок растягивается на всё место и становится мутным.', ''],
+    top: ['1. Сверху по центру', 'Снимок прижат к строке инструментов, по ширине — посередине. Всё свободное место остаётся внизу, где оно не мешает. Маленький снимок показывается в настоящем размере и не мутнеет: увеличивать его больше 100% программа не будет.', 'Снимок всегда начинается сразу под инструментами. Привычно — так открывают картинки просмотрщики.'],
+    topleft: ['2. Сверху слева', 'Снимок прижат к левому верхнему углу, рядом с инструментами и историей. Свободное место — справа и снизу. Маленький снимок — в настоящем размере.', 'Глазу ближе всего от кнопок, но на широком мониторе справа может оставаться пустая полоса.'],
+    width: ['3. По ширине, с прокруткой', 'Снимок всегда занимает всю ширину редактора. Высокий снимок (длинная страница) не уменьшается, а прокручивается колесом мыши — мелкий текст на нём крупнее. Маленький — в настоящем размере, не растягивается.', 'Удобно для длинных страниц, но высокий снимок целиком сразу не видно — нужно крутить.'],
+  };
+  let v = 'top', s = 'wide';
+  function draw() {
+    document.querySelectorAll('[data-v]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+    document.querySelectorAll('[data-s]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === s)));
+    const stage = document.getElementById('stage'), shot = document.getElementById('shot');
+    stage.className = 'stage ' + v;
+    const pad = 20, W = stage.clientWidth - pad, H = stage.clientHeight - pad, [w, h] = SHOTS[s];
+    // How big the picture is shown: «now» may enlarge it, the variants never go above 100%.
+    let k = v === 'width' ? Math.min(1, W / w) : Math.min(W / w, H / h);
+    if (v !== 'center') k = Math.min(k, 1);
+    shot.style.width = Math.round(w * k) + 'px';
+    shot.style.height = Math.round(h * k) + 'px';
+    shot.classList.toggle('blurry', k > 1.05);
+    stage.querySelectorAll('.gap-note').forEach((n) => n.remove());
+    if (v === 'center' && h * k < H - 60) {
+      const n = document.createElement('div');
+      n.className = 'gap-note';
+      n.style.top = '14px';
+      n.textContent = 'пустое место сверху';
+      stage.append(n);
+    }
+    const [title, text, note] = TEXT[v];
+    document.getElementById('legend').innerHTML = '<h2>' + title + '</h2><p>' + text + '</p>' + (note ? '<p class="muted">' + note + '</p>' : '') +
+      (v === 'top' ? '<div class="gain">Советую этот: снимок сразу под инструментами, целиком на экране, а маленькие снимки больше не мутнеют. <span class="tag">Новое</span></div>' : '') +
+      '<p class="muted" style="margin-top:14px">Переключайте «Какой снимок» сверху, чтобы увидеть, как ведут себя широкий, высокий и маленький снимки.</p>';
+  }
+  document.querySelectorAll('[data-v]').forEach((b) => b.addEventListener('click', () => { v = b.dataset.v; draw(); }));
+  document.querySelectorAll('[data-s]').forEach((b) => b.addEventListener('click', () => { s = b.dataset.s; draw(); }));
+  window.addEventListener('resize', draw);
+  draw();
+</script>
+</body>
+</html>

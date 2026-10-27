@@ -23,12 +23,20 @@ module.exports = async function ({ main, page, shot }) {
       document.querySelector('#capture-shortcut-notice').hidden = true;
       document.querySelector('.shot-key output').textContent = 'Alt + Z';
       document.querySelector('.shot-key-state').textContent = 'Alt + Z — работает поверх других окон, пока Snowball открыта';
+      document.querySelector('.shot-key-value').textContent = 'Alt + Z';
+      document.querySelector('.shot-key-btn').classList.remove('error');
+      document.querySelector('.shot-key-state').classList.remove('error');
       document.querySelector('.shot-empty-key').textContent = 'Нажмите «Снять область» или Alt + Z.';
       return true;
     })()`);
     await shot(name, targets);
   }
-  await guideShot('01-where', { section: '.capture-nav', capture: '[data-action=capture]', key: '.shot-key', help: '[data-guide=screenshots]' });
+  await guideShot('01-where', { section: '.capture-nav', capture: '[data-action=capture]', key: '.shot-key-btn', help: '.shot-help-btn' });
+  // «Клавиши» opens a pop-up: the second frame of the first step shows it.
+  await click('.shot-key-btn');
+  await until("!document.querySelector('.shot-key-pop').hidden");
+  await guideShot('01-keys', { pop: '.shot-key-pop', change: '.shot-key .capture-shortcut-change', reset: '.shot-key .capture-shortcut-reset' });
+  await click('.shot-key-btn');
   // Add two harmless fixtures via the real import handler.
   for (let i = 1; i <= 2; i++) {
     const png = await ev(`(() => { const c=document.createElement('canvas');c.width=640;c.height=280;const g=c.getContext('2d');g.fillStyle='#e0e9e1';g.fillRect(0,0,640,280);g.fillStyle='#fff9f4';g.fillRect(30,30,580,220);g.fillStyle='#416551';g.font='bold 28px sans-serif';g.fillText('План проекта — пример ${i}',55,80);g.font='18px sans-serif';g.fillText('Подготовить материалы',55,130);g.fillText('Обсудить идею',55,175);g.fillStyle='#f4aa84';g.fillRect(420,105,150,90);return c.toDataURL('image/png').split(',')[1] })()`);

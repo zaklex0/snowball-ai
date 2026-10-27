@@ -181,6 +181,10 @@ async function customShortcuts() {
       await main.ev(
         "(()=>{const w=process.mainModule.require('electron').BrowserWindow.getAllWindows().find(w=>!w.__snowCapture);w.show();w.focus();})()",
       );
+      // In «Снимки» the shortcut lives in the «Клавиши» pop-up: open it first, like a person would
+      // (recording stops by itself when its field is not visible).
+      if (selector === '.shot-key')
+        await page.ev("(() => { const p = document.querySelector('.shot-key-pop'); if (p.hidden) document.querySelector('.shot-key-btn').click(); return true; })()");
       await page.ev(
         `document.querySelector(${JSON.stringify(selector + ' .capture-shortcut-change')}).click()`,
       );

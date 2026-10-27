@@ -154,41 +154,35 @@
   };
   function mount(root, api, initialId) {
     root.classList.add('capture-app');
+    // No header: the capture buttons stand above the history, so the editor starts at the top of the window.
     root.innerHTML = /* HTML */ `
-      <header class="shot-head">
-        <div>
-          <h1>Снимки</h1>
-          <p class="shot-sub">Захват экрана, пометки и ваша история</p>
-          <details class="shot-help">
-            <summary>Подсказки по захвату</summary>
-            <p class="shot-tip">Shift при выделении — квадрат · Правая кнопка — весь экран · Esc — отмена</p>
-          </details>
-        </div>
-        <div class="shot-head-actions">
-          <button class="primary shot-capture" data-action="capture" title="Снять область">
-            <span class="shot-capture-icon" aria-hidden="true">＋</span>
-            <span class="shot-capture-label">Снять область</span>
-          </button>
-          <button data-action="import">Открыть картинку</button>
-          <button data-guide="screenshots">Как пользоваться</button>
-          <div class="shot-key"></div>
-          <span class="shot-key-state"></span>
-        </div>
-      </header>
       <div class="shot-layout">
         <aside class="shot-library">
-          <strong>
+          <div class="shot-actions">
+            <button class="primary shot-capture" data-action="capture" title="Снять область">
+              <span class="shot-capture-icon" aria-hidden="true">＋</span>
+              <span class="shot-capture-label">Снять область</span>
+            </button>
+            <button data-action="import">Открыть картинку</button>
+            <div class="shot-pop-wrap">
+              <button class="shot-key-btn" data-pop="key" aria-expanded="false" title="Сочетание для снимка">
+                <span>Клавиши</span>
+                <kbd class="shot-key-value">Alt + Z</kbd>
+              </button>
+              <div class="shot-pop shot-key-pop" data-pop-body="key" hidden>
+                <div class="shot-key"></div>
+                <p class="shot-key-state"></p>
+              </div>
+            </div>
+          </div>
+          <strong class="shot-library-title">
             Мои снимки
             <span class="shot-count">0</span>
           </strong>
-          <p>
-            Хранятся после перезапуска.
-            <br />
-            У каждого — своя кнопка копирования.
-          </p>
           <div class="shot-list"></div>
         </aside>
         <div class="shot-work">
+          <div class="shot-bar">
           <div class="shot-tools" role="toolbar" aria-label="Инструменты редактора">
             <button data-tool="pen" aria-pressed="true">Перо</button>
             <button data-tool="marker" aria-pressed="false">Маркер</button>
@@ -208,7 +202,6 @@
                 ↷
               </button>
             </div>
-            <div class="shot-status" role="status" aria-live="polite">Снимки и пометки сохраняются автоматически.</div>
           </div>
           <div class="shot-options">
             <label>
@@ -235,8 +228,16 @@
               <button data-action="cancel-crop">Отмена</button>
             </div>
             <button data-action="reset-crop" hidden>Вернуть весь снимок</button>
-            <span class="shot-size"></span>
-            <button data-action="copy" class="primary">Копировать снимок</button>
+          </div>
+          <div class="shot-status" role="status" aria-live="polite">Снимки и пометки сохраняются автоматически.</div>
+          <div class="shot-pop-wrap">
+            <button class="shot-help-btn" data-pop="help" aria-expanded="false" title="Подсказки и инструкция" aria-label="Подсказки и инструкция">?</button>
+            <div class="shot-pop shot-help-pop" data-pop-body="help" hidden>
+              <p class="shot-tip">Потяните мышью — область · Shift — квадрат · Правая кнопка — весь экран · Esc — отмена</p>
+              <button data-guide="screenshots">Как пользоваться</button>
+            </div>
+          </div>
+          <button data-action="copy" class="primary">Копировать снимок</button>
           </div>
           <div class="shot-stage">
             <p class="shot-empty">
@@ -294,6 +295,7 @@
       refreshSeq = 0,
       allowClose = false,
       closing = false,
+      recordingKey = false,
       items = [];
     const status = (s, error = false) => {
       $('.shot-status').textContent = s;
@@ -314,6 +316,10 @@
           ? 'Захват приостановлен на время выбора клавиш.'
           : 'Сочетание занято. Нажмите «Изменить», чтобы выбрать другое.';
       $('.shot-key-state').classList.toggle('error', !r.shortcutActive && !r.shortcutRecording);
+      // The folded «Клавиши» button shows the key, and a warning mark when the key does not work.
+      $('.shot-key-value').textContent = keyLabel;
+      $('.shot-key-btn').classList.toggle('error', !r.shortcutActive && !r.shortcutRecording);
+      recordingKey = !!r.shortcutRecording;
       document.querySelectorAll('.capture-nav').forEach((n) => {
         n.querySelector('kbd').textContent = keyLabel;
         n.title = 'Снимки экрана · ' + keyLabel;
@@ -326,7 +332,8 @@
       const availableWidth = stage.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
       const availableHeight = stage.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
       if (availableWidth < 1 || availableHeight < 1) return;
-      const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+      // Fits the free space, but never above the real size: a small picture enlarged would get blurry.
+      const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height, 1);
       canvas.style.width = Math.max(1, Math.floor(canvas.width * scale)) + 'px';
       canvas.style.height = Math.max(1, Math.floor(canvas.height * scale)) + 'px';
       positionText();
@@ -373,7 +380,8 @@
       canvas.width = view.width;
       canvas.height = view.height;
       previewPoint = { x: 0.5, y: 0.5 };
-      $('.shot-size').textContent = view.width + ' × ' + view.height;
+      // The size is in the save status of the toolbar (one line, no separate label).
+      $('.shot-status').title = view.width + ' × ' + view.height;
       fitCanvas();
     }
     function render() {
@@ -816,6 +824,30 @@
       }
     });
     window.SnowShortcut.mount($('.shot-key'), api);
+    // Two small pop-ups: «Клавиши» (change the shortcut) and «?» (capture tips and the guide).
+    // They close on a click elsewhere and on Esc, but not while a new shortcut is being pressed.
+    function closePops(except) {
+      root.querySelectorAll('[data-pop-body]').forEach((body) => {
+        if (body === except) return;
+        body.hidden = true;
+        root.querySelector('[data-pop="' + body.dataset.popBody + '"]').setAttribute('aria-expanded', 'false');
+      });
+    }
+    root.querySelectorAll('[data-pop]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const body = root.querySelector('[data-pop-body="' + b.dataset.pop + '"]');
+        closePops(body);
+        body.hidden = !body.hidden;
+        b.setAttribute('aria-expanded', String(!body.hidden));
+      }),
+    );
+    document.addEventListener('pointerdown', (e) => {
+      if (!recordingKey && !e.target.closest('.shot-pop-wrap')) closePops();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !recordingKey) closePops();
+    });
+    root.querySelectorAll('.shot-help-pop [data-guide]').forEach((b) => b.addEventListener('click', () => closePops()));
     function undo(redo) {
       finishText();
       if (!current) return;

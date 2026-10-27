@@ -206,32 +206,79 @@
 .capture-app button.primary:hover {
   background: var(--accent-hover);
 }
-.capture-app .shot-head {
+/* The left column: capture buttons above the history (there is no header above the editor). */
+.capture-app .shot-actions {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.capture-app .shot-actions > button {
+  width: 100%;
+  text-align: left;
+}
+.capture-app .shot-actions > button.shot-capture {
+  padding: 10px 12px;
+  font-weight: 600;
+}
+.capture-app .shot-pop-wrap {
+  position: relative;
+}
+.capture-app button.shot-key-btn {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
+  gap: 6px;
+  background: var(--surface-2);
+  font-size: 13px;
 }
-.capture-app .shot-help { margin-top: 6px; font-size: 12px; color: var(--ink-soft); }
-.capture-app .shot-help summary { cursor: pointer; width: fit-content; }
-.capture-app .shot-help .shot-tip { padding: 4px 0 0; margin: 0; }
-.capture-app h1 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 25px;
-}
-.capture-app .shot-sub {
+.capture-app .shot-key-btn > span {
   color: var(--ink-soft);
-  margin: 6px 0 0;
-  font-size: 12px;
 }
-.capture-app .shot-head-actions {
-  display: flex;
+.capture-app .shot-key-btn kbd {
+  font: 12px var(--font-mono);
+}
+.capture-app .shot-key-btn kbd::after {
+  content: ' ▾';
+  font-size: 10px;
+  color: var(--ink-soft);
+}
+.capture-app .shot-key-btn.error {
+  border-color: var(--danger);
+}
+.capture-app .shot-key-btn.error > span::before {
+  content: '! ';
+  color: var(--danger);
+  font-weight: 700;
+}
+/* The pop-ups of «Клавиши» and «?» */
+.capture-app .shot-pop {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  width: 320px;
+  padding: 12px;
+  display: grid;
   gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--pop-shadow);
+}
+.capture-app .shot-key-pop {
+  left: 0;
+}
+.capture-app .shot-help-pop {
+  right: 0;
+  width: 300px;
+}
+.capture-app .shot-pop p {
+  margin: 0;
+}
+.capture-app .shot-library-title {
+  margin-bottom: 8px;
 }
 .capture-app .shot-layout {
   display: grid;
@@ -311,14 +358,29 @@
   display: flex;
   flex-direction: column;
 }
+/* One row: tools, their settings, the save status, «?» and «Копировать снимок». A narrow window wraps it. */
+.capture-app .shot-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
 .capture-app .shot-tools,
 .capture-app .shot-options {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
-  border-bottom: 1px solid var(--line);
+  gap: 6px;
+}
+.capture-app .shot-bar button {
+  padding: 6px 10px;
+}
+.capture-app button.shot-help-btn {
+  width: 32px;
+  padding: 6px 0;
+  font-weight: 700;
 }
 .capture-app .shot-tools button[aria-pressed='true'] {
   background: var(--accent);
@@ -353,15 +415,15 @@
   border-radius: 50%;
 }
 .capture-app .shot-undo {
-  margin-left: auto;
   display: flex;
   gap: 4px;
 }
+/* The picture stands right under the toolbar, centred across; the free space stays below it. */
 .capture-app .shot-stage {
   position: relative;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   flex: 1;
   overflow: hidden;
   padding: 8px;
@@ -396,12 +458,19 @@
 }
 .capture-app .shot-status {
   font-size: 12px;
-  flex: 1 1 180px;
+  flex: 1 1 140px;
   min-width: 0;
   padding: 0 4px;
   color: var(--ink-soft);
   min-height: 0;
   text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* An error has to be read in full, so it may take two lines. */
+.capture-app .shot-status.error {
+  white-space: normal;
   overflow-wrap: anywhere;
 }
 .capture-app .shot-crop-actions { display: flex; align-items: center; gap: 6px; }
@@ -409,7 +478,6 @@
   color: var(--danger);
 }
 .capture-app .shot-tip {
-  padding: 0 14px 10px;
   color: var(--ink-soft);
   font-size: 12px;
 }
@@ -443,8 +511,6 @@
 .capture-app .shot-key-state {
   color: var(--ink-soft);
   font-size: 12px;
-  width: 100%;
-  text-align: right;
 }
 .capture-app .shot-key-state.error {
   color: var(--danger);
@@ -457,34 +523,31 @@
 }
 /* Zaklex uses the brand palette and hard shadows, with cream small text. */
 :where(html[data-theme='zaklex']) .capture-app button.shot-capture {
-  width: 42px;
-  height: 42px;
-  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: var(--zx-red);
   color: var(--zx-paper);
   box-shadow: 4px 4px 0 var(--zx-cyan);
   border: 0;
   border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 :where(html[data-theme='zaklex']) .capture-app button.shot-capture:hover {
   background: var(--zx-deep);
 }
 :where(html[data-theme='zaklex']) .capture-app .shot-capture-icon {
   display: block;
-  font-size: 30px;
+  font-size: 20px;
   line-height: 1;
 }
-:where(html[data-theme='zaklex']) .capture-app .shot-capture-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+:where(html[data-theme='zaklex']) .capture-app .shot-pop {
+  border-radius: 0;
+  box-shadow: 5px 5px 0 var(--zx-cyan);
 }
-:where(html[data-theme='zaklex']) .capture-app .shot-sub,
-:where(html[data-theme='zaklex']) .capture-app .shot-help,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-btn > span,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-btn kbd::after,
 :where(html[data-theme='zaklex']) .capture-app .shot-size,
 :where(html[data-theme='zaklex']) .capture-app .shot-library > p,
 :where(html[data-theme='zaklex']) .capture-app .shot-status,
@@ -528,14 +591,7 @@
     grid-template-columns: 140px minmax(0, 1fr);
     gap: 10px;
   }
-  .capture-app .shot-head-actions {
-    justify-content: flex-start;
-  }
-  .capture-app .shot-key-state {
-    text-align: left;
-  }
-  .capture-app .shot-tools,
-  .capture-app .shot-options {
+  .capture-app .shot-bar {
     gap: 5px;
     padding: 8px;
   }
