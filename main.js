@@ -1853,7 +1853,7 @@ const TASKS_PROMPT = [
   'Каждое сообщение — отдельная просьба. Делай сразу и не переспрашивай, если смысл понятен: изменения применяются сразу, а у пользователя есть кнопка «Отменить».',
   'Из одного сообщения может получиться несколько задач: «смонтировать рилс завтра и позвонить Диме в пятницу» — это две задачи.',
   'Название — суть в 2–6 словах, с большой буквы, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали; даты считай от строки «Сейчас». Важность priority: 2 — срочно (срочно, горит, asap), 1 — важно, 0 — обычно, если ничего такого не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач в tasks_list: «смонтировать рилс» → «Монтаж», «начать вёрстку сайта» → «Сайт».',
-  'Чтобы изменить, перенести, отметить или удалить задачу, сначала найди её id через tasks_list. «Сделал …», «готово …» — перенеси задачу в done. subtasks_add добавляет шаги внутри задачи («разбей … на шаги» — 3–6 конкретных шагов), subtask_done отмечает шаг.',
+  'Чтобы изменить, перенести, отметить или удалить задачу, сначала найди её id через tasks_list. «Сделал …», «готово …» — перенеси задачу в done. subtasks_add добавляет шаги внутри задачи («разбей … на шаги» — 3–6 конкретных шагов), subtask_done отмечает шаг, subtask_delete удаляет шаги (id шагов — в tasks_list).',
   'Выполненные задачи уходят в архив: tasks_list его не показывает. «Найди в архиве …», «что я делал на прошлой неделе» — tasks_archive_search. «Убери выполненные в архив», «очисти готово» — tasks_archive_done.',
   'Если просят не про задачи (календарь, промты, вкладки), коротко скажи, что это умеет маленькое окно ассистента (звёздочка внизу слева) или раздел LLM.',
   'Ответ — одна-две короткие фразы по-русски без разметки: что сделано. Например: «Добавил 2 задачи: «Смонтировать рилс» на завтра, срочная; «Позвонить Диме» на пятницу.»'
@@ -1875,6 +1875,11 @@ const TASK_TOOLS = [
     name: 'subtask_done',
     description: 'Отмечает шаг задачи сделанным или снимает отметку.',
     parameters: { type: 'object', additionalProperties: false, required: ['id', 'subtask_id', 'done'], properties: { id: { type: 'string', description: 'id задачи' }, subtask_id: { type: 'string' }, done: { type: 'boolean' } } }
+  },
+  {
+    name: 'subtask_delete',
+    description: 'Удаляет шаги (подзадачи) из задачи. Можно передать несколько subtask_ids сразу.',
+    parameters: { type: 'object', additionalProperties: false, required: ['id', 'subtask_ids'], properties: { id: { type: 'string', description: 'id задачи' }, subtask_ids: { type: 'array', items: { type: 'string' } } } }
   }
 ];
 
@@ -1919,6 +1924,13 @@ async function runTaskTool(name, input, log) {
     if (!prev.subtasks.some((s) => s.id === a.subtask_id)) return 'Такого шага нет: возьми subtask_id из tasks_list.';
     await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.map((s) => (s.id === a.subtask_id ? Object.assign({}, s, { done: !!a.done }) : s)) }));
     return 'Отмечено.';
+  }
+  if (name === 'subtask_delete') {
+    const ids = new Set((Array.isArray(a.subtask_ids) ? a.subtask_ids : []).map(String));
+    const gone = prev.subtasks.filter((s) => ids.has(s.id));
+    if (!gone.length) return 'Таких шагов нет: возьми subtask_ids из tasks_list.';
+    await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.filter((s) => !ids.has(s.id)) }));
+    return 'Удалено шагов: ' + gone.length + '.';
   }
   return 'Такого инструмента нет.';
 }

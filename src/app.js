@@ -2249,7 +2249,11 @@
     });
   });
   els.cfCancel.addEventListener("click", closeEventForm);
-  els.calDialog.addEventListener("click", function (e) { if (e.target === els.calDialog) closeEventForm(); });
+  // Close on a click outside only if it also started outside: dragging the note's resize handle and letting go
+  // over the dark area is not a click outside.
+  var calDownOnBackdrop = false;
+  els.calDialog.addEventListener("mousedown", function (e) { calDownOnBackdrop = e.target === els.calDialog; });
+  els.calDialog.addEventListener("click", function (e) { if (e.target === els.calDialog && calDownOnBackdrop) closeEventForm(); });
   els.calDialog.addEventListener("close", function () { cal.editing = null; cal.confirmDelete = false; });
   els.calAdd.addEventListener("click", function () { openEventForm(null); });
   els.calDayAdd.addEventListener("click", function () { openEventForm(null); });
