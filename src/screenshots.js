@@ -285,7 +285,9 @@
       drawing = null,
       cropSelection = null,
       textEdit = null,
-      previewPoint = { x: 0.5, y: 0.5 };
+      previewPoint = { x: 0.5, y: 0.5 },
+      overCanvas = false,
+      sizing = null;
     let timer = null,
       loading = 0,
       opening = false,
@@ -330,10 +332,12 @@
       positionText();
       updateBrushPreview();
     }
-    // Show the stroke footprint at the canvas zoom while the size slider has focus.
+    // The stroke footprint at the canvas zoom: under the pointer while it is over the picture,
+    // and in the middle for a second after the size or pressure slider moves.
     function updateBrushPreview() {
       const preview = $('.shot-brush-preview');
-      const active = current && !canvas.hidden && (tool === 'pen' || tool === 'marker');
+      const active =
+        current && !canvas.hidden && (tool === 'pen' || tool === 'marker') && (overCanvas || !!sizing);
       preview.hidden = !active;
       if (!active) return;
       const canvasRect = canvas.getBoundingClientRect();
@@ -353,6 +357,15 @@
         x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
         y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
       };
+      updateBrushPreview();
+    }
+    function showSizing() {
+      if (!overCanvas) previewPoint = { x: 0.5, y: 0.5 };
+      clearTimeout(sizing);
+      sizing = setTimeout(() => {
+        sizing = null;
+        updateBrushPreview();
+      }, 1000);
       updateBrushPreview();
     }
     function sizeCanvas(s) {
@@ -686,7 +699,16 @@
       e.preventDefault();
       render();
     });
+    canvas.addEventListener('pointerenter', (e) => {
+      overCanvas = true;
+      moveBrushPreview(e);
+    });
+    canvas.addEventListener('pointerleave', () => {
+      overCanvas = false;
+      updateBrushPreview();
+    });
     canvas.addEventListener('pointermove', (e) => {
+      overCanvas = true;
       moveBrushPreview(e);
       if (!drawing) return;
       const p = point(e);
@@ -728,6 +750,8 @@
           .querySelectorAll('[data-tool]')
           .forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
         render();
+        // Choosing the pen or the marker shows its size for a moment; other tools have no circle.
+        if (tool === 'pen' || tool === 'marker') showSizing();
         status(
           tool === 'text'
             ? 'Выделите прямоугольник и введите текст — буквы подстроятся под его размер.'
@@ -776,12 +800,12 @@
     $('.shot-width').addEventListener('input', (e) => {
       width = +e.target.value;
       $('.shot-width-out').textContent = width;
-      updateBrushPreview();
+      showSizing();
     });
     $('.shot-pressure').addEventListener('input', (e) => {
       pressure = +e.target.value;
       $('.shot-pressure-out').textContent = pressure + '%';
-      updateBrushPreview();
+      showSizing();
     });
     $('.shot-blur').addEventListener('input', (e) => {
       $('.shot-blur-out').textContent = e.target.value + '%';
