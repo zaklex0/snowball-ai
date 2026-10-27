@@ -91,7 +91,9 @@ async function draw(page, tool, from, to) {
   await main.ev("(async()=>{global.shotCovers=[];for(const d of shotTestElectron.screen.getAllDisplays()){const w=new shotTestElectron.BrowserWindow({...d.bounds,frame:false,skipTaskbar:true,alwaysOnTop:true,enableLargerThanScreen:true,webPreferences:{sandbox:true}});w.__snowCapture='fixture';await w.loadURL('data:text/html,<body style=\"margin:0;background:rgb(45,105,85);color:white;font:48px sans-serif;padding:70px\">Snowball capture test</body>');w.setBounds(d.bounds);w.show();shotCovers.push(w);}return true;})()");
   const started = await page.ev('window.vsApi.captureStart()'); assert.equal(started.ok, true, started.error);
   const overlay = await connect(9345, t => /capture-overlay\.html/.test(t.url));
-  await overlay.until("document.querySelector('#screen').complete && document.querySelector('#screen').naturalWidth>0");
+  await overlay.until("window.captureShownAt>0 && document.querySelector('#screen').width>1");
+  // The window got the fixture's colours, not red and blue swapped (raw pixels come as B, G, R, A).
+  assert.deepEqual(await overlay.ev("Array.from(document.querySelector('#screen').getContext('2d').getImageData(5,5,1,1).data)"), [217, 232, 225, 255]);
   await mouse(overlay, 'mousePressed', 100, 100, { button: 'left', clickCount: 1, modifiers: 8 });
   await mouse(overlay, 'mouseMoved', 400, 260, { button: 'left', buttons: 1, modifiers: 8 });
   // Do not await a renderer request which closes its own window.
@@ -109,14 +111,16 @@ async function draw(page, tool, from, to) {
   await canceledOverlay.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
   await page.sleep(150);
   assert.equal((await page.ev('window.vsApi.captureList()')).items.length, 3);
-  assert.equal(await main.ev("shotTestElectron.BrowserWindow.getAllWindows().filter(w=>w.__snowCapture==='overlay').length"), 0);
+  // Selection windows stay ready for the next capture, but hidden.
+  assert.equal(await main.ev("shotTestElectron.BrowserWindow.getAllWindows().filter(w=>w.__snowCapture==='overlay'&&w.isVisible()).length"), 0);
+  assert.equal(await canceledOverlay.ev('window.captureShownAt'), 0);
   if (!await main.ev("shotTestElectron.BrowserWindow.getAllWindows().find(w=>!w.__snowCapture).isVisible()")) {
     throw Error('Window visibility: '+JSON.stringify(await main.ev("shotTestElectron.BrowserWindow.getAllWindows().map(w=>({type:w.__snowCapture,url:w.webContents.getURL(),visible:w.isVisible(),minimized:w.isMinimized(),bounds:w.getBounds()}))")));
   }
   assert.equal((await page.ev('window.vsApi.captureStart()')).ok, true);
   const fullOverlay = await connect(9345, t => /capture-overlay\.html/.test(t.url));
-  await fullOverlay.until("document.querySelector('#screen').complete && document.querySelector('#screen').naturalWidth>0");
-  const fullSize = await fullOverlay.ev("({width:document.querySelector('#screen').naturalWidth,height:document.querySelector('#screen').naturalHeight})");
+  await fullOverlay.until("window.captureShownAt>0 && document.querySelector('#screen').width>1");
+  const fullSize = await fullOverlay.ev("({width:document.querySelector('#screen').width,height:document.querySelector('#screen').height})");
   await mouse(fullOverlay, 'mousePressed', 100, 100, { button: 'right', clickCount: 1 });
   await mouse(fullOverlay, 'mouseReleased', 100, 100, { button: 'right', clickCount: 1 });
   await page.until("document.querySelector('.shot-count').textContent==='4'");

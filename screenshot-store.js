@@ -303,4 +303,4 @@ async function discardUndo(folder) {
     throw Error('Неверная папка отмены удаления.');
   await fsp.rm(resolved, { recursive: true, force: true });
 }
-module.exports = { ScreenshotStore, SHOTS_DIR, annotations, pngSize, cropRect, normalizeCrop, discardUndo };
+module.exports = { ScreenshotStore, SHOTS_DIR, annotations, pngSize, validSize, cropRect, normalizeCrop, discardUndo };

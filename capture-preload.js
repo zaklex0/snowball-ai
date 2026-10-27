@@ -28,7 +28,18 @@ contextBridge.exposeInMainWorld('vsApi', {
     ipcRenderer.on('capture-theme', f);
     return () => ipcRenderer.removeListener('capture-theme', f);
   },
-  captureInit: () => ipcRenderer.invoke('capture-init'),
+  // The selection window: a screen picture arrives as raw pixels, the window says when it has drawn it.
+  onCaptureFrame: (fn) => {
+    const f = (_e, frame) => fn(frame);
+    ipcRenderer.on('capture-frame', f);
+    return () => ipcRenderer.removeListener('capture-frame', f);
+  },
+  onCaptureReset: (fn) => {
+    const f = () => fn();
+    ipcRenderer.on('capture-reset', f);
+    return () => ipcRenderer.removeListener('capture-reset', f);
+  },
+  captureReady: () => ipcRenderer.invoke('capture-ready'),
   captureChoose: (rect) => ipcRenderer.invoke('capture-choose', rect),
   captureCancel: () => ipcRenderer.invoke('capture-cancel'),
 });

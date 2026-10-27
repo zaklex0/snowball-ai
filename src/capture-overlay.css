@@ -17,9 +17,6 @@ body {
   width: 100%;
   height: 100%;
 }
-#screen {
-  object-fit: fill;
-}
 #hint {
   position: absolute;
   pointer-events: none;

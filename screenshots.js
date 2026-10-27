@@ -13,9 +13,11 @@ const {
 } = require('electron');
 const path = require('path');
 const crypto = require('crypto');
-const { ScreenshotStore, pngSize, cropRect, discardUndo } = require('./screenshot-store');
+const { ScreenshotStore, pngSize, validSize, cropRect, discardUndo } = require('./screenshot-store');
 const SHORTCUTS = ['Alt+Z', 'Alt+V', 'Alt+B'];
 const shortcut = require('./src/capture-shortcut');
+// SNOWBALL_CAPTURE_TIMING=1 prints how long each step of a capture takes (tools/screenshot-timing.cjs reads it).
+const TIMING = !!process.env.SNOWBALL_CAPTURE_TIMING;
 
 module.exports = function setupScreenshots(options) {
   let storage = new ScreenshotStore(options.dir()),
@@ -75,12 +77,92 @@ module.exports = function setupScreenshots(options) {
     }
     await storage.queue;
   }
+  // The selection windows are made in advance, one per monitor, and are only hidden between captures:
+  // loading a new window took 0.15–0.25 s per monitor at every shortcut. They are remade when monitors change.
+  const pool = new Map(); // display id → { win, display, loaded }
+  let warmTimer = null;
+  const sameDisplay = (a, b) =>
+    a.scaleFactor === b.scaleFactor && ['x', 'y', 'width', 'height'].every((k) => a.bounds[k] === b.bounds[k]);
+  function dropOverlay(id) {
+    const o = pool.get(id);
+    pool.delete(id);
+    if (o && !o.win.isDestroyed()) o.win.destroy();
+  }
+  function makeOverlay(d) {
+    const w = new BrowserWindow({
+      ...d.bounds,
+      frame: false,
+      transparent: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      show: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      enableLargerThanScreen: true,
+      backgroundColor: '#111111',
+      webPreferences: {
+        preload: path.join(__dirname, 'capture-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        zoomFactor: 1,
+        backgroundThrottling: false,
+      },
+    });
+    w.__snowCapture = 'overlay';
+    w.setAlwaysOnTop(true, 'screen-saver');
+    const id = w.webContents.id;
+    const entry = {
+      win: w,
+      display: d,
+      loaded: w.loadFile(path.join(__dirname, 'src/capture-overlay.html')).catch(() => {}),
+    };
+    w.webContents.on('before-input-event', (e, input) => {
+      if (input.key === 'Escape') {
+        e.preventDefault();
+        closeCapture();
+      }
+    });
+    w.on('closed', () => {
+      if (pool.get(d.id) === entry) pool.delete(d.id);
+      if (session && session.screens.has(id)) closeCapture();
+    });
+    w.webContents.on('render-process-gone', () => {
+      if (pool.get(d.id) === entry) dropOverlay(d.id);
+      closeCapture();
+    });
+    pool.set(d.id, entry);
+    return entry;
+  }
+  // Brings the windows in line with the monitors connected now.
+  function warm() {
+    if (stopping || session) return;
+    const displays = screen.getAllDisplays();
+    for (const [id, o] of [...pool])
+      if (o.win.isDestroyed() || !displays.some((d) => d.id === id && sameDisplay(d, o.display))) dropOverlay(id);
+    for (const d of displays) if (!pool.has(d.id)) makeOverlay(d);
+  }
+  function warmLater(ms) {
+    clearTimeout(warmTimer);
+    warmTimer = setTimeout(warm, ms);
+  }
+  function releaseOverlays() {
+    clearTimeout(warmTimer);
+    for (const id of [...pool.keys()]) dropOverlay(id);
+  }
   function closeCapture(restore = true) {
     const old = session;
     session = null;
     if (!old) return;
     clearTimeout(old.timeout);
-    for (const { win } of old.screens.values()) if (!win.isDestroyed()) win.destroy();
+    for (const r of old.waiting.values()) r();
+    // Hidden, not closed: the next capture reuses them. The window forgets its picture first.
+    for (const { win } of old.screens.values())
+      if (!win.isDestroyed()) {
+        win.webContents.send('capture-reset');
+        win.hide();
+      }
     // show() reliably unhides a Windows window; showInactive() can leave it hidden after capture.
     if (restore)
       for (const w of old.hidden)
@@ -134,20 +216,27 @@ module.exports = function setupScreenshots(options) {
     if (busy || session || stopping) return {};
     busy = true;
     const hidden = [];
+    const t0 = Date.now(), marks = [];
+    let last = t0;
+    const mark = (name) => { if (TIMING) { const now = Date.now(); marks.push(name + ' ' + (now - last)); last = now; } };
     try {
       if (blocked) throw Error('Дождитесь переноса папки с данными.');
       await flushEditors();
+      mark('flush');
       if (stopping) return {};
       // An explicit capture button always returns to its window, even if Windows reports it occluded.
       if (requester) {
         requester.hide();
         hidden.push(requester);
       }
-      session = { screens: new Map(), hidden, token, timeout: null };
+      session = { screens: new Map(), waiting: new Map(), hidden, token, timeout: null };
       const current = session;
-      // Give the desktop compositor time to remove the requesting window.
-      await new Promise((r) => setTimeout(r, 180));
+      // Give the desktop compositor time to remove the requesting window. The shortcut hides nothing.
+      if (requester) await new Promise((r) => setTimeout(r, 180));
+      mark('wait');
       const displays = screen.getAllDisplays();
+      for (const [id, o] of [...pool])
+        if (o.win.isDestroyed() || !displays.some((d) => d.id === id && sameDisplay(d, o.display))) dropOverlay(id);
       const maxW = Math.max(...displays.map((d) => Math.ceil(d.size.width * d.scaleFactor)));
       const maxH = Math.max(...displays.map((d) => Math.ceil(d.size.height * d.scaleFactor)));
       const sources = await desktopCapturer.getSources({
@@ -155,6 +244,7 @@ module.exports = function setupScreenshots(options) {
         thumbnailSize: { width: maxW, height: maxH },
         fetchWindowIcons: false,
       });
+      mark('getSources');
       if (session !== current) return {};
       for (const d of displays) {
         const source =
@@ -162,51 +252,41 @@ module.exports = function setupScreenshots(options) {
           (displays.length === 1 ? sources[0] : null);
         if (!source || source.thumbnail.isEmpty())
           throw Error('Windows не предоставила изображение экрана. Попробуйте ещё раз.');
-        const image = source.thumbnail;
-        pngSize(image.toPNG());
-        const w = new BrowserWindow({
-          ...d.bounds,
-          frame: false,
-          transparent: false,
-          resizable: false,
-          movable: false,
-          minimizable: false,
-          show: false,
-          skipTaskbar: true,
-          alwaysOnTop: true,
-          enableLargerThanScreen: true,
-          backgroundColor: '#111111',
-          webPreferences: {
-            preload: path.join(__dirname, 'capture-preload.js'),
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-            zoomFactor: 1,
-          },
-        });
-        w.__snowCapture = 'overlay';
-        w.setAlwaysOnTop(true, 'screen-saver');
-        current.screens.set(w.webContents.id, { win: w, image, display: d });
-        w.webContents.on('before-input-event', (e, input) => {
-          if (input.key === 'Escape') {
-            e.preventDefault();
-            closeCapture();
-          }
-        });
-        w.on('closed', () => {
-          if (session === current) closeCapture();
-        });
-        w.webContents.on('render-process-gone', () => closeCapture());
-        await w.loadFile(path.join(__dirname, 'src/capture-overlay.html'));
+        const image = source.thumbnail,
+          size = image.getSize();
+        if (!validSize(size.width, size.height))
+          throw Error('Экран слишком большой для снимка. Уменьшите разрешение или масштаб в Windows.');
+        const o = pool.get(d.id) || makeOverlay(d);
+        await o.loaded;
         if (session !== current) return {};
-        w.setBounds(d.bounds);
+        if (o.win.isDestroyed()) throw Error('Окно выделения закрылось. Попробуйте ещё раз.');
+        current.screens.set(o.win.webContents.id, { win: o.win, image, display: d });
       }
+      mark('windows');
+      // Raw pixels go to the window: no PNG to pack here and unpack there. The window is shown once it has drawn them.
+      const drawn = [...current.screens].map(
+        ([id, s]) =>
+          new Promise((resolve) => {
+            current.waiting.set(id, resolve);
+            setTimeout(resolve, 2000);
+            const size = s.image.getSize();
+            s.win.webContents.send('capture-frame', { width: size.width, height: size.height, pixels: s.image.toBitmap() });
+          }),
+      );
+      await Promise.all(drawn);
+      mark('drawn');
+      if (session !== current) return {};
       const underMouse = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-      for (const s of current.screens.values()) s.win.showInactive();
+      for (const s of current.screens.values()) {
+        s.win.setBounds(s.display.bounds);
+        s.win.showInactive();
+      }
       const focus =
         [...current.screens.values()].find((s) => s.display.id === underMouse.id) ||
         [...current.screens.values()][0];
       focus.win.focus();
+      mark('show');
+      if (TIMING) console.log('[capture timing] start ' + t0 + ' displays ' + displays.length + ' | ' + marks.join(' | '));
       current.timeout = setTimeout(() => closeCapture(), 120000);
       return {};
     } catch (e) {
@@ -215,6 +295,7 @@ module.exports = function setupScreenshots(options) {
       throw e;
     } finally {
       busy = false;
+      warmLater(500);
     }
   }
   function register(next) {
@@ -381,9 +462,14 @@ module.exports = function setupScreenshots(options) {
     changed();
     return { id: item.id };
   });
+  // The selection window has drawn the screen it was sent and may be shown.
   handle(
-    'capture-init',
-    async (w) => ({ url: session.screens.get(w.webContents.id).image.toDataURL() }),
+    'capture-ready',
+    async (w) => {
+      const resolve = session.waiting.get(w.webContents.id);
+      if (resolve) resolve();
+      return {};
+    },
     true,
   );
   handle(
@@ -417,12 +503,22 @@ module.exports = function setupScreenshots(options) {
     },
     true,
   );
-  screen.on('display-removed', () => closeCapture());
-  screen.on('display-metrics-changed', () => closeCapture());
+  // The timing tool starts a capture the way the global shortcut does, without a requesting window.
+  if (TIMING) global.snowCaptureStart = () => start(null);
+  const displaysChanged = () => {
+    closeCapture();
+    warmLater(1000);
+  };
+  screen.on('display-added', displaysChanged);
+  screen.on('display-removed', displaysChanged);
+  screen.on('display-metrics-changed', displaysChanged);
+  // Not at once: the first seconds after the start belong to the main window.
+  warmLater(3000);
   app.on('will-quit', () => {
     endRecording(false);
     globalShortcut.unregisterAll();
     closeCapture(false);
+    releaseOverlays();
   });
   return {
     state,
@@ -432,6 +528,7 @@ module.exports = function setupScreenshots(options) {
       try {
         await flushEditors();
         closeCapture(false);
+        releaseOverlays();
         if (editor && !editor.isDestroyed()) editor.destroy();
         await Promise.all(
           [...removed.values()].map((entry) => {
@@ -445,6 +542,8 @@ module.exports = function setupScreenshots(options) {
         throw e;
       }
     },
+    // The hidden selection windows must not keep the app alive after its last window is closed.
+    releaseOverlays,
     flush: flushEditors,
     async pause() {
       await flushEditors();

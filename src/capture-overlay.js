@@ -105,16 +105,37 @@
     }
   });
   window.addEventListener('resize', draw);
-  api
-    .captureInit()
-    .then((r) => {
-      if (!r.ok) throw Error(r.error);
-      const img = document.getElementById('screen');
-      img.onload = () => {
-        ready = true;
-        draw();
-      };
-      img.src = r.url;
-    })
-    .catch(() => api.captureCancel());
+  // The window lives between captures (hidden): every capture brings a new frame, closing it brings a reset.
+  const shot = document.getElementById('screen'),
+    shotCtx = shot.getContext('2d'),
+    hint = document.getElementById('hint'),
+    hintText = hint.textContent;
+  function reset() {
+    a = b = null;
+    square = choosing = ready = false;
+    hint.textContent = hintText;
+    shot.width = shot.height = 1;
+    window.captureShownAt = 0;
+    draw();
+  }
+  api.onCaptureReset(reset);
+  api.onCaptureFrame(({ width, height, pixels }) => {
+    reset();
+    // Windows gives the pixels as B, G, R, A; the canvas wants R, G, B, A.
+    const bytes = pixels.byteOffset % 4 ? pixels.slice() : pixels;
+    const src = new Uint32Array(bytes.buffer, bytes.byteOffset, width * height);
+    const image = new ImageData(width, height),
+      dst = new Uint32Array(image.data.buffer);
+    for (let i = 0; i < src.length; i++) {
+      const v = src[i];
+      dst[i] = 0xff000000 | ((v & 0xff) << 16) | (v & 0xff00) | ((v >>> 16) & 0xff);
+    }
+    shot.width = width;
+    shot.height = height;
+    shotCtx.putImageData(image, 0, 0);
+    ready = true;
+    draw();
+    window.captureShownAt = Date.now(); // read by tools/screenshot-timing.cjs
+    api.captureReady();
+  });
 })();

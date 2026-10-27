@@ -240,6 +240,7 @@ function createWindow(opts) {
   w.on('close', () => { rememberBounds(); saveSettings(true); });
   // Screenshot windows belong to the app, and must not outlive its last regular window.
   w.on('close', event => {
+    if (liveWins().length === 1 && captures) captures.releaseOverlays();
     if (w.__captureCloseReady || liveWins().length !== 1 || !captures || !captures.hasAuxiliary()) return;
     event.preventDefault();
     if (w.__captureClosing) return;
