@@ -88,7 +88,7 @@ async function customShortcuts() {
     JSON.stringify({
       dataDir: path.join(tmp, 'data'),
       captureShortcut: 'Alt+B',
-      lastVersion: '1.16.2',
+      lastVersion: '1.16.3',
     }),
   );
   async function launch(busy, test) {
@@ -171,6 +171,7 @@ async function customShortcuts() {
     await page.until(
       "!!window.screenshotEditor && document.querySelector('.shot-empty-key').textContent.includes('Ctrl + Shift + S')",
     );
+    assert.equal(await page.ev("document.querySelector('.shot-empty-key').textContent"), 'Нажмите «Снять область» или Ctrl + Shift + S.');
     assert.ok(
       await page.ev(
         "document.querySelector('.shot-key-state').textContent.includes('Ctrl + Shift + S')",
@@ -206,6 +207,8 @@ async function customShortcuts() {
     );
     await press('KeyQ', { key: 'й', ctrlKey: true, shiftKey: true });
     await page.until("document.querySelector('.shot-key output').textContent==='Ctrl + Shift + Q'");
+    await page.until("document.querySelector('.shot-empty-key').textContent==='Нажмите «Снять область» или Ctrl + Shift + Q.'");
+    assert.equal(await page.ev(`(() => { const e = new KeyboardEvent('keydown', { code: 'KeyS', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }); document.dispatchEvent(e); return e.defaultPrevented; })()`), false, 'Unassigned Ctrl + Shift + S must not trigger capture');
     assert.equal((await page.ev('vsApi.captureState()')).shortcut, 'Control+Shift+Q');
     await begin('.shot-key');
     await press('KeyT', { ctrlKey: true });
@@ -243,6 +246,13 @@ async function customShortcuts() {
     await page.until(
       "!document.querySelector('#capture-settings-control .capture-shortcut-reset').disabled",
     );
+    // Force a conflict in this test process; an installed Snowball may or may not own Alt+Z.
+    assert.equal(await main.ev(`(() => {
+      const shortcuts = process.mainModule.require('electron').globalShortcut;
+      global.__testRegisterShortcut = shortcuts.register;
+      shortcuts.register = (key, callback) => key === 'Alt+Z' ? false : global.__testRegisterShortcut.call(shortcuts, key, callback);
+      return shortcuts.register !== global.__testRegisterShortcut;
+    })()`), true);
     await page.ev(
       "document.querySelector('#capture-settings-control .capture-shortcut-reset').click()",
     );
@@ -250,17 +260,11 @@ async function customShortcuts() {
       "!document.querySelector('#capture-settings-control .capture-shortcut-reset').disabled",
     );
     const resetState = await page.ev('vsApi.captureState()');
-    if (resetState.shortcut !== 'Alt+Z') {
-      assert.equal(
-        await page.ev("document.querySelector('#capture-settings-control p').textContent"),
-        'Это сочетание занято другой программой',
-      );
-      assert.equal(resetState.shortcut, 'Control+Shift+S');
-      assert.equal(resetState.shortcutActive, true);
-      console.log(
-        'PASS reset preserved old shortcut: Alt+Z is occupied on this Windows installation',
-      );
-    }
+    assert.equal(await page.ev("document.querySelector('#capture-settings-control p').textContent"), 'Это сочетание занято другой программой');
+    assert.equal(resetState.shortcut, 'Control+Shift+S');
+    assert.equal(resetState.shortcutActive, true);
+    await main.ev(`(() => { const s = process.mainModule.require('electron').globalShortcut; s.register = global.__testRegisterShortcut; return true; })()`);
+    console.log('PASS: Alt + Z занят в тесте — прежнее сочетание сохранено');
     await begin('#capture-settings-control');
     await page.ev(
       "window.dispatchEvent(new KeyboardEvent('keyup',{code:'PrintScreen',bubbles:true}))",

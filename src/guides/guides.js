@@ -5,7 +5,7 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
-  { version: "1.16.0", updated: "1.16.2", section: "screenshots", title: "Снимки", steps: [
+  { version: "1.16.0", updated: "1.16.3", section: "screenshots", title: "Снимки", steps: [
     { title: "Где найти и как снять", lead: "Снимки открываются отдельным разделом. Захват работает и поверх других программ.", frames: [{ shot: "01-where", points: [
       { box: "section", at: [110, 260], label: "Снимки", text: "Кнопка под иконками слева открывает историю и редактор." },
       { box: "capture", at: [420, 320], label: "Снять область", text: "Нажмите кнопку или выбранные горячие клавиши. Потяните мышью по экрану; Shift делает квадрат, правая кнопка снимает весь монитор, Esc отменяет." },

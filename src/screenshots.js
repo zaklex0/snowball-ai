@@ -278,7 +278,7 @@
     }
     function keyState(r) {
       const keyLabel = window.SnowShortcut.format(r.shortcut);
-      $('.shot-empty-key').textContent = 'Нажмите ' + keyLabel + ' или Ctrl + Shift + S.';
+      $('.shot-empty-key').textContent = 'Нажмите «Снять область» или ' + keyLabel + '.';
       $('.shot-key-state').textContent = r.shortcutActive
         ? keyLabel + ' — работает поверх других окон, пока Snowball открыта'
         : r.shortcutRecording
@@ -711,20 +711,6 @@
       }
     });
     window.addEventListener('resize', positionText);
-    document.addEventListener('keydown', (e) => {
-      if (
-        root.getClientRects().length &&
-        e.ctrlKey &&
-        e.shiftKey &&
-        !e.altKey &&
-        !e.metaKey &&
-        e.code === 'KeyS' &&
-        !e.repeat
-      ) {
-        e.preventDefault();
-        run(async () => check(await api.captureStart()));
-      }
-    });
     new ResizeObserver(positionText).observe($('.shot-stage'));
     window.addEventListener('beforeunload', (e) => {
       if (allowClose || (!textEdit && (!current || current.generation === current.saved))) return;
