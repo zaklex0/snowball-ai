@@ -3803,12 +3803,15 @@
   }
 
   /* The timeline of a task: set → started → done → in the archive, with how long each step took and the whole way. */
-  // "меньше часа", "5 ч", "2 дня"
+  // Exact time: "40 минут", "1 час 10 минут", "2 дня 3 часа" (at most two units, rounded to the minute)
   function fmtSpan(ms) {
-    if (ms < 3600e3) return "меньше часа";
-    if (ms < 864e5) { var hrs = Math.round(ms / 3600e3); return hrs + " ч"; }
-    var days = Math.round(ms / 864e5);
-    return days + " " + plural(days, "день", "дня", "дней");
+    var mins = Math.round(ms / 60e3);
+    if (mins < 1) return "меньше минуты";
+    var days = Math.floor(mins / 1440), hrs = Math.floor(mins % 1440 / 60), m = mins % 60, parts = [];
+    if (days) parts.push(days + " " + plural(days, "день", "дня", "дней"));
+    if (hrs) parts.push(hrs + " " + plural(hrs, "час", "часа", "часов"));
+    if (m && !days) parts.push(m + " " + plural(m, "минута", "минуты", "минут"));
+    return parts.join(" ");
   }
   function fmtStamp(ms) {
     var d = new Date(ms), now = new Date(), time = d.getHours() + ":" + pad2(d.getMinutes());
