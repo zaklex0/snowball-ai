@@ -5,7 +5,7 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
-  { version: "1.16.0", updated: "1.16.3", section: "screenshots", title: "Снимки", steps: [
+  { version: "1.16.0", updated: "1.16.4", section: "screenshots", title: "Снимки", steps: [
     { title: "Где найти и как снять", lead: "Снимки открываются отдельным разделом. Захват работает и поверх других программ.", frames: [{ shot: "01-where", points: [
       { box: "section", at: [110, 260], label: "Снимки", text: "Кнопка под иконками слева открывает историю и редактор." },
       { box: "capture", at: [420, 320], label: "Снять область", text: "Нажмите кнопку или выбранные горячие клавиши. Потяните мышью по экрану; Shift делает квадрат, правая кнопка снимает весь монитор, Esc отменяет." },
@@ -29,7 +29,17 @@ window.GUIDES = [
       { box: "copy", at: [650, 350], label: "Копировать карточку", text: "Значок на карточке копирует именно этот снимок, не переключая текущий редактор." },
       { box: "remove", at: [650, 470], label: "Удалить", text: "Снимок сразу исчезает из истории, а его папка отправляется в корзину Windows." },
       { box: "undo", at: [1000, 670], label: "7 секунд на отмену", text: "Нажмите «Отменить», чтобы вернуть снимок вместе с пометками. После этого срока папка остаётся доступна в корзине Windows." }
-    ] }] }
+    ] }] },
+    { title: "Обрезать снимок", lead: "Оставьте нужную часть изображения. Исходный снимок и пометки сохраняются.", frames: [
+      { shot: "06-crop-selection", points: [
+        { box: "tool", at: [650, 360], label: "Обрезать", text: "Нажмите «Обрезать» и потяните мышью по части снимка, которую хотите оставить." },
+        { box: "apply", at: [1050, 470], label: "Применить", text: "Проверьте область и нажмите «Применить обрезку»." }
+      ] },
+      { shot: "07-crop-result", points: [
+        { box: "image", at: [650, 680], label: "Крупный просмотр", text: "Снимок подстроится под свободное место. При копировании сохранится выбранная область." },
+        { box: "reset", at: [1050, 480], label: "Вернуть весь снимок", text: "Нажмите, чтобы снова увидеть исходное изображение вместе с пометками." }
+      ] }
+    ] }
   ] },
   // updated: the version where the section changed a lot and the screenshots were re-shot (three modes, «!», the price).
   { version: "1.15.0", updated: "1.15.3", section: "transcribe", title: "Транскрибация", steps: [

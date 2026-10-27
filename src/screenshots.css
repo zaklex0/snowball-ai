@@ -94,7 +94,8 @@
   margin-left: 5px;
 }
 .capture-app .shot-list {
-  max-height: 640px;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
 }
 .capture-app .shot-options {
@@ -150,12 +151,28 @@
   border-color: currentColor;
 }
 #view-screenshots {
-  min-height: 100%;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
+.page:has(> #view-screenshots:not([hidden])) {
+  max-width: none;
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px 24px;
+}
+#view-screenshots #screenshots-root { flex: 1; min-height: 0; }
 .capture-app {
   color: var(--ink);
   font: 14px/1.45 var(--font-body);
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .capture-app * {
   box-sizing: border-box;
@@ -195,8 +212,11 @@
   justify-content: space-between;
   gap: 14px;
   flex-wrap: wrap;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
+.capture-app .shot-help { margin-top: 6px; font-size: 12px; color: var(--ink-soft); }
+.capture-app .shot-help summary { cursor: pointer; width: fit-content; }
+.capture-app .shot-help .shot-tip { padding: 4px 0 0; margin: 0; }
 .capture-app h1 {
   margin: 0;
   font-family: var(--font-display);
@@ -217,9 +237,14 @@
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 20px;
+  flex: 1;
+  min-height: 0;
 }
 .capture-app .shot-library {
   min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .capture-app .shot-library > p {
   font-size: 12px;
@@ -282,6 +307,9 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .capture-app .shot-tools,
 .capture-app .shot-options {
@@ -299,6 +327,7 @@
 .capture-app .shot-options {
   font-size: 12px;
 }
+.capture-app .shot-size { color: var(--ink-soft); font-family: var(--font-mono); }
 .capture-app label {
   display: inline-flex;
   align-items: center;
@@ -333,16 +362,18 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 18px;
+  flex: 1;
+  overflow: hidden;
+  padding: 8px;
   background: var(--bg);
-  min-height: 290px;
+  min-height: 260px;
 }
 .capture-app canvas {
   display: block;
   max-width: 100%;
   width: auto;
   height: auto;
-  max-height: 560px;
+  max-height: 100%;
   touch-action: none;
   cursor: crosshair;
   box-shadow: var(--shadow);
@@ -355,11 +386,15 @@
 }
 .capture-app .shot-status {
   font-size: 12px;
-  padding: 10px 14px;
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 0 4px;
   color: var(--ink-soft);
-  min-height: 38px;
+  min-height: 0;
+  text-align: right;
   overflow-wrap: anywhere;
 }
+.capture-app .shot-crop-actions { display: flex; align-items: center; gap: 6px; }
 .capture-app .shot-status.error {
   color: var(--danger);
 }
@@ -388,11 +423,13 @@
   margin: 10px 14px;
 }
 .capture-external body {
-  height: auto;
-  min-height: 100%;
-  overflow: auto;
-  padding: 22px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px;
+  box-sizing: border-box;
 }
+.capture-external #screenshots-root { height: 100%; }
 .capture-app .shot-key-state {
   color: var(--ink-soft);
   font-size: 12px;
@@ -437,6 +474,8 @@
   white-space: nowrap;
 }
 :where(html[data-theme='zaklex']) .capture-app .shot-sub,
+:where(html[data-theme='zaklex']) .capture-app .shot-help,
+:where(html[data-theme='zaklex']) .capture-app .shot-size,
 :where(html[data-theme='zaklex']) .capture-app .shot-library > p,
 :where(html[data-theme='zaklex']) .capture-app .shot-status,
 :where(html[data-theme='zaklex']) .capture-app .shot-tip,

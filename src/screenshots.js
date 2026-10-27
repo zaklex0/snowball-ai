@@ -98,11 +98,13 @@
     g.restore();
   }
   // One renderer is shared by the canvas, history thumbnails and clipboard export.
-  function paint(g, source, ops, softness) {
+  function paint(g, source, ops, softness, crop = null) {
     const w = source.width,
       h = source.height,
       focus = ops.filter((o) => o.type === 'focus');
-    g.clearRect(0, 0, w, h);
+    g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+    g.save();
+    if (crop) g.translate(-crop.x, -crop.y);
     g.save();
     if (focus.length) g.filter = 'blur(' + softness * 0.24 + 'px)';
     g.drawImage(source, 0, 0, w, h);
@@ -122,6 +124,22 @@
       });
     }
     ops.forEach((o) => drawOp(g, o));
+    g.restore();
+  }
+  const viewOf = (s) => s.crop || { x: 0, y: 0, width: s.width, height: s.height };
+  function cropOverlay(g, selection, view) {
+    const box = bounds(selection), x = box.x - view.x, y = box.y - view.y;
+    g.save();
+    g.beginPath();
+    g.rect(0, 0, g.canvas.width, g.canvas.height);
+    g.rect(x, y, box.w, box.h);
+    g.fillStyle = 'rgba(15, 15, 15, .48)';
+    g.fill('evenodd');
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 2;
+    g.setLineDash([7, 5]);
+    g.strokeRect(x, y, box.w, box.h);
+    g.restore();
   }
   const loadImage = (url) =>
     new Promise((resolve, reject) => {
@@ -141,6 +159,10 @@
         <div>
           <h1>Снимки</h1>
           <p class="shot-sub">Захват экрана, пометки и ваша история</p>
+          <details class="shot-help">
+            <summary>Подсказки по захвату</summary>
+            <p class="shot-tip">Shift при выделении — квадрат · Правая кнопка — весь экран · Esc — отмена</p>
+          </details>
         </div>
         <div class="shot-head-actions">
           <button class="primary shot-capture" data-action="capture" title="Снять область">
@@ -173,6 +195,7 @@
             <button data-tool="rect" aria-pressed="false">Рамка</button>
             <button data-tool="focus" aria-pressed="false">Подсветить</button>
             <button data-tool="text" aria-pressed="false">Текст</button>
+            <button data-tool="crop" aria-pressed="false">Обрезать</button>
             <div class="shot-undo">
               <button data-action="undo" title="Отменить · Ctrl + Z" aria-label="Отменить пометку">
                 ↶
@@ -185,6 +208,7 @@
                 ↷
               </button>
             </div>
+            <div class="shot-status" role="status" aria-live="polite">Снимки и пометки сохраняются автоматически.</div>
           </div>
           <div class="shot-options">
             <label>
@@ -206,6 +230,12 @@
               <input class="shot-blur" type="range" min="0" max="40" value="15" />
               <output class="shot-blur-out">15%</output>
             </label>
+            <div class="shot-crop-actions" hidden>
+              <button data-action="apply-crop" class="primary">Применить обрезку</button>
+              <button data-action="cancel-crop">Отмена</button>
+            </div>
+            <button data-action="reset-crop" hidden>Вернуть весь снимок</button>
+            <span class="shot-size"></span>
             <button data-action="copy" class="primary">Копировать снимок</button>
           </div>
           <div class="shot-stage">
@@ -216,13 +246,7 @@
             </p>
             <canvas hidden aria-label="Снимок: рисуйте выбранным инструментом"></canvas>
           </div>
-          <div class="shot-status" role="status" aria-live="polite">
-            Снимки и пометки сохраняются автоматически.
-          </div>
           <button class="shot-conflict" hidden>Открыть сохранённую версию заново</button>
-          <div class="shot-tip">
-            Shift при выделении — квадрат · Правая кнопка — весь экран · Esc — отмена
-          </div>
         </div>
       </div>
     `;
@@ -258,6 +282,7 @@
       width = 5,
       pressure = 35,
       drawing = null,
+      cropSelection = null,
       textEdit = null;
     let timer = null,
       loading = 0,
@@ -291,28 +316,53 @@
       });
       theme(r.theme);
     }
+    function fitCanvas() {
+      if (canvas.hidden || !canvas.width || !canvas.height) return;
+      const stage = $('.shot-stage'), css = getComputedStyle(stage);
+      const availableWidth = stage.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
+      const availableHeight = stage.clientHeight - parseFloat(css.paddingTop) - parseFloat(css.paddingBottom);
+      if (availableWidth < 1 || availableHeight < 1) return;
+      const scale = Math.min(availableWidth / canvas.width, availableHeight / canvas.height);
+      canvas.style.width = Math.max(1, Math.floor(canvas.width * scale)) + 'px';
+      canvas.style.height = Math.max(1, Math.floor(canvas.height * scale)) + 'px';
+      positionText();
+    }
+    function sizeCanvas(s) {
+      const view = viewOf(s);
+      canvas.width = view.width;
+      canvas.height = view.height;
+      $('.shot-size').textContent = view.width + ' × ' + view.height;
+      fitCanvas();
+    }
     function render() {
       canvas.hidden = !current;
       $('.shot-empty').hidden = !!current;
-      if (current)
+      if (current) {
         paint(
           ctx,
           current.image,
-          drawing ? current.ops.concat(drawing) : current.ops,
+          drawing && drawing.type !== 'crop' ? current.ops.concat(drawing) : current.ops,
           current.blur,
+          current.crop,
         );
+        const selection = drawing?.type === 'crop' ? drawing : cropSelection;
+        if (selection) cropOverlay(ctx, selection, viewOf(current));
+      }
       $('[data-action="undo"]').disabled = !current?.ops.length;
       $('[data-action="redo"]').disabled = !current?.redo.length;
       $('[data-action="copy"]').disabled = !current;
+      $('.shot-crop-actions').hidden = !current || !cropSelection;
+      $('[data-action="reset-crop"]').hidden = !current?.crop;
       $('.shot-pressure-label').hidden = tool !== 'marker';
       $('.shot-blur-label').hidden = tool !== 'focus';
       for (const [id, card] of cards) card.classList.toggle('active', id === current?.id);
     }
     function rendered(s) {
       const c = document.createElement('canvas');
-      c.width = s.width;
-      c.height = s.height;
-      paint(c.getContext('2d'), s.image, s.ops, s.blur);
+      const view = viewOf(s);
+      c.width = view.width;
+      c.height = view.height;
+      paint(c.getContext('2d'), s.image, s.ops, s.blur, s.crop);
       return c;
     }
     function thumbnail(s) {
@@ -344,6 +394,7 @@
               revision: s.revision,
               ops: s.ops,
               blur: s.blur,
+              crop: s.crop,
               thumb,
             }),
           );
@@ -372,9 +423,10 @@
         c = canvas.getBoundingClientRect(),
         s = $('.shot-stage').getBoundingClientRect(),
         scale = c.width / canvas.width;
+      const view = viewOf(current);
       Object.assign(area.style, {
-        left: c.left - s.left + l.r.x * scale + 'px',
-        top: c.top - s.top + l.r.y * scale + 'px',
+        left: c.left - s.left + (l.r.x - view.x) * scale + 'px',
+        top: c.top - s.top + (l.r.y - view.y) * scale + 'px',
         width: l.r.w * scale + 'px',
         height: l.r.h * scale + 'px',
         padding: l.pad * scale + 'px',
@@ -452,13 +504,14 @@
         await document.fonts.ready;
         if (seq !== loading || t !== token) return;
         current = { ...item, image, token: t, redo: [], generation: 0, saved: 0, pending: null };
-        canvas.width = item.width;
-        canvas.height = item.height;
+        cropSelection = null;
+        sizeCanvas(current);
         $('.shot-blur').value = item.blur;
         $('.shot-blur-out').textContent = item.blur + '%';
         $('.shot-conflict').hidden = true;
         render();
-        status(item.width + ' × ' + item.height + ' · Пометки сохраняются автоматически');
+        fitCanvas();
+        status(canvas.width + ' × ' + canvas.height + ' · Пометки сохраняются автоматически');
       } finally {
         if (seq === loading) opening = false;
       }
@@ -482,6 +535,7 @@
       if (current && !ids.has(current.id)) {
         current = null;
         drawing = null;
+        cropSelection = null;
         loading++;
         opening = false;
       }
@@ -575,18 +629,20 @@
     }
     const point = (e) => {
       const r = canvas.getBoundingClientRect();
+      const view = viewOf(current);
       return {
-        x: Math.max(0, Math.min(canvas.width, ((e.clientX - r.left) * canvas.width) / r.width)),
-        y: Math.max(0, Math.min(canvas.height, ((e.clientY - r.top) * canvas.height) / r.height)),
+        x: view.x + Math.max(0, Math.min(canvas.width, ((e.clientX - r.left) * canvas.width) / r.width)),
+        y: view.y + Math.max(0, Math.min(canvas.height, ((e.clientY - r.top) * canvas.height) / r.height)),
       };
     };
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !current || opening) return;
       finishText();
-      if (current.ops.length >= 1500) {
+      if (tool !== 'crop' && current.ops.length >= 1500) {
         status('На снимке уже много пометок. Скопируйте результат и начните новый снимок.', true);
         return;
       }
+      if (tool === 'crop') cropSelection = null;
       const p = point(e);
       drawing = {
         type: tool,
@@ -612,7 +668,12 @@
       const op = drawing;
       drawing = null;
       if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-      if (op.type === 'text') beginText(op);
+      if (op.type === 'crop') {
+        if (bounds(op).w >= 12 && bounds(op).h >= 12) {
+          cropSelection = op;
+          status('Проверьте выделенную область и нажмите «Применить обрезку».');
+        } else status('Для обрезки выделите область побольше.', true);
+      } else if (op.type === 'text') beginText(op);
       else {
         if (op.points || (bounds(op).w > 1 && bounds(op).h > 1)) {
           current.ops.push(op);
@@ -630,6 +691,7 @@
       b.addEventListener('click', () => {
         finishText();
         tool = b.dataset.tool;
+        if (tool !== 'crop') cropSelection = null;
         root
           .querySelectorAll('[data-tool]')
           .forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
@@ -637,12 +699,44 @@
         status(
           tool === 'text'
             ? 'Выделите прямоугольник и введите текст — буквы подстроятся под его размер.'
+            : tool === 'crop'
+              ? 'Выделите область, которую хотите оставить на снимке.'
             : tool === 'marker'
               ? 'Нажим меняет насыщенность маркера: от прозрачного до плотного следа.'
               : 'Рисуйте на снимке. Пометки сохраняются автоматически.',
         );
       }),
     );
+    async function changeCrop(next) {
+      if (!current || !(await flush())) return;
+      current.crop = next;
+      cropSelection = null;
+      sizeCanvas(current);
+      render();
+      fitCanvas();
+      dirty();
+      clearTimeout(timer);
+      await save(current);
+      status(next ? 'Снимок обрезан до ' + next.width + ' × ' + next.height + '. Исходник сохранён.' : 'Показан весь исходный снимок.');
+    }
+    $('[data-action="apply-crop"]').addEventListener('click', () =>
+      run(async () => {
+        if (!cropSelection || !current) return;
+        const selected = bounds(cropSelection), view = viewOf(current);
+        const x = Math.max(view.x, Math.floor(selected.x));
+        const y = Math.max(view.y, Math.floor(selected.y));
+        const right = Math.min(view.x + view.width, Math.ceil(selected.x + selected.w));
+        const bottom = Math.min(view.y + view.height, Math.ceil(selected.y + selected.h));
+        if (right - x < 2 || bottom - y < 2) throw Error('Для обрезки выделите область побольше.');
+        await changeCrop({ x, y, width: right - x, height: bottom - y });
+      }),
+    );
+    $('[data-action="cancel-crop"]').addEventListener('click', () => {
+      cropSelection = null;
+      render();
+      status('Обрезка отменена.');
+    });
+    $('[data-action="reset-crop"]').addEventListener('click', () => run(() => changeCrop(null)));
     $('.shot-color').addEventListener('input', (e) => {
       color = e.target.value;
     });
@@ -710,8 +804,8 @@
         undo(e.shiftKey);
       }
     });
-    window.addEventListener('resize', positionText);
-    new ResizeObserver(positionText).observe($('.shot-stage'));
+    window.addEventListener('resize', fitCanvas);
+    new ResizeObserver(fitCanvas).observe($('.shot-stage'));
     window.addEventListener('beforeunload', (e) => {
       if (allowClose || (!textEdit && (!current || current.generation === current.saved))) return;
       e.preventDefault();

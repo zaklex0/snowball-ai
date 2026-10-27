@@ -44,6 +44,28 @@ async function draw(page, tool, from, to) {
   assert.equal(await page.ev('window.screenshotEditor.flush()'), true);
   let shot = await page.ev(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)})`);
   assert.deepEqual(shot.item.ops.map(o => o.type), ['marker', 'rect', 'focus', 'text']); assert.equal(shot.item.ops[3].text, 'Текст в области');
+  // Crop the edited image, copy the cropped dimensions, then restore the immutable original.
+  const beforeCrop = fs.readFileSync(path.join(data, 'Снимки', ids[0], 'original.png'));
+  await draw(page, 'crop', [.2, .15], [.8, .85]);
+  await page.until("!document.querySelector('.shot-crop-actions').hidden");
+  await page.ev("document.querySelector('[data-action=apply-crop]').click()");
+  await page.until(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)}).then(r=>!!r.item.crop)`);
+  const cropped = await page.ev(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)})`);
+  assert.equal(cropped.item.ops.length, 4, 'Crop keeps annotations');
+  assert.ok(cropped.item.crop.width < cropped.item.width && cropped.item.crop.height < cropped.item.height);
+  assert.deepEqual(await page.ev("({width:document.querySelector('.shot-stage canvas').width,height:document.querySelector('.shot-stage canvas').height})"), { width: cropped.item.crop.width, height: cropped.item.crop.height });
+  await draw(page, 'pen', [.2, .2], [.7, .2]);
+  assert.equal(await page.ev('window.screenshotEditor.flush()'), true);
+  const editedCrop = await page.ev(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)})`);
+  assert.equal(editedCrop.item.ops.length, 5);
+  assert.ok(editedCrop.item.ops[4].points.every(p => p.x >= cropped.item.crop.x && p.x <= cropped.item.crop.x + cropped.item.crop.width));
+  await page.ev("document.querySelector('[data-action=copy]').click()");
+  await page.until("document.querySelector('.shot-status').textContent.includes('скопирован')");
+  assert.deepEqual(await main.ev('shotTestElectron.clipboard.readImage().getSize()'), { width: cropped.item.crop.width, height: cropped.item.crop.height });
+  assert.deepEqual(fs.readFileSync(path.join(data, 'Снимки', ids[0], 'original.png')), beforeCrop);
+  await page.ev("document.querySelector('[data-action=reset-crop]').click()");
+  await page.until(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)}).then(r=>r.item.crop===null)`);
+  assert.deepEqual(await page.ev("({width:document.querySelector('.shot-stage canvas').width,height:document.querySelector('.shot-stage canvas').height})"), { width: shot.item.width, height: shot.item.height });
   // Per-card copy must not switch the editor or discard pending text.
   const activeSize = await page.ev("({w:document.querySelector('.shot-stage canvas').width,h:document.querySelector('.shot-stage canvas').height})");
   await page.ev(`document.querySelector('[data-id="${ids[1]}"] .shot-copy').click()`);
@@ -53,7 +75,7 @@ async function draw(page, tool, from, to) {
   // Stale revision rejected, current revision and originals survive reopening.
   const stale = await page.ev(`window.vsApi.captureSave(${JSON.stringify(ids[0])},${JSON.stringify(list.token)},{revision:0,ops:[],blur:0})`); assert.equal(stale.ok, false);
   await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`);
-  assert.equal((await page.ev(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)})`)).item.ops.length, 4);
+  assert.equal((await page.ev(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)})`)).item.ops.length, 5);
   // Key choice persists and the old shortcut is released.
   const alt = await page.ev("window.vsApi.captureShortcut('Alt+B')"); assert.equal(alt.ok, true, alt.error);
   assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+B')"), true);
@@ -76,6 +98,9 @@ async function draw(page, tool, from, to) {
   await mouse(overlay, 'mouseReleased', 400, 260, { button: 'left', clickCount: 1, modifiers: 8 });
   const editor = await connect(9345, t => /capture-editor\.html/.test(t.url));
   await editor.until("!!document.querySelector('.shot-stage canvas') && !document.querySelector('.shot-stage canvas').hidden");
+  const editorSize = await main.ev("(()=>{const e=shotTestElectron.BrowserWindow.getAllWindows().find(w=>w.__snowCapture==='editor'),b=e.getBounds(),a=shotTestElectron.screen.getDisplayMatching(b).workArea;return {width:b.width,height:b.height,workWidth:a.width,workHeight:a.height}})()");
+  assert.ok(Math.abs(editorSize.width - Math.round(editorSize.workWidth * .8)) <= 2);
+  assert.ok(Math.abs(editorSize.height - Math.round(editorSize.workHeight * .8)) <= 2);
   const captured = await editor.ev('window.vsApi.captureList()'); assert.equal(captured.items.length, 3);
   assert.equal(captured.items[0].width, captured.items[0].height); assert.ok(captured.items[0].width >= 300);
   // Escape leaves the history untouched and restores the requesting window.
@@ -112,7 +137,10 @@ async function draw(page, tool, from, to) {
   }
   for (const [name, target] of [['screenshots-zaklex', editor], ['screenshots-light', page]]) {
     if (name === 'screenshots-light') { await page.ev("document.querySelector('button[data-theme=light]').click()"); await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`); }
-    await target.sleep(250); const png = await target.send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(png.result.data, 'base64'));
+    await target.sleep(250);
+    const fit = await target.ev("(() => {const canvas=document.querySelector('.shot-stage canvas').getBoundingClientRect(),stage=document.querySelector('.shot-stage').getBoundingClientRect(),viewport=document.querySelector('.scroller')?.getBoundingClientRect() || document.body.getBoundingClientRect();return {canvasBottom:canvas.bottom,stageBottom:stage.bottom,viewportBottom:viewport.bottom,canvasWidth:canvas.width,stageWidth:stage.width}})()");
+    assert.ok(fit.canvasBottom <= fit.viewportBottom - 8 && fit.canvasWidth <= fit.stageWidth - 16, name + ' must fit: ' + JSON.stringify(fit));
+    const png = await target.send('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(out, name + '.png'), Buffer.from(png.result.data, 'base64'));
   }
   // Complete real backup through the main app; the immutable original and metadata must be there.
   const backup = path.join(tmp, 'backup.snowball'); await main.ev(`shotTestElectron.dialog.showSaveDialog=async()=>({canceled:false,filePath:${JSON.stringify(backup)}});true`);
@@ -133,7 +161,7 @@ async function draw(page, tool, from, to) {
   assert.equal((await page.ev(`window.vsApi.archiveOpen(${JSON.stringify(backup)})`)).ok,true);
   assert.equal((await page.ev('window.vsApi.captureList()')).items.length,4);
   const activity = (await page.ev('window.vsApi.load()')).activity;
-  assert.equal(Object.values(activity.days).reduce((n,d)=>n+(d.screenshots||0),0),5);
+  assert.equal(Object.values(activity.days).reduce((n,d)=>n+(d.screenshots||0),0),6);
   await page.ev("document.querySelector('[data-guide=screenshots]').click()");
   await page.until("!!document.querySelector('dialog.guide-dlg[open]')");
   assert.equal(await page.ev("document.querySelector('dialog.guide-dlg img').complete && document.querySelector('dialog.guide-dlg img').naturalWidth>0"),true);

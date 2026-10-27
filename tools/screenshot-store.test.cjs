@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs/promises'), os = require('os'), path = require('path');
-const { ScreenshotStore, annotations, cropRect, pngSize } = require('../screenshot-store');
+const { ScreenshotStore, annotations, cropRect, normalizeCrop, pngSize } = require('../screenshot-store');
 const { writeZip, extractZip } = require('../archive');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9hoAAAAASUVORK5CYII=', 'base64');
 test('immutable originals, atomic revisions, concurrent windows, restart, ZIP restore and no overwrite', async () => {
@@ -32,4 +32,24 @@ test('untrusted dimensions, annotation limits and DPI independent crops', () => 
   assert.deepEqual(cropRect({ x: .25, y: .1, w: .5, h: .5 }, 3840, 2160), { x: 960, y: 216, width: 1920, height: 1080 });
   assert.deepEqual(cropRect({ x: 0, y: 0, w: 1, h: 1 }, 2560, 1440), { x: 0, y: 0, width: 2560, height: 1440 });
   assert.throws(() => cropRect({ x: 0, y: 0, w: 0, h: 1 }, 100, 100));
+});
+
+test('non-destructive crop persists, validates bounds, and can restore the original view', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-shot-crop-'));
+  const original = await fs.readFile(path.join(__dirname, '..', 'assets', 'icon.png'));
+  const store = new ScreenshotStore(dir);
+  const added = await store.add(original);
+  assert.equal((await store.get(added.id)).crop, null);
+  const crop = { x: 40, y: 20, width: 100, height: 120 };
+  await store.save(added.id, { revision: 0, ops: [], blur: 15, crop });
+  const reopened = new ScreenshotStore(dir);
+  assert.deepEqual((await reopened.get(added.id)).crop, crop);
+  assert.deepEqual((await reopened.list())[0].crop, crop);
+  assert.deepEqual(await fs.readFile(path.join(store.folder(added.id), 'original.png')), original);
+  await assert.rejects(reopened.save(added.id, { revision: 0, ops: [], blur: 15, crop: null }));
+  await reopened.save(added.id, { revision: 1, ops: [], blur: 15, crop: null });
+  assert.equal((await reopened.get(added.id)).crop, null);
+  assert.deepEqual(normalizeCrop({ x: 0, y: 0, width: 256, height: 256 }, 256, 256), null);
+  for (const bad of [{ x: -1, y: 0, width: 20, height: 20 }, { x: 250, y: 0, width: 20, height: 20 }, { x: 0.5, y: 0, width: 20, height: 20 }, { x: 0, y: 0, width: 1, height: 20 }])
+    assert.throws(() => normalizeCrop(bad, 256, 256));
 });

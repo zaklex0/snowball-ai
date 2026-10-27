@@ -58,5 +58,13 @@ module.exports = async function ({ main, page, shot }) {
   await guideShot('05-history', { history: '.shot-library', copy: '.shot-card .shot-copy', remove: '.shot-card .shot-delete', undo: '.shot-toast' });
   await click('.shot-toast button');
   await sleep(250);
+  await draw('crop', .16, .12, .79, .82);
+  await until("!document.querySelector('.shot-crop-actions').hidden");
+  await guideShot('06-crop-selection', { tool: '[data-tool=crop]', selection: '.shot-stage canvas', apply: '[data-action=apply-crop]' });
+  await click('[data-action=apply-crop]');
+  await until("!document.querySelector('[data-action=reset-crop]').hidden");
+  await ev('window.screenshotEditor.flush()');
+  await sleep(500);
+  await guideShot('07-crop-result', { image: '.shot-stage canvas', reset: '[data-action=reset-crop]', copy: '[data-action=copy]' });
   return shot.boxes;
 };

@@ -69,6 +69,19 @@ function annotations(input, w, h) {
     return r;
   });
 }
+// A crop is a view of the immutable original, so resetting it restores every annotation.
+function normalizeCrop(crop, width, height) {
+  if (crop == null) return null;
+  if (
+    !crop ||
+    !['x', 'y', 'width', 'height'].every((key) => Number.isInteger(crop[key])) ||
+    crop.x < 0 || crop.y < 0 || crop.width < 2 || crop.height < 2 ||
+    crop.x + crop.width > width || crop.y + crop.height > height
+  ) throw Error('Некорректная область обрезки.');
+  if (crop.x === 0 && crop.y === 0 && crop.width === width && crop.height === height)
+    return null;
+  return { x: crop.x, y: crop.y, width: crop.width, height: crop.height };
+}
 function normalize(m, id) {
   if (!m || !ID.test(id) || m.id !== id || !validSize(m.width, m.height))
     throw new Error('Повреждена запись снимка.');
@@ -83,6 +96,7 @@ function normalize(m, id) {
     updatedAt: Number(m.updatedAt) || Date.now(),
     revision: Math.max(0, Math.floor(Number(m.revision) || 0)),
     blur: Math.max(0, Math.min(40, Number(m.blur) || 0)),
+    crop: normalizeCrop(m.crop, m.width, m.height),
     ops: annotations(m.ops || [], m.width, m.height),
     thumb:
       typeof m.thumb === 'string' &&
@@ -185,6 +199,7 @@ class ScreenshotStore {
           ...old,
           ops: input.ops,
           blur: input.blur,
+          crop: input.crop,
           thumb: input.thumb,
           revision: old.revision + 1,
           updatedAt: Date.now(),
@@ -288,4 +303,4 @@ async function discardUndo(folder) {
     throw Error('Неверная папка отмены удаления.');
   await fsp.rm(resolved, { recursive: true, force: true });
 }
-module.exports = { ScreenshotStore, SHOTS_DIR, annotations, pngSize, cropRect, discardUndo };
+module.exports = { ScreenshotStore, SHOTS_DIR, annotations, pngSize, cropRect, normalizeCrop, discardUndo };

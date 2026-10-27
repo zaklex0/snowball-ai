@@ -97,11 +97,16 @@ module.exports = function setupScreenshots(options) {
       editor.webContents.send('capture-open', id);
       return;
     }
+    const area = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+    const width = Math.max(1, Math.round(area.width * 0.8));
+    const height = Math.max(1, Math.round(area.height * 0.8));
     editor = new BrowserWindow({
-      width: 1180,
-      height: 820,
-      minWidth: 650,
-      minHeight: 480,
+      x: area.x + Math.round((area.width - width) / 2),
+      y: area.y + Math.round((area.height - height) / 2),
+      width,
+      height,
+      minWidth: Math.min(650, width),
+      minHeight: Math.min(480, height),
       show: false,
       title: 'Снимки — Snowball.ai',
       autoHideMenuBar: true,
@@ -336,7 +341,8 @@ module.exports = function setupScreenshots(options) {
     check(t);
     const item = await storage.get(id),
       size = pngSize(bytes);
-    if (size.width !== item.width || size.height !== item.height)
+    const view = item.crop || item;
+    if (size.width !== view.width || size.height !== view.height)
       throw Error('Размер изображения не совпадает со снимком.');
     const image = nativeImage.createFromBuffer(Buffer.from(bytes));
     if (image.isEmpty()) throw Error('Не удалось скопировать снимок.');
