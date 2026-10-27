@@ -451,13 +451,14 @@ h1 .brand { color: var(--accent-strong); }
 
 /* Banner */
 .banner {
-  display: flex; align-items: flex-start; gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent-strong);
   border-radius: 14px; padding: 12px 14px; font-size: 14px;
 }
 .banner p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .banner-bar { display: block; height: 8px; margin-top: 8px; max-width: 420px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .banner-bar span { display: block; height: 100%; background: var(--accent-strong); border-radius: inherit; transition: width .3s; }
+.banner .link-btn { flex: none; }
 .banner .btn-mini { flex: none; background: var(--accent); border-color: transparent; color: var(--accent-ink); }
 .banner .btn-mini:hover { background: var(--accent-hover); border-color: transparent; }
 

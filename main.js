@@ -847,7 +847,8 @@ const dayKeyOf = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + p
 const dateOfKey = (k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
 // "вторник, 3 ноября" for cards and answers.
 function humanDay(k) { const d = dateOfKey(k); return WEEKDAYS_RU[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS_RU[d.getMonth()]; }
-function eventLine(e) { return humanDay(e.date) + ', ' + e.from + (e.to ? '–' + e.to : '') + ' — ' + e.title; }
+function eventName(e) { return e.who ? e.who + ': ' + e.title : e.title; }
+function eventLine(e) { return humanDay(e.date) + ', ' + e.from + (e.to ? '–' + e.to : '') + ' — ' + eventName(e); }
 // Tells the model what "today" and "tomorrow" are. It goes after the cached instructions so it does not break the cache.
 function nowLine() {
   const d = new Date();
@@ -1076,7 +1077,7 @@ const SYSTEM_PROMPT = [
   'Если не хватает важной детали (для какой нейросети, картинка или видео, соотношение сторон), сначала предложи вариант, а потом коротко спроси.',
   'Из разметки используй только абзацы, списки, **жирный** и блоки кода. Таблицы не используй: программа их не показывает.',
   'У пользователя в программе есть календарь, и ты можешь с ним работать: calendar_list показывает дела за период, calendar_add добавляет дело, calendar_update меняет или переносит существующее, calendar_delete удаляет. Результат вызова говорит, сделано ли изменение сразу или пользователь должен подтвердить его кнопкой на карточке: пиши в ответе именно так, как там сказано. Чтобы перенести или изменить дело, найди его через calendar_list и вызови calendar_update с его id (не удаляй и не создавай заново). Перед удалением тоже найди id через calendar_list.',
-  'Название дела — только суть, 2–5 слов, без слова, обозначающего тип (созвон, звонок, встреча, съёмка, монтаж — тип и так виден по цвету), и без служебных слов. Например, «на завтра забей созвон на 14:00 с Димой по поводу правок по монтажу видео на ютуб» → название «Дима, правки монтажа YouTube», тип call. Важные подробности можно положить в note. Тип: task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж. Если время окончания не названо, оставь to пустым.',
+  'Если в деле есть люди (звонок, встреча), их имена — в who (через запятую), а title — только тема, 2–5 слов, без имён. Тема — только суть, без слова, обозначающего тип (созвон, звонок, встреча, съёмка, монтаж — тип и так виден по цвету), и без служебных слов. Например, «на завтра забей созвон на 14:00 с Димой по поводу правок по монтажу видео на ютуб» → who «Дима», title «правки монтажа YouTube», тип call. Важные подробности можно положить в note. Тип: task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж. Если время окончания не названо, оставь to пустым.',
   'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
   'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
@@ -1111,12 +1112,13 @@ const TOOLS = [
     name: 'calendar_add',
     description: 'Добавляет дело в календарь (или показывает пользователю карточку для подтверждения — это скажет результат).',
     parameters: {
-      type: 'object', additionalProperties: false, required: ['date', 'from', 'to', 'title', 'kind', 'note', 'remind'],
+      type: 'object', additionalProperties: false, required: ['date', 'from', 'to', 'who', 'title', 'kind', 'note', 'remind'],
       properties: {
         date: { type: 'string', description: 'День, YYYY-MM-DD' },
         from: { type: 'string', description: 'Начало, HH:MM (24 часа)' },
         to: { type: 'string', description: 'Окончание, HH:MM, или пустая строка, если не названо' },
-        title: { type: 'string', description: 'Коротко, что за дело' },
+        who: { type: 'string', description: 'С кем дело: имена через запятую, или пустая строка, если никого не названо' },
+        title: { type: 'string', description: 'Тема дела: коротко, о чём речь' },
         kind: { type: 'string', enum: ['task', 'meet', 'call', 'shoot', 'edit'], description: 'task — задача, meet — встреча, call — звонок, shoot — съёмка, edit — монтаж' },
         note: { type: 'string', description: 'Подробности или пустая строка' },
         remind: { type: 'integer', enum: [0, 15, 30, 60, 1440], description: 'За сколько минут напомнить. Если не сказано — 60, «без напоминания» — 0' }
@@ -1127,13 +1129,14 @@ const TOOLS = [
     name: 'calendar_update',
     description: 'Меняет существующее дело: перенос на другой день или время, новое название, тип, заметка, напоминание. Передай все поля; то, что не меняется, — как было в calendar_list.',
     parameters: {
-      type: 'object', additionalProperties: false, required: ['id', 'date', 'from', 'to', 'title', 'kind', 'note', 'remind'],
+      type: 'object', additionalProperties: false, required: ['id', 'date', 'from', 'to', 'who', 'title', 'kind', 'note', 'remind'],
       properties: {
         id: { type: 'string', description: 'id дела из calendar_list' },
         date: { type: 'string', description: 'День, YYYY-MM-DD' },
         from: { type: 'string', description: 'Начало, HH:MM' },
         to: { type: 'string', description: 'Окончание, HH:MM, или пустая строка' },
-        title: { type: 'string', description: 'Коротко, суть дела' },
+        who: { type: 'string', description: "С кем дело: имена через запятую, или пустая строка" },
+        title: { type: 'string', description: 'Тема дела: коротко, о чём речь' },
         kind: { type: 'string', enum: ['task', 'meet', 'call', 'shoot', 'edit'] },
         note: { type: 'string', description: 'Подробности или пустая строка' },
         remind: { type: 'integer', enum: [0, 15, 30, 60, 1440] }
@@ -1216,10 +1219,10 @@ function runTool(name, input) {
   if (name === 'calendar_list') {
     if (!DATE_ONLY.test(a.from || '') || !DATE_ONLY.test(a.to || '')) return { output: 'Ошибка: from и to должны быть датами YYYY-MM-DD.', error: true };
     const list = store.calendarView().filter((e) => e.date >= a.from && e.date <= a.to).slice(0, 200)
-      .map((e) => ({ id: e.id, date: e.date, from: e.from, to: e.to, title: e.title, kind: e.kind, note: e.note, remind: e.remind }));
+      .map((e) => ({ id: e.id, date: e.date, from: e.from, to: e.to, who: e.who, title: e.title, kind: e.kind, note: e.note, remind: e.remind }));
     return { output: list.length ? JSON.stringify(list) : 'В этот период дел нет.' };
   }
-  const fields = () => ({ date: a.date, from: a.from, to: a.to, title: a.title, kind: a.kind, note: a.note, remind: a.remind });
+  const fields = () => ({ date: a.date, from: a.from, to: a.to, who: a.who, title: a.title, kind: a.kind, note: a.note, remind: a.remind });
   if (name === 'calendar_add') {
     const event = DATE_ONLY.test(a.date || '') ? normalizeEvent(fields()) : null;
     if (!event) return { output: 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.', error: true };
@@ -2275,7 +2278,7 @@ function checkReminders() {
     reminded.add(key);
     if (!Notification.isSupported()) return;
     const n = new Notification({
-      title: 'Напоминание: ' + e.title,
+      title: 'Напоминание: ' + eventName(e),
       body: (e.remind >= 1440 ? 'Завтра' : 'Сегодня') + ' в ' + e.from + (e.to ? '–' + e.to : '') + ', ' + remindLabel(e.remind) + (e.note ? '. ' + e.note : ''),
       icon: path.join(__dirname, 'assets', 'icon.png')
     });

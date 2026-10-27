@@ -93,7 +93,7 @@
     calDialog: $("cal-dialog"), calViewBtn: $("cal-view-btn"), calViewMenu: $("cal-view-menu"), calViewName: $("cal-view-name"),
     calMonthView: $("cal-month-view"), calWeekView: $("cal-week-view"), cwHead: $("cw-head"), cwBody: $("cw-body"),
     calGrid: $("cal-grid"), calDayTitle: $("cal-day-title"), calDaySub: $("cal-day-sub"), calDayAdd: $("cal-day-add"), calDayBadge: $("cal-day-badge"),
-    calForm: $("cal-form"), calFormTitle: $("cal-form-title"), cfTitle: $("cf-title"), cfDate: $("cf-date"), cfFrom: $("cf-from"), cfTo: $("cf-to"),
+    calForm: $("cal-form"), calFormTitle: $("cal-form-title"), cfWho: $("cf-who"), cfTitle: $("cf-title"), cfDate: $("cf-date"), cfFrom: $("cf-from"), cfTo: $("cf-to"),
     cfKind: $("cf-kind"), cfRemind: $("cf-remind"), cfNote: $("cf-note"), cfSave: $("cf-save"), cfCancel: $("cf-cancel"), cfDelete: $("cf-delete"), cfMsg: $("cf-msg"),
     calTimeline: $("cal-timeline"),
     chatMode: $("chat-mode"), chatMeta: $("chat-meta"), chatConnect: $("chat-connect"), setNotify: $("set-notify"), setConfirm: $("set-confirm"),
@@ -1317,8 +1317,8 @@
       }
       var on = isNowEvent(e);
       kids.push(h("button", { type: "button", class: "up-ev ev-" + kindOfEvent(e).id + (on ? " now" : ""),
-        title: (on ? "Идёт сейчас: " : "") + timeRange(e) + " " + e.title + (e.note ? " — " + e.note : ""), onclick: function () { openCalendarDay(e.date); } },
-        h("i", { "aria-hidden": "true" }), h("span", { class: "tt", text: e.title }), h("span", { class: "tm", text: on ? "сейчас" : e.from })));
+        title: (on ? "Идёт сейчас: " : "") + timeRange(e) + " " + evName(e) + (e.note ? " — " + e.note : ""), onclick: function () { openCalendarDay(e.date); } },
+        h("i", { "aria-hidden": "true" }), h("span", { class: "tt", text: evName(e) }), h("span", { class: "tm", text: on ? "сейчас" : e.from })));
     });
     if (!kids.length) kids.push(h("p", { class: "up-empty", text: "Ближайших дел нет." }));
     kids.push(h("button", { type: "button", class: "up-more", onclick: function () { setPage("calendar"); } }, "Весь календарь"));
@@ -1931,6 +1931,8 @@
     return name.charAt(0).toUpperCase() + name.slice(1) + ", " + fmtDay(d, d.getFullYear() !== new Date().getFullYear());
   }
   function timeRange(e) { return e.from + (e.to ? "–" + e.to : ""); }
+  // How an event is called everywhere: «С кем: тема», or just the topic when nobody is named.
+  function evName(e) { return e.who ? e.who + ": " + e.title : e.title; }
   function minutesOf(t) { return +t.slice(0, 2) * 60 + +t.slice(3); }
 
   function ensureCal() {
@@ -1980,7 +1982,7 @@
         ondblclick: (function (k) { return function () { cal.selected = k; setCalMode("day"); }; })(k) },
         h("span", { class: "num", text: String(d.getDate()) }),
         hol ? h("span", { class: "hol", text: hol }) : null,
-        list.slice(0, shown).map(function (e) { return h("span", { class: "ev ev-" + kindOfEvent(e).id }, h("i"), e.from + " " + e.title); }),
+        list.slice(0, shown).map(function (e) { return h("span", { class: "ev ev-" + kindOfEvent(e).id }, h("i"), e.from + " " + evName(e)); }),
         list.length > shown ? h("span", { class: "more", text: "ещё " + (list.length - shown) }) : null));
     }
     els.calGrid.replaceChildren.apply(els.calGrid, kids);
@@ -1996,7 +1998,7 @@
   function eventBlock(e) {
     var k = kindOfEvent(e), now = isNowEvent(e);
     return h("button", { type: "button", class: "cal-ev ev-" + k.id + (now ? " now" : ""), title: now ? "Идёт сейчас. Изменить дело" : "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
-      h("span", { class: "row1" }, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: e.title }), h("span", { class: "kind", text: k.label })),
+      h("span", { class: "row1" }, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: evName(e) }), h("span", { class: "kind", text: k.label })),
       e.note ? h("span", { class: "note", text: e.note }) : null,
       e.remind ? h("span", { class: "bell", text: "Напомнить " + (REMIND_LABELS[e.remind] || "") }) : null);
   }
@@ -2073,7 +2075,7 @@
         b.style.height = hgt + "px";
         // As many whole lines as fit (a one-hour event shows two), the rest ends with "…"; the full text is in the tooltip.
         b.querySelector(".row1").style.webkitLineClamp = String(Math.max(1, Math.floor((hgt - 8) / 16)));
-        b.title = timeRange(pl.e) + " " + pl.e.title + (pl.e.note ? " — " + pl.e.note : "");
+        b.title = timeRange(pl.e) + " " + evName(pl.e) + (pl.e.note ? " — " + pl.e.note : "");
         b.style.left = "calc(" + (pl.lane / lanes.length * 100) + "% + 2px)";
         b.style.width = "calc(" + (100 / lanes.length) + "% - 4px)";
         col.append(b);
@@ -2199,6 +2201,7 @@
     cal.editing = e ? e.id : "";
     cal.confirmDelete = false;
     els.calFormTitle.textContent = e ? "Изменить дело" : "Новое дело";
+    els.cfWho.value = e ? e.who || "" : "";
     els.cfTitle.value = e ? e.title : "";
     els.cfDate.value = e ? e.date : cal.selected;
     setTime(els.cfFrom, e ? e.from : (time || "10:00"));
@@ -2222,12 +2225,12 @@
     e.preventDefault();
     if (els.cfSave.disabled) return;
     var title = els.cfTitle.value.trim(), from = getTime(els.cfFrom), to = getTime(els.cfTo);
-    if (!title) { els.cfMsg.textContent = "Напишите, что за дело."; els.cfTitle.focus(); return; }
+    if (!title) { els.cfMsg.textContent = "Напишите тему дела."; els.cfTitle.focus(); return; }
     if (!els.cfDate.value) { els.cfMsg.textContent = "Выберите день."; els.cfDate.focus(); return; }
     if (to && to <= from) { els.cfMsg.textContent = "Окончание должно быть позже начала."; els.cfTo.querySelector("select").focus(); return; }
     var checked = els.cfKind.querySelector("input:checked");
     var isNew = !cal.editing;
-    var ev = { id: cal.editing || undefined, date: els.cfDate.value, from: from, to: to, title: title,
+    var ev = { id: cal.editing || undefined, date: els.cfDate.value, from: from, to: to, who: els.cfWho.value.trim(), title: title,
       kind: checked ? checked.value : "task", remind: +els.cfRemind.value, note: els.cfNote.value.trim() };
     els.cfSave.disabled = true;
     call(api.calSave(ev)).then(function (r) {

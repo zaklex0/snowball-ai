@@ -189,6 +189,7 @@ function normalizeEvent(e, fallbackTime) {
   return {
     id: ID_RE.test(str(e.id)) ? e.id : newId('e'),
     date: e.date, from, to,
+    who: str(e.who, 200).trim(),
     title: str(e.title, 300).trim() || 'Без названия',
     kind: EVENT_KINDS.includes(e.kind) ? e.kind : 'task',
     note: str(e.note, 5000).trim(),
@@ -527,7 +528,7 @@ class Store {
       const now = Date.now();
       const ev = normalizeEvent(Object.assign({}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now }));
       if (!ev) throw Object.assign(new Error('bad event'), { userMessage: 'Не получилось сохранить дело: проверьте день и время.' });
-      const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.title, e.kind, e.note, e.remind]);
+      const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
       // "Сохранить" without real changes is not an action on the statistics page.
       const changed = !prev || sig(prev) !== sig(ev);
       if (prev && !changed) return prev;
