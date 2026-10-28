@@ -137,7 +137,19 @@ function windowColors() {
   const t = currentTheme();
   return WINDOW_COLORS[t === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : t];
 }
-function overlayColors() { const c = windowColors(); return { color: c.bar, symbolColor: c.symbol, height: TITLEBAR_HEIGHT }; }
+// dim: a dialog is open over the window, so the page is darkened by its backdrop (see ::backdrop in styles.css); the Windows
+// buttons are drawn by the system above the page and are not darkened by it, so they get the same shade here.
+function shade(hex, dark, a) {
+  const n = parseInt(hex.slice(1), 16), out = [n >> 16 & 255, n >> 8 & 255, n & 255].map((v, i) => Math.round(v * (1 - a) + dark[i] * a));
+  return '#' + out.map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+function overlayColors(dim) {
+  const c = windowColors();
+  if (!dim) return { color: c.bar, symbolColor: c.symbol, height: TITLEBAR_HEIGHT };
+  const zaklex = currentTheme() === 'zaklex', dark = zaklex ? [20, 17, 15] : [30, 18, 12], a = zaklex ? 0.72 : 0.55;
+  return { color: shade(c.bar, dark, a), symbolColor: shade(c.symbol, dark, a), height: TITLEBAR_HEIGHT };
+}
+const dimmedWins = new WeakSet();
 function bgColor() { return windowColors().bg; }
 
 function visibleBounds(b) {
@@ -162,7 +174,7 @@ function paintWindows() {
   if (captures) captures.theme();
   liveWins().forEach((w) => {
     w.setBackgroundColor(bgColor());
-    if (IS_WIN) { try { w.setTitleBarOverlay(overlayColors()); } catch (e) { /* older Windows */ } }
+    if (IS_WIN) { try { w.setTitleBarOverlay(overlayColors(dimmedWins.has(w))); } catch (e) { /* older Windows */ } }
   });
 }
 
@@ -2632,6 +2644,15 @@ handle('assistant-set-balance', async (provider, amount) => {
 });
 
 // Off: the assistant makes calendar and prompt changes at once, and the card offers "Отменить".
+// A dialog opened or closed in a window: darken the Windows buttons like the rest of the page.
+handle('dim-controls', async function (on) {
+  const w = BrowserWindow.fromWebContents(this.sender);
+  if (!w || w.isDestroyed() || !IS_WIN) return {};
+  if (on) dimmedWins.add(w); else dimmedWins.delete(w);
+  try { w.setTitleBarOverlay(overlayColors(!!on)); } catch (e) { /* older Windows */ }
+  return {};
+});
+
 handle('set-confirm', async (on) => {
   settings.confirm = !!on;
   saveSettings();

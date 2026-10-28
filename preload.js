@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld('vsApi', {
     ipcRenderer.on('window-main', listener);
     return () => ipcRenderer.removeListener('window-main', listener);
   },
+  dimControls: (on) => ipcRenderer.invoke('dim-controls', on),
   setConfirm: (on) => ipcRenderer.invoke('set-confirm', on),
   updateState: () => ipcRenderer.invoke('update-state'),
   checkUpdates: () => ipcRenderer.invoke('check-updates'),

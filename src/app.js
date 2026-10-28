@@ -5360,6 +5360,18 @@
   });
   api.onCaptureGuide(function () { var g = guideOfSection('screenshots'); if (g) openGuide(g); });
 
+  // While a dialog is open the page is darkened, but the Windows buttons (minimise, maximise, close) are drawn by the system
+  // above it: main.js gives them the same shade.
+  var controlsDimmed = null;
+  function syncControlsShade() {
+    var on = !!document.querySelector("dialog:modal");
+    if (on === controlsDimmed) return;
+    controlsDimmed = on;
+    api.dimControls(on);
+  }
+  new MutationObserver(syncControlsShade).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["open"], childList: true });
+  syncControlsShade();
+
   // The page in «Настройки» → «Обновление»: the guides of this version and the earlier ones, each folded until opened
   // (the newest one is open); a screenshot is drawn only when its guide is unfolded.
   var guidesPageFor = null;
