@@ -4146,6 +4146,7 @@
   document.addEventListener("dragover", function (e) {
     if (!hasFiles(e)) return;
     e.preventDefault();
+    if (state.page === "screenshots") { e.dataTransfer.dropEffect = "copy"; return; }
     // «Транскрибация»: a file can be let go anywhere on the page, the drop zone lights up.
     if (state.page === "transcribe") {
       e.dataTransfer.dropEffect = "copy";
@@ -4164,6 +4165,7 @@
     var archive = Array.prototype.find.call(e.dataTransfer.files || [], function (f) { return /\.(snowprompt|snowball)$/i.test(f.name); });
     if (archive) { clearDrag(); var ap = api.pathForFile(archive); if (ap) openArchive(ap); return; }
     if (state.page === "assistant") { clearDrag(); addChatImages(e.dataTransfer.files); return; }
+    if (state.page === "screenshots" && window.screenshotEditor) { clearDrag(); window.screenshotEditor.importFiles(e.dataTransfer.files); return; }
     if (state.page === "transcribe") {
       clearDrag();
       var media = e.dataTransfer.files && e.dataTransfer.files[0], mp = media && api.pathForFile(media);

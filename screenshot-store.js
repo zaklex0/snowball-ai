@@ -47,7 +47,7 @@ function annotations(input, w, h) {
   return input.map((o) => {
     if (
       !o ||
-      !['pen', 'marker', 'rect', 'focus', 'text'].includes(o.type) ||
+      !['pen', 'marker', 'eraser', 'rect', 'focus', 'text'].includes(o.type) ||
       !/^#[0-9a-f]{6}$/i.test(o.color)
     )
       throw new Error('Некорректная пометка.');
@@ -57,7 +57,7 @@ function annotations(input, w, h) {
       width: Math.max(1, Math.min(50, Number(o.width) || 5)),
       pressure: Math.max(10, Math.min(100, Number(o.pressure) || 35)),
     };
-    if (o.type === 'pen' || o.type === 'marker') {
+    if (o.type === 'pen' || o.type === 'marker' || o.type === 'eraser') {
       if (!Array.isArray(o.points) || !o.points.length || (points += o.points.length) > 120000)
         throw new Error('Слишком длинный рисунок.');
       r.points = o.points.map(point);

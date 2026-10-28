@@ -1,5 +1,5 @@
 'use strict';
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('vsApi', {
   captureList: () => ipcRenderer.invoke('capture-list'),
   captureDelete: (id, token) => ipcRenderer.invoke('capture-delete', id, token),
@@ -9,7 +9,8 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureSave: (id, token, value) => ipcRenderer.invoke('capture-save', id, token, value),
   captureCopy: (id, token, bytes) => ipcRenderer.invoke('capture-copy', id, token, bytes),
   captureStart: () => ipcRenderer.invoke('capture-start'),
-  captureImport: () => ipcRenderer.invoke('capture-import'),
+  pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch (e) { return ''; } },
+  captureImport: (filePath) => ipcRenderer.invoke('capture-import', filePath),
   captureShortcut: (key) => ipcRenderer.invoke('capture-shortcut', key),
   captureState: () => ipcRenderer.invoke('capture-state'),
   captureRecording: (begin) => ipcRenderer.invoke('capture-recording', begin),

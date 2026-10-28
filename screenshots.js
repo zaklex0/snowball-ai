@@ -445,16 +445,24 @@ module.exports = function setupScreenshots(options) {
     return state();
   });
   handle('capture-start', (w) => start(w));
-  handle('capture-import', async (w) => {
+  handle('capture-import', async (w, dropped) => {
     if (blocked) throw Error('Дождитесь переноса папки с данными.');
-    const result = await dialog.showOpenDialog(w, {
-      title: 'Открыть картинку',
-      properties: ['openFile'],
-      filters: [{ name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
-    });
-    if (result.canceled) return { canceled: true };
+    let picked = null;
+    if (typeof dropped === 'string' && dropped) {
+      // Dropped on the window: no dialog, but only a picture file.
+      if (!/\.(png|jpe?g|webp)$/i.test(dropped)) throw Error('Это не картинка. Подойдут png, jpg и webp.');
+      picked = dropped;
+    } else {
+      const result = await dialog.showOpenDialog(w, {
+        title: 'Открыть картинку',
+        properties: ['openFile'],
+        filters: [{ name: 'Изображения', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      });
+      if (result.canceled) return { canceled: true };
+      picked = result.filePaths[0];
+    }
     const t = token,
-      image = nativeImage.createFromPath(result.filePaths[0]);
+      image = nativeImage.createFromPath(picked);
     if (image.isEmpty()) throw Error('Не удалось прочитать картинку.');
     check(t);
     const item = await storage.add(image.toPNG(), image.resize({ width: 280 }).toDataURL());

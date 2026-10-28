@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureSave: (id, token, value) => ipcRenderer.invoke('capture-save', id, token, value),
   captureCopy: (id, token, bytes) => ipcRenderer.invoke('capture-copy', id, token, bytes),
   captureStart: () => ipcRenderer.invoke('capture-start'),
-  captureImport: () => ipcRenderer.invoke('capture-import'),
+  captureImport: (filePath) => ipcRenderer.invoke('capture-import', filePath),
   captureShortcut: key => ipcRenderer.invoke('capture-shortcut', key),
   captureState: () => ipcRenderer.invoke('capture-state'),
   captureRecording: begin => ipcRenderer.invoke('capture-recording', begin),

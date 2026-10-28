@@ -57,6 +57,7 @@
     }
     return { r, pad, size: low, lines: wrappedText(o.text || '', low, w), lineHeight: low * 1.25 };
   }
+  const ERASER_SCALE = 3;
   function drawOp(g, o) {
     g.save();
     g.strokeStyle = o.color;
@@ -64,7 +65,12 @@
     g.lineWidth = o.width;
     g.lineCap = 'round';
     g.lineJoin = 'round';
-    if (o.type === 'pen' || o.type === 'marker') {
+    if (o.type === 'pen' || o.type === 'marker' || o.type === 'eraser') {
+      if (o.type === 'eraser') {
+        // The eraser takes away marks only; the picture underneath stays (see paint).
+        g.globalCompositeOperation = 'destination-out';
+        g.lineWidth = o.width * ERASER_SCALE;
+      }
       if (o.type === 'marker') {
         g.globalAlpha = (o.pressure ?? 35) / 100;
         g.lineWidth = o.width * 5;
@@ -123,7 +129,15 @@
         g.strokeRect(r.x, r.y, r.w, r.h);
       });
     }
-    ops.forEach((o) => drawOp(g, o));
+    if (ops.some((o) => o.type === 'eraser')) {
+      // Marks go onto their own layer so the eraser can rub them out without touching the picture.
+      const layer = document.createElement('canvas');
+      layer.width = w;
+      layer.height = h;
+      const lg = layer.getContext('2d');
+      ops.forEach((o) => drawOp(lg, o));
+      g.drawImage(layer, 0, 0);
+    } else ops.forEach((o) => drawOp(g, o));
     g.restore();
   }
   const viewOf = (s) => s.crop || { x: 0, y: 0, width: s.width, height: s.height };
@@ -186,6 +200,7 @@
           <div class="shot-tools" role="toolbar" aria-label="Инструменты редактора">
             <button data-tool="pen" aria-pressed="true">Перо</button>
             <button data-tool="marker" aria-pressed="false">Маркер</button>
+            <button data-tool="eraser" aria-pressed="false" title="Стереть пометки (картинка остаётся)">Ластик</button>
             <button data-tool="rect" aria-pressed="false">Рамка</button>
             <button data-tool="focus" aria-pressed="false">Подсветить</button>
             <button data-tool="text" aria-pressed="false">Текст</button>
@@ -344,18 +359,18 @@
     function updateBrushPreview() {
       const preview = $('.shot-brush-preview');
       const active =
-        current && !canvas.hidden && (tool === 'pen' || tool === 'marker') && (overCanvas || !!sizing);
+        current && !canvas.hidden && (tool === 'pen' || tool === 'marker' || tool === 'eraser') && (overCanvas || !!sizing);
       preview.hidden = !active;
       if (!active) return;
       const canvasRect = canvas.getBoundingClientRect();
       const stageRect = $('.shot-stage').getBoundingClientRect();
-      const stroke = width * (tool === 'marker' ? 5 : 1);
+      const stroke = width * (tool === 'marker' ? 5 : tool === 'eraser' ? ERASER_SCALE : 1);
       const diameter = stroke * canvasRect.width / canvas.width;
       preview.style.width = diameter + 'px';
       preview.style.height = diameter + 'px';
       preview.style.left = canvasRect.left - stageRect.left + previewPoint.x * canvasRect.width + 'px';
       preview.style.top = canvasRect.top - stageRect.top + previewPoint.y * canvasRect.height + 'px';
-      preview.style.setProperty('--brush-preview-color', color);
+      preview.style.setProperty('--brush-preview-color', tool === 'eraser' ? '#8a8a8a' : color);
       preview.style.setProperty('--brush-preview-alpha', tool === 'marker' ? pressure + '%' : '18%');
     }
     function moveBrushPreview(e) {
@@ -701,7 +716,7 @@
         color,
         width,
         pressure,
-        ...(tool === 'pen' || tool === 'marker' ? { points: [p] } : { a: p, b: p }),
+        ...(tool === 'pen' || tool === 'marker' || tool === 'eraser' ? { points: [p] } : { a: p, b: p }),
       };
       canvas.setPointerCapture(e.pointerId);
       e.preventDefault();
@@ -759,12 +774,14 @@
           .forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
         render();
         // Choosing the pen or the marker shows its size for a moment; other tools have no circle.
-        if (tool === 'pen' || tool === 'marker') showSizing();
+        if (tool === 'pen' || tool === 'marker' || tool === 'eraser') showSizing();
         status(
           tool === 'text'
             ? 'Выделите прямоугольник и введите текст — буквы подстроятся под его размер.'
             : tool === 'crop'
               ? 'Выделите область, которую хотите оставить на снимке.'
+            : tool === 'eraser'
+              ? 'Проведите по пометке, чтобы стереть её. Сама картинка не пострадает.'
             : tool === 'marker'
               ? 'Нажим меняет насыщенность маркера: от прозрачного до плотного следа.'
               : 'Рисуйте на снимке. Пометки сохраняются автоматически.',
@@ -879,6 +896,35 @@
         }
       }),
     );
+    // A picture dropped on the window opens at once, like «Открыть картинку» without the file dialog.
+    const IMAGE_RE = /\.(png|jpe?g|webp)$/i;
+    async function importFiles(files) {
+      const file = Array.from(files || []).find((f) => IMAGE_RE.test(f.name));
+      if (!file) return status('Это не картинка. Подойдут png, jpg и webp.', true);
+      const filePath = api.pathForFile ? api.pathForFile(file) : '';
+      if (!filePath) return status('Этот файл не открылся. Попробуйте кнопку «Открыть картинку».', true);
+      if (!(await flush())) return;
+      const r = check(await api.captureImport(filePath));
+      if (r.id) {
+        await refresh();
+        await open(r.id);
+        status('Картинка открыта · ' + canvas.width + ' × ' + canvas.height);
+      }
+    }
+    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
+    // The main window routes drops through its own handler (app.js); the separate editor listens here.
+    if (document.documentElement.classList.contains('capture-external')) {
+      document.addEventListener('dragover', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+      document.addEventListener('drop', (e) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        run(() => importFiles(e.dataTransfer.files));
+      });
+    }
     if (document.documentElement.classList.contains('capture-external'))
       $('[data-guide]').addEventListener('click', () => run(() => api.captureGuide()));
     $('.shot-conflict').addEventListener('click', () =>
@@ -922,7 +968,7 @@
     );
     render();
     run(refresh);
-    return { flush, refresh, open };
+    return { flush, refresh, open, importFiles: (f) => run(() => importFiles(f)) };
   }
   window.SnowCapture = { mount, textLayout, paint };
 })();
