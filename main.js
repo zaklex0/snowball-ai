@@ -444,7 +444,7 @@ function fail(e) {
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
 const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir',
-  'media-pick', 'media-info', 'media-read', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get']);
+  'media-pick', 'media-info', 'media-read', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get', 'recap-text', 'recap-pick-file']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
@@ -1938,13 +1938,15 @@ async function runTaskTool(name, input, log) {
   return 'Такого инструмента нет.';
 }
 
-async function tasksOpenai(model, text, log, signal) {
+// The tasks assistant and the calendar assistant run on the same two loops; cfg says which prompt, tools and runner.
+const TASKS_CFG = { prompt: TASKS_PROMPT, tools: TASK_TOOLS, run: runTaskTool };
+async function tasksOpenai(model, text, log, signal, cfg = TASKS_CFG) {
   const client = new OpenAI({ apiKey: keys.openai });
-  const tools = TASK_TOOLS.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: true }));
+  const tools = cfg.tools.map((t) => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: true }));
   let input = [{ role: 'user', content: text }];
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const r = await client.responses.create({
-      model: model.id, instructions: TASKS_PROMPT + '\n\n' + nowLine(), input, tools,
+      model: model.id, instructions: cfg.prompt +'\n\n' + nowLine(), input, tools,
       reasoning: { effort: 'low' }, max_output_tokens: 8000, store: false
     }, { signal });
     recordSpend(model, openaiUsage(r), signal);
@@ -1958,19 +1960,19 @@ async function tasksOpenai(model, text, log, signal) {
     for (const c of calls) {
       let args = null;
       try { args = JSON.parse(c.arguments || '{}'); } catch (e) { args = null; }
-      input.push({ type: 'function_call_output', call_id: c.call_id, output: args ? await runTaskTool(c.name, args, log) : 'Ошибка: аргументы не прочитались, повтори вызов.' });
+      input.push({ type: 'function_call_output', call_id: c.call_id, output: args ? await cfg.run(c.name, args, log) : 'Ошибка: аргументы не прочитались, повтори вызов.' });
     }
   }
   return 'Сделал, что успел.';
 }
-async function tasksClaude(model, text, log, signal) {
+async function tasksClaude(model, text, log, signal, cfg = TASKS_CFG) {
   const client = new Anthropic({ apiKey: keys.anthropic });
-  const tools = TASK_TOOLS.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters, strict: true }));
+  const tools = cfg.tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters, strict: true }));
   let msgs = [{ role: 'user', content: text }];
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const final = await client.beta.messages.create({
       model: model.id, max_tokens: 8000, tools, messages: msgs, output_config: { effort: 'low' },
-      system: [{ type: 'text', text: TASKS_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: nowLine() }]
+      system: [{ type: 'text', text: cfg.prompt, cache_control: { type: 'ephemeral' } }, { type: 'text', text: nowLine() }]
     }, { signal });
     const u = final.usage || {};
     recordSpend(model, { input: u.input_tokens || 0, cached: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0, output: u.output_tokens || 0 }, signal);
@@ -1979,7 +1981,7 @@ async function tasksClaude(model, text, log, signal) {
     msgs = msgs.concat([{ role: 'assistant', content: final.content }]);
     const results = [];
     for (const b of final.content) {
-      if (b.type === 'tool_use') results.push({ type: 'tool_result', tool_use_id: b.id, content: await runTaskTool(b.name, b.input, log) });
+      if (b.type === 'tool_use') results.push({ type: 'tool_result', tool_use_id: b.id, content: await cfg.run(b.name, b.input, log) });
     }
     msgs.push({ role: 'user', content: results });
   }
@@ -2181,6 +2183,197 @@ handle('tasks-assistant-undo', async (undoId) => {
     else if (x.id) await store.deleteTask(x.id);
   }
   return ok();
+});
+
+/* ---------- the calendar assistant ---------- */
+// The bar above the calendar works like the one above the tasks: the cheapest model, every message is a separate
+// request, changes apply at once, «Отменить» puts back everything one message changed.
+const CAL_PROMPT = [
+  'Ты — ассистент раздела «Календарь» в программе Snowball.ai. Ты работаешь только с делами в календаре: добавляешь, переносишь, меняешь, удаляешь и отвечаешь, что запланировано и что решили на прошедших созвонах.',
+  'Каждое сообщение — отдельная просьба. Делай сразу и не переспрашивай, если смысл понятен: изменения применяются сразу, а у пользователя есть кнопка «Отменить».',
+  'Названия дел короткие: суть в 2–5 слов, без слова-типа («Правки монтажа YouTube», тип call). Имена собеседников — в who. Если время не названо, поставь 10:00. Напоминание по умолчанию за час (remind 60), если не сказано иное, и коротко скажи об этом. Даты считай от строки «Сейчас».',
+  'Чтобы изменить или удалить дело, сначала найди его id через calendar_list. У дел с итогами созвона в списке есть recap: там коротко главное и что решили. Отвечай по ним, если спрашивают про прошедший созвон.',
+  'Если просят не про календарь (задачи, промты, вкладки), коротко скажи, что это умеет маленькое окно ассистента (звёздочка внизу слева) или раздел LLM.',
+  'Ответ — одна-две короткие фразы по-русски без разметки: что сделано.'
+].join('\n\n');
+const CAL_TOOLS = [
+  sameTool('calendar_list', 'Показывает дела из календаря пользователя за период (включительно) с id. Если у дела есть итоги созвона, в recap — коротко главное и решения.'),
+  sameTool('calendar_add', 'Добавляет дело в календарь сразу, без подтверждения.'),
+  sameTool('calendar_update', 'Меняет дело сразу: перенос на другой день или время, название, тип, заметка, напоминание. Передай все поля; то, что не меняется, — как было в calendar_list.'),
+  sameTool('calendar_delete', 'Удаляет дело из календаря сразу.')
+];
+async function loggedEvent(log, id, fn) {
+  const before = id ? store.findEvent(id) : null;
+  const r = await fn();
+  log.push({ before: before ? JSON.parse(JSON.stringify(before)) : null, id: r ? r.id : id });
+  return r;
+}
+async function runCalTool(name, input, log) {
+  const a = input && typeof input === 'object' ? input : {};
+  if (name === 'calendar_list') {
+    if (!DATE_ONLY.test(a.from || '') || !DATE_ONLY.test(a.to || '')) return 'Ошибка: from и to должны быть датами YYYY-MM-DD.';
+    const list = store.calendarView().filter((e) => e.date >= a.from && e.date <= a.to).slice(0, 200).map((e) => {
+      const o = { id: e.id, date: e.date, from: e.from, to: e.to, who: e.who, title: e.title, kind: e.kind, note: e.note, remind: e.remind };
+      if (e.recap) o.recap = { brief: e.recap.brief, decisions: e.recap.decisions };
+      return o;
+    });
+    return list.length ? JSON.stringify(list) : 'В этот период дел нет.';
+  }
+  const fields = () => ({ date: a.date, from: a.from, to: a.to, who: a.who, title: a.title, kind: a.kind, note: a.note, remind: a.remind });
+  if (name === 'calendar_add') {
+    if (!DATE_ONLY.test(a.date || '') || !normalizeEvent(fields())) return 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.';
+    const saved = await loggedEvent(log, null, () => store.saveEvent(fields()));
+    return 'Добавлено: ' + eventLine(saved) + ', id ' + saved.id;
+  }
+  const prev = store.findEvent(String(a.id || ''));
+  if (!prev) return 'Дела с таким id нет. Найди его через calendar_list.';
+  if (name === 'calendar_update') {
+    if (!DATE_ONLY.test(a.date || '')) return 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.';
+    const saved = await loggedEvent(log, prev.id, () => store.saveEvent(Object.assign(fields(), { id: prev.id })));
+    return 'Изменено: ' + eventLine(saved);
+  }
+  if (name === 'calendar_delete') {
+    await loggedEvent(log, prev.id, () => store.deleteEvent(prev.id));
+    return 'Удалено.';
+  }
+  return 'Такого инструмента нет.';
+}
+const CAL_CFG = { prompt: CAL_PROMPT, tools: CAL_TOOLS, run: runCalTool };
+const calUndos = new Map();
+let calUndoSeq = 0;
+handle('cal-assistant', async function (text) {
+  const msg = String(text || '').trim().slice(0, 2000);
+  if (!msg) return { ok: false, error: 'Напишите, что сделать с календарём.' };
+  const model = quickModel();
+  if (!model) return { ok: false, error: 'Ассистенту календаря нужен ключ ChatGPT или Claude: «Настройки» → «API-ключи».' };
+  store.recordAssistant();
+  const log = [];
+  const controller = new AbortController();
+  let reply = '', failed = false;
+  try {
+    reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal, CAL_CFG);
+  } catch (e) {
+    if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('calendar assistant', e.status, e.code || e.type);
+    else if (!e.userMessage) console.error('calendar assistant', e);
+    reply = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
+    failed = true;
+  }
+  let undoId = null;
+  if (log.length) {
+    undoId = 'c' + (++calUndoSeq);
+    calUndos.set(undoId, log);
+    if (calUndos.size > 20) calUndos.delete(calUndos.keys().next().value);
+  }
+  const changed = Array.from(new Set(log.map((x) => x.id).filter((id) => id && store.findEvent(id))));
+  return ok({ reply: reply || 'Готово.', failed, undoId, changed, cost: runCost.get(controller.signal) || 0, info: info() });
+});
+handle('cal-assistant-undo', async (undoId) => {
+  const log = calUndos.get(undoId);
+  if (!log) return { ok: false, error: 'Отменить уже нельзя.' };
+  calUndos.delete(undoId);
+  for (const x of log.slice().reverse()) {
+    if (x.before) await store.putEvent(x.before);
+    else if (x.id) await store.deleteEvent(x.id);
+  }
+  return ok();
+});
+
+/* ---------- call summaries in the calendar ---------- */
+// The user loads a text about a call that happened (ready summary from another program, a transcript, or both);
+// one request turns it into: short text, decisions, next steps, new meetings. It is kept in the event (`recap`).
+// Steps become tasks and meetings become events only on the user's button in the window.
+const RECAP_PROMPT = [
+  'Ты разбираешь итоги созвона или встречи для программы Snowball.ai. Пользователь загрузил текст: это могут быть готовые итоги из другой программы, расшифровка разговора или и то и другое. Не выдумывай ничего, чего нет в тексте. Пиши по-русски, коротко и просто.',
+  'title — название дела: суть в 2–5 словах без слова-типа («Правки монтажа YouTube»). who — с кем был разговор: имена собеседников через запятую, без самого пользователя (его ник дан ниже).',
+  'brief — 2–4 предложения о самом главном. decisions — только то, о чём действительно договорились или что решили («делаем так, а не иначе»): короткие самостоятельные пункты. Пожелания, факты, обсуждение и просьбы пользователя самому себе или программе сюда не попадают.',
+  'Если в тексте есть фраза, которую пользователь продиктовал не собеседнику, а себе или программе («добавь задачу…», «я хочу добавить задачу…», «напомни…»), это не решение созвона: сделай из неё шаг пользователя (mine — true), например «Создать задачу «Миникурс» с подзадачами: накидать структуру, дать креативные идеи».',
+  'steps — следующие шаги: кто что пообещал сделать. t — действие коротко, с глагола («Прислать правки по вступлению»). who — имя исполнителя. mine — true, только если исполнитель сам пользователь (его ник, «я» в его реплике); если не ясно — false. due — срок в формате YYYY-MM-DD, если он назван («к пятнице», «завтра» считай от дня созвона), иначе пустая строка.',
+  'meets — о чём договорились созвониться или встретиться ещё раз: t — короткая тема без слов о времени («Следующий созвон по мини-курсу», не «… завтра или послезавтра»), date — YYYY-MM-DD (от дня созвона), from — начало HH:MM (24 часа), to — окончание HH:MM; то, что не названо, — пустая строка. Если ни о чём такого не договорились, список пустой.'
+].join('\n\n');
+const RECAP_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['title', 'who', 'brief', 'decisions', 'steps', 'meets'],
+  properties: {
+    title: { type: 'string' }, who: { type: 'string' }, brief: { type: 'string' },
+    decisions: { type: 'array', items: { type: 'string' } },
+    steps: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['t', 'who', 'mine', 'due'], properties: { t: { type: 'string' }, who: { type: 'string' }, mine: { type: 'boolean' }, due: { type: 'string' } } } },
+    meets: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['t', 'date', 'from', 'to'], properties: { t: { type: 'string' }, date: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' } } } }
+  }
+};
+function recapModel() { return keys.openai ? modelById('gpt-6.1-sol') : keys.anthropic ? modelById('claude-haiku-5-5') : null; }
+async function recapData(model, input, signal) {
+  if (model.provider === 'openai') {
+    const client = new OpenAI({ apiKey: keys.openai });
+    const r = await client.responses.create({
+      model: model.id, instructions: RECAP_PROMPT + '\n\n' + nowLine(), input,
+      reasoning: { effort: 'low' }, max_output_tokens: 12000, store: false,
+      text: { format: { type: 'json_schema', name: 'recap', strict: true, schema: RECAP_SCHEMA } }
+    }, { signal });
+    recordSpend(model, openaiUsage(r), signal);
+    if (r.status === 'incomplete') throw userError('Ответ оборвался. Попробуйте ещё раз или загрузите текст покороче.');
+    try { return JSON.parse(r.output_text || ''); } catch (e) { throw userError('Модель ответила не так, как нужно. Попробуйте ещё раз.'); }
+  }
+  const client = new Anthropic({ apiKey: keys.anthropic });
+  const r = await client.beta.messages.create({
+    model: model.id, max_tokens: 12000, messages: [{ role: 'user', content: input }],
+    system: [{ type: 'text', text: RECAP_PROMPT, cache_control: { type: 'ephemeral' } }, { type: 'text', text: nowLine() }],
+    tools: [{ name: 'save_recap', description: 'Сохраняет итоги созвона.', input_schema: RECAP_SCHEMA }],
+    tool_choice: { type: 'tool', name: 'save_recap' }
+  }, { signal });
+  const u = r.usage || {};
+  recordSpend(model, { input: u.input_tokens || 0, cached: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0, output: u.output_tokens || 0 }, signal);
+  const b = (r.content || []).find((x) => x.type === 'tool_use');
+  if (!b) throw userError('Модель ответила не так, как нужно. Попробуйте ещё раз.');
+  return b.input;
+}
+// o: { eventId (the event to put it on, or none for a new one), date (for a new event), text, name (where the text is from) }
+async function makeRecap(o) {
+  const text = String(o.text || '').trim().slice(0, 400000);
+  if (!text) return { ok: false, error: 'Вставьте текст итогов или выберите файл.' };
+  let ev = o.eventId ? store.findEvent(String(o.eventId)) : null;
+  if (o.eventId && !ev) return { ok: false, error: 'Этого дела уже нет в календаре.' };
+  const model = recapModel();
+  if (!model) return { ok: false, error: 'Чтобы разобрать итоги, нужен ключ ChatGPT или Claude: «Настройки» → «API-ключи».' };
+  const day = ev ? ev.date : (DATE_ONLY.test(String(o.date || '')) ? o.date : dayKeyOf(new Date()));
+  const nick = store.profileView().name || 'не указан';
+  const input = 'День созвона: ' + day + '.' + (ev ? ' Дело в календаре: «' + eventName(ev) + '».' : '') + ' Ник пользователя: ' + nick + '.\n\nТекст:\n' + text;
+  const controller = new AbortController();
+  try {
+    store.recordAssistant();
+    const d = await recapData(model, input, controller.signal);
+    const recap = {
+      brief: d.brief, decisions: d.decisions, steps: d.steps, meets: d.meets,
+      source: String(o.name || '').slice(0, 200) || 'Вставленный текст', text, cost: runCost.get(controller.signal) || 0, madeAt: Date.now()
+    };
+    if (!ev) {
+      const d2 = new Date();
+      ev = await store.saveEvent({ date: day, from: pad2(d2.getHours()) + ':' + pad2(Math.floor(d2.getMinutes() / 10) * 10), to: '', who: d.who, title: d.title || 'Созвон', kind: 'call', note: '', remind: 0 });
+    }
+    await store.setRecap(ev.id, recap);
+    return ok({ eventId: ev.id, date: ev.date, created: !o.eventId, cost: recap.cost, info: info() });
+  } catch (e) {
+    if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('recap', e.status, e.code || e.type);
+    else if (!e.userMessage) console.error('recap', e);
+    return { ok: false, error: e.userMessage || modelError(e) || 'Итоги не получились. Попробуйте ещё раз.' };
+  }
+}
+handle('recap-make', (o) => makeRecap(o || {}));
+handle('recap-remake', (eventId) => {
+  const ev = store.findEvent(String(eventId || ''));
+  if (!ev || !ev.recap || !ev.recap.text) return { ok: false, error: 'У этого дела нет загруженного текста.' };
+  return makeRecap({ eventId: ev.id, text: ev.recap.text, name: ev.recap.source });
+});
+handle('recap-update', async (eventId, recap) => { await store.setRecap(String(eventId || ''), recap && typeof recap === 'object' ? recap : null); return ok(); });
+handle('recap-text', async (eventId) => ({ ok: true, text: store.recapText(String(eventId || '')) }));
+handle('recap-pick-file', async function () {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
+    title: 'Выберите файл с итогами созвона', properties: ['openFile'],
+    filters: [{ name: 'Текст', extensions: ['txt', 'md', 'srt', 'vtt', 'csv', 'log'] }]
+  });
+  if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
+  const stat = await fsp.stat(r.filePaths[0]);
+  if (stat.size > 5 * 1024 * 1024) return { ok: false, error: 'Файл больше 5 МБ — для итогов это слишком много.' };
+  const text = (await fsp.readFile(r.filePaths[0], 'utf8')).replace(/^﻿/, '');
+  return { ok: true, name: path.basename(r.filePaths[0]), text };
 });
 
 // Calendar, stored in calendar.json beside the prompts.

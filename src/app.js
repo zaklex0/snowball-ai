@@ -137,6 +137,7 @@
     home: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg>',
     tasks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg>',
     prompts: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg>',
+    doc: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h7.5L19 8v12.5H7zM14 3.5V8h5M9.5 12.5h6M9.5 16h6"/></svg>',
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg>',
     lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
     dots: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="18.5" cy="12" r="1.7"/></svg>',
@@ -1986,7 +1987,7 @@
         ondblclick: (function (k) { return function () { cal.selected = k; setCalMode("day"); }; })(k) },
         h("span", { class: "num", text: String(d.getDate()) }),
         hol ? h("span", { class: "hol", text: hol }) : null,
-        list.slice(0, shown).map(function (e) { return h("span", { class: "ev ev-" + kindOfEvent(e).id }, h("i"), e.from + " " + evName(e)); }),
+        list.slice(0, shown).map(function (e) { return h("span", { class: "ev ev-" + kindOfEvent(e).id }, h("i"), e.recap ? h("span", { class: "flag", html: ICONS.doc }) : null, e.from + " " + evName(e)); }),
         list.length > shown ? h("span", { class: "more", text: "ещё " + (list.length - shown) }) : null));
     }
     els.calGrid.replaceChildren.apply(els.calGrid, kids);
@@ -2002,7 +2003,7 @@
   function eventBlock(e) {
     var k = kindOfEvent(e), now = isNowEvent(e);
     return h("button", { type: "button", class: "cal-ev ev-" + k.id + (now ? " now" : ""), title: now ? "Идёт сейчас. Изменить дело" : "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
-      h("span", { class: "row1" }, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: evName(e) }), h("span", { class: "kind", text: k.label })),
+      h("span", { class: "row1" }, e.recap ? h("span", { class: "flag", html: ICONS.doc, title: "Есть итоги созвона" }) : null, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: evName(e) }), h("span", { class: "kind", text: k.label })),
       e.note ? h("span", { class: "note", text: e.note }) : null,
       e.remind ? h("span", { class: "bell", text: "Напомнить " + (REMIND_LABELS[e.remind] || "") }) : null);
   }
@@ -2100,6 +2101,7 @@
   }
 
   function renderCalendar() {
+    if (typeof renderCbar === "function" && cbar) renderCbar();
     ensureCal();
     var month = cal.mode === "month";
     els.calMonthView.hidden = !month;
@@ -2218,6 +2220,9 @@
     els.cfMsg.textContent = "";
     els.cfSave.disabled = false;
     if (!els.calDialog.open) els.calDialog.showModal();
+    recapUi.q = "";
+    recapUi.picked = {};
+    showCalTab("ev");
     els.cfTitle.focus();
   }
   function closeEventForm() {
@@ -2267,6 +2272,358 @@
   els.calPrev.addEventListener("click", function () { stepCalendar(-1); });
   els.calNext.addEventListener("click", function () { stepCalendar(1); });
   els.calToday.addEventListener("click", function () { ensureCal(); selectDay(dayKey(today())); });
+  /* ---------- call summaries in the event window ----------
+     A saved event has two buttons on top: «Дело» (the usual form, opens first) and «Итоги». «Итоги» holds everything about the
+     call: with no summary yet a box to paste the text or choose a file; with one — short text, decisions, next steps that can
+     go to the board «Задачи», meetings agreed on that can go to the calendar, and the loaded text with search.
+     The summary is made in main.js (recap-make); the button beside the calendar assistant loads one for any event or a new one. */
+  var calTabs = $("cal-tabs"), calRecap = $("cal-recap"), calTabTr = $("cal-tab-tr");
+  var recapUi = { tab: "ev", picked: {}, q: "", text: {}, draft: {}, fname: {}, confirmRemove: false, busy: false };
+  function eventById(id) { return state.events.find(function (x) { return x.id === id; }) || null; }
+  function recapCopy(r) { var c = JSON.parse(JSON.stringify(r)); c.text = ""; return c; }
+  function stepAdded(s) { return !!s.added && state.tasks.some(function (t) { return t.id === s.added; }); }
+  function meetAdded(m) { return !!m.added && state.events.some(function (x) { return x.id === m.added; }); }
+  function showCalTab(tab) {
+    var e = cal.editing ? eventById(cal.editing) : null, r = e && e.recap;
+    if (!e) tab = "ev";
+    if (tab === "tr" && !r) tab = "sum";
+    recapUi.tab = tab;
+    recapUi.confirmRemove = false;
+    calTabs.hidden = !e;
+    calTabTr.hidden = !r;
+    calTabs.querySelectorAll("[data-tab]").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
+    els.calForm.hidden = tab !== "ev";
+    calRecap.hidden = tab === "ev";
+    els.calDialog.classList.toggle("wide", tab !== "ev");
+    if (tab !== "ev") { if (r) renderRecap(e); else renderRecapEmpty(e); }
+  }
+  // After the data changed: draw the open summary again (or close the window if the event is gone).
+  function refreshRecap() {
+    if (!els.calDialog.open || !cal.editing) return;
+    if (!eventById(cal.editing)) { closeEventForm(); return; }
+    showCalTab(recapUi.tab);
+  }
+  calTabs.addEventListener("click", function (ev) {
+    var b = ev.target.closest("[data-tab]");
+    if (b) showCalTab(b.dataset.tab);
+  });
+  function recapPlain(e) {
+    var r = e.recap, out = ["Итоги созвона «" + evName(e) + "», " + longDay(e.date), ""];
+    if (r.brief) out.push(r.brief, "");
+    if (r.decisions.length) out.push("Решили:", r.decisions.map(function (d) { return "— " + d; }).join("\n"), "");
+    if (r.steps.length) out.push("Следующие шаги:", r.steps.map(function (s) { return "— " + s.t + (s.who || s.due ? " (" + [s.who, s.due ? "до " + longDay(s.due) : ""].filter(Boolean).join(", ") + ")" : ""); }).join("\n"), "");
+    if (r.meets.length) out.push("Договорились созвониться:", r.meets.map(function (m) { return "— " + m.t + (m.date ? ", " + longDay(m.date) + (m.from ? " в " + m.from : "") : ""); }).join("\n"), "");
+    return out.join("\n").trim();
+  }
+  function recapToLlm(e) {
+    api.recapText(e.id).then(function (r) {
+      openTab("assistant", { fresh: true });
+      var cur = activeTab();
+      if (!cur || !cur.session) return;
+      var text = "Вот итоги созвона «" + evName(e) + "» (" + longDay(e.date) + "):\n\n" + recapPlain(e) + (r && r.text ? "\n\nИ текст, из которого они сделаны:\n\n" + r.text : "") + "\n\n";
+      cur.session.draft = text;
+      els.chatInput.value = text;
+      growInput();
+      els.chatInput.focus();
+      els.chatInput.setSelectionRange(text.length, text.length);
+      closeEventForm();
+    });
+  }
+  function renderRecap(e) {
+    var r = e.recap, k = kindOfEvent(e);
+    var head = h("div", { class: "rc-head" }, h("div", null, h("h2", { text: evName(e) }), h("p", { text: longDay(e.date) + ", " + timeRange(e) + " · " + k.label })));
+    var body = recapUi.tab === "tr" ? recapTextPane(e) : recapSumPane(e);
+    var foot = h("div", { class: "rc-foot" },
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", html: ICONS.chat, onclick: function () { recapToLlm(e); } }, "Спросить про созвон в LLM"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { api.copyText(recapPlain(e)).then(function (x) { if (x && x.ok) toast("Итоги скопированы"); }); } }, "Скопировать итоги"),
+      r.hasText ? h("button", { type: "button", class: "btn btn-ghost btn-sm", disabled: recapUi.busy, onclick: function () {
+        recapUi.busy = true; renderRecap(e);
+        api.recapRemake(e.id).then(function (x) {
+          recapUi.busy = false;
+          if (!x || !x.ok) { toast((x && x.error) || "Не получилось. Попробуйте ещё раз.", true); refreshRecap(); return; }
+          applyData(x); renderCalendar(); refreshRecap(); toast("Итоги написаны заново" + (x.cost > 0 ? " · " + fmtCost(x.cost) : ""));
+        }, function () { recapUi.busy = false; toast("Не получилось. Попробуйте ещё раз.", true); refreshRecap(); });
+      } }, recapUi.busy ? "Пересоздаю…" : "Пересоздать итоги") : null,
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () {
+        if (!recapUi.confirmRemove) { recapUi.confirmRemove = true; renderRecap(e); return; }
+        call(api.recapUpdate(e.id, null)).then(function (x) { if (!x) return; recapUi.text[e.id] = undefined; renderCalendar(); showCalTab("sum"); toast("Итоги убраны из дела"); });
+      } }, recapUi.confirmRemove ? "Точно убрать? Нажмите ещё раз" : "Убрать итоги"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: closeEventForm }, "Закрыть"));
+    calRecap.replaceChildren(head, body, foot);
+  }
+  function recapSumPane(e) {
+    var r = e.recap;
+    r.steps.forEach(function (s) { if (!(s.id in recapUi.picked)) recapUi.picked[s.id] = !!s.mine && !stepAdded(s); });
+    var pickedN = r.steps.filter(function (s) { return recapUi.picked[s.id] && !stepAdded(s); }).length;
+    var allAdded = r.steps.length && r.steps.every(stepAdded);
+    var src = h("div", { class: "rc-src" }, h("span", { class: "pill", text: r.source || "Вставленный текст" }),
+      r.cost > 0 ? h("span", { text: "разобрано за " + fmtCost(r.cost) }) : null);
+    var kids = [src,
+      h("div", { class: "rc-blk" }, h("h5", { text: "Кратко" }), r.brief ? h("p", { text: r.brief }) : h("p", { class: "rc-empty", text: "Главного в тексте не нашлось." })),
+      h("div", { class: "rc-blk" }, h("h5", { text: "Решили" }),
+        r.decisions.length ? h("ul", null, r.decisions.map(function (d) { return h("li", { text: d }); })) : h("p", { class: "rc-empty", text: "Решений не названо." }))];
+    kids.push(h("div", { class: "rc-blk" }, h("h5", { text: "Следующие шаги" }),
+      r.steps.length ? h("div", { class: "rc-steps" }, r.steps.map(function (s) {
+        var done = stepAdded(s);
+        // Somebody else's step is only for information: no checkbox, it cannot go to the board (unless the user takes it).
+        if (!s.mine && !done) {
+          return h("div", { class: "rc-step other" }, h("span", { class: "dash", text: "—" }),
+            h("span", { class: "t" }, s.t, h("span", { class: "who", text: s.who ? "делает " + s.who : "делает кто-то другой" })),
+            h("button", { type: "button", class: "link-btn", title: "Если этот шаг на самом деле ваш", onclick: function () {
+              recapSave(e.id, function (rc) { rc.steps.forEach(function (x) { if (x.id === s.id) x.mine = true; }); }).then(function () { delete recapUi.picked[s.id]; refreshRecap(); });
+            } }, "Это мой шаг"));
+        }
+        return h("label", { class: "rc-step" + (done ? " added" : "") },
+          h("input", { type: "checkbox", checked: recapUi.picked[s.id] || done, disabled: done, onchange: function () { recapUi.picked[s.id] = this.checked; renderRecap(e); } }),
+          h("span", { class: "t" }, s.t, h("span", { class: "who", text: [s.who || "", s.due ? "до " + longDay(s.due) : "", done ? "уже на доске" : ""].filter(Boolean).join(" · ") })));
+      })) : h("p", { class: "rc-empty", text: "Следующих шагов не названо." }),
+      r.steps.length ? h("div", { class: "rc-act" },
+        allAdded ? h("span", { class: "rc-ok", text: "✓ Все шаги на доске «Задачи»" }) :
+          h("button", { type: "button", class: "btn btn-primary btn-sm", disabled: !pickedN, onclick: function () { recapAddTasks(e); } }, pickedN ? "Добавить на доску: " + pickedN : "Отметьте шаги галочкой"),
+        h("span", { class: "rc-empty", text: r.steps.some(function (s) { return !s.mine && !stepAdded(s); }) ? "На доску идут только ваши шаги, шаги других людей показаны для справки. Задачи сами не появляются." : "Задачи сами не появляются." })) : null));
+    if (r.meets.length) kids.push(h("div", { class: "rc-blk" }, h("h5", { text: "Договорились созвониться" }),
+      h("div", { class: "rc-meets" }, r.meets.map(function (m) {
+        var done = meetAdded(m), when = m.date ? longDay(m.date) + (m.from ? " в " + m.from : "") : "день и время не названы";
+        return h("div", { class: "rc-meet" }, h("span", { class: "t" }, m.t, h("small", { text: when + " · Звонок · напомнить за час" })),
+          done ? h("span", { class: "rc-ok", text: "✓ В календаре" }) :
+            h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { recapAddMeet(e, m); } }, "Добавить в календарь"));
+      }))));
+    return h("div", null, kids);
+  }
+  function recapTextPane(e) {
+    var box = h("div", { class: "rc-lines" });
+    function lines() {
+      var full = recapUi.text[e.id];
+      if (full === undefined) { box.replaceChildren(h("p", { class: "rc-empty", text: "Загружаю текст…" })); return; }
+      var q = recapUi.q.trim().toLowerCase();
+      var list = full.split(/\r?\n/).filter(function (l) { return l.trim() && (!q || l.toLowerCase().indexOf(q) !== -1); });
+      if (!list.length) { box.replaceChildren(h("p", { class: "rc-empty", text: full ? "Ничего не нашлось." : "Текст не сохранён." })); return; }
+      box.replaceChildren.apply(box, list.slice(0, 2000).map(function (l) {
+        if (!q) return h("div", { class: "rc-line", text: l });
+        var i = l.toLowerCase().indexOf(q);
+        return h("div", { class: "rc-line" }, l.slice(0, i), h("mark", { text: l.slice(i, i + q.length) }), l.slice(i + q.length));
+      }));
+    }
+    var input = h("input", { type: "search", placeholder: "Найти в тексте: «музыка», «пятница»…", value: recapUi.q, "aria-label": "Поиск по тексту созвона",
+      oninput: function () { recapUi.q = this.value; lines(); } });
+    if (recapUi.text[e.id] === undefined) {
+      api.recapText(e.id).then(function (x) {
+        recapUi.text[e.id] = x && x.ok ? x.text || "" : "";
+        if (recapUi.tab === "tr" && cal.editing === e.id) lines();
+      });
+    }
+    lines();
+    return h("div", { class: "rc-blk" }, h("label", { class: "rc-search", html: ICONS.search || "" }, input), box);
+  }
+  // «Итоги» of an event that has none yet: paste the text or choose a file right here.
+  function renderRecapEmpty(e) {
+    var k = kindOfEvent(e);
+    var head = h("div", { class: "rc-head" }, h("div", null, h("h2", { text: evName(e) }), h("p", { text: longDay(e.date) + ", " + timeRange(e) + " · " + k.label })));
+    var ta = h("textarea", { class: "textarea", rows: "9", placeholder: "Вставьте сюда итоги или расшифровку созвона (Ctrl + V) или нажмите «Выбрать файл…»", "aria-label": "Итоги или расшифровка созвона",
+      oninput: function () { recapUi.draft[e.id] = this.value; } });
+    ta.value = recapUi.draft[e.id] || "";
+    var msg = h("span", { class: "form-msg", role: "status" });
+    var go = h("button", { type: "button", class: "btn btn-primary" }, "Разобрать итоги");
+    var pick = h("button", { type: "button", class: "btn btn-ghost" }, "Выбрать файл…");
+    function fail(text) { msg.classList.add("error"); msg.textContent = text; }
+    pick.addEventListener("click", function () {
+      api.recapPickFile().then(function (r) {
+        if (!r || !r.ok) { fail((r && r.error) || "Файл не открылся."); return; }
+        if (r.canceled) return;
+        ta.value = recapUi.draft[e.id] = r.text;
+        recapUi.fname[e.id] = r.name;
+        msg.classList.remove("error");
+        msg.textContent = "Файл «" + r.name + "» загружен — нажмите «Разобрать итоги».";
+      });
+    });
+    go.addEventListener("click", function () {
+      if (!ta.value.trim()) { fail("Вставьте текст итогов или выберите файл."); ta.focus(); return; }
+      msg.classList.remove("error");
+      msg.textContent = "Читаю текст и ищу главное. Это занимает до минуты.";
+      [ta, go, pick].forEach(function (x) { x.disabled = true; });
+      go.textContent = "Разбираю…";
+      var back = function (text) { if (cal.editing !== e.id) return; [ta, go, pick].forEach(function (x) { x.disabled = false; }); go.textContent = "Разобрать итоги"; fail(text || "Не получилось. Попробуйте ещё раз."); };
+      api.recapMake({ eventId: e.id, text: ta.value, name: recapUi.fname[e.id] || "" }).then(function (r) {
+        if (!r || !r.ok) { back(r && r.error); return; }
+        applyData(r);
+        recapUi.draft[e.id] = ""; recapUi.fname[e.id] = ""; recapUi.picked = {};
+        renderCalendar();
+        if (cal.editing === e.id) showCalTab("sum");
+        toast("Итоги разобраны" + (r.cost > 0 ? " · " + fmtCost(r.cost) : ""));
+      }, function () { back(); });
+    });
+    calRecap.replaceChildren(head,
+      h("p", { class: "rd-hint", text: "Вставьте итоги созвона из другой программы (например, Wispr Flow) или расшифровку. Ассистент найдёт главное, решения, следующие шаги и договорённости о новых созвонах." }),
+      ta, h("div", { class: "editor-actions" }, go, pick, h("button", { type: "button", class: "btn btn-ghost", onclick: closeEventForm }, "Закрыть"), msg));
+  }
+  function recapSave(id, mutate) {
+    var ev = eventById(id), rc = recapCopy(ev.recap);
+    mutate(rc);
+    return call(api.recapUpdate(id, rc));
+  }
+  function recapAddTasks(e) {
+    var list = e.recap.steps.filter(function (s) { return recapUi.picked[s.id] && !stepAdded(s); }), made = [], i = 0;
+    function done() {
+      if (!made.length) return;
+      recapSave(e.id, function (rc) { rc.steps.forEach(function (s) { var m = made.find(function (x) { return x.step === s.id; }); if (m) s.added = m.task; }); }).then(function () {
+        refreshRecap();
+        undoToast("На доску «Задачи» добавлено: " + made.length, function () {
+          made.reduce(function (p, m) { return p.then(function () { return call(api.taskDelete(m.task)); }); }, Promise.resolve()).then(function () {
+            if (eventById(e.id)) recapSave(e.id, function (rc) { rc.steps.forEach(function (s) { if (made.some(function (x) { return x.step === s.id; })) s.added = ""; }); }).then(refreshRecap);
+          });
+        });
+      });
+    }
+    (function next() {
+      if (i >= list.length) { done(); return; }
+      var s = list[i++];
+      call(api.taskSave({ title: s.t, due: s.due || "", tags: ["Созвон"],
+        note: "Из созвона «" + evName(e) + "», " + longDay(e.date) + (s.who ? ". Исполнитель: " + s.who : "") })).then(function (r) {
+        if (r) made.push({ step: s.id, task: r.taskId });
+        next();
+      });
+    })();
+  }
+  function recapAddMeet(e, m) {
+    if (!m.date) {
+      // No day was named: the usual form opens with the topic filled in.
+      closeEventForm();
+      openEventForm(null, m.from || null);
+      els.cfTitle.value = m.t;
+      els.cfWho.value = e.who || "";
+      return;
+    }
+    call(api.calSave({ date: m.date, from: m.from || "10:00", to: m.to || "", who: e.who || "", title: m.t, kind: "call", remind: 60, note: "" })).then(function (r) {
+      if (!r) return;
+      recapSave(e.id, function (rc) { rc.meets.forEach(function (x) { if (x.id === m.id) x.added = r.id; }); }).then(function () {
+        renderCalendar();
+        refreshRecap();
+        undoToast("Дело «" + m.t + "» добавлено: " + longDay(m.date), function () {
+          call(api.calDelete(r.id)).then(function () { if (eventById(e.id)) recapSave(e.id, function (rc) { rc.meets.forEach(function (x) { if (x.id === m.id) x.added = ""; }); }).then(function () { renderCalendar(); refreshRecap(); }); });
+        });
+      });
+    });
+  }
+
+  /* The window for loading a summary: choose the event (or a new one), paste the text or choose a file. */
+  var rd = { dlg: $("recap-dlg"), form: $("rd-form"), ev: $("rd-event"), dateField: $("rd-date-field"), date: $("rd-date"), text: $("rd-text"),
+    go: $("rd-go"), file: $("rd-file"), cancel: $("rd-cancel"), msg: $("rd-msg"), name: "", busy: false };
+  function openRecapLoad(preferId) {
+    ensureCal();
+    var now = new Date(), nowKey = dayKey(now) + " " + pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    var from = dayKey(addDays(today(), -14)), to = dayKey(addDays(today(), 1));
+    var list = state.events.filter(function (e) { return e.date >= from && e.date <= to; })
+      .sort(function (a, b) { return (b.date + b.from).localeCompare(a.date + a.from); });
+    rd.ev.replaceChildren.apply(rd.ev, [h("option", { value: "", text: "Новое дело — создам само" })].concat(list.map(function (e) {
+      return h("option", { value: e.id, text: (e.date === dayKey(now) ? "Сегодня" : longDay(e.date)) + ", " + e.from + " — " + evName(e) + (e.recap ? " · итоги заменятся" : "") });
+    })));
+    var guess = list.find(function (e) { return (e.kind === "call" || e.kind === "meet") && e.date + " " + e.from <= nowKey; });
+    rd.ev.value = preferId || (guess ? guess.id : "");
+    rd.dateField.hidden = !!rd.ev.value;
+    rd.date.value = dayKey(now);
+    rd.text.value = "";
+    rd.name = "";
+    rd.msg.textContent = "";
+    rd.msg.classList.remove("error");
+    if (!rd.dlg.open) rd.dlg.showModal();
+    rd.text.focus();
+  }
+  function setRecapBusy(on) {
+    rd.busy = on;
+    [rd.ev, rd.date, rd.text, rd.file, rd.cancel, rd.go].forEach(function (x) { x.disabled = on; });
+    rd.go.textContent = on ? "Разбираю…" : "Разобрать итоги";
+  }
+  rd.ev.addEventListener("change", function () { rd.dateField.hidden = !!rd.ev.value; });
+  rd.cancel.addEventListener("click", function () { if (!rd.busy) rd.dlg.close(); });
+  rd.dlg.addEventListener("cancel", function (e) { if (rd.busy) e.preventDefault(); });
+  rd.file.addEventListener("click", function () {
+    api.recapPickFile().then(function (r) {
+      if (!r || !r.ok) { rd.msg.classList.add("error"); rd.msg.textContent = (r && r.error) || "Файл не открылся."; return; }
+      if (r.canceled) return;
+      rd.text.value = r.text;
+      rd.name = r.name;
+      rd.msg.classList.remove("error");
+      rd.msg.textContent = "Файл «" + r.name + "» загружен — нажмите «Разобрать итоги».";
+    });
+  });
+  rd.form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (rd.busy) return;
+    if (!rd.text.value.trim()) { rd.msg.classList.add("error"); rd.msg.textContent = "Вставьте текст итогов или выберите файл."; rd.text.focus(); return; }
+    rd.msg.classList.remove("error");
+    rd.msg.textContent = "Читаю текст и ищу главное. Это занимает до минуты.";
+    setRecapBusy(true);
+    var fail = function (msg) { setRecapBusy(false); rd.msg.classList.add("error"); rd.msg.textContent = msg || "Не получилось. Попробуйте ещё раз."; };
+    api.recapMake({ eventId: rd.ev.value || "", date: rd.date.value, text: rd.text.value, name: rd.name }).then(function (r) {
+      if (!r || !r.ok) { fail(r && r.error); return; }
+      applyData(r);
+      setRecapBusy(false);
+      rd.dlg.close();
+      selectDay(r.date);
+      var ev = eventById(r.eventId);
+      if (ev) { openEventForm(ev); showCalTab("sum"); }
+      toast((r.created ? "Создал дело и разобрал итоги" : "Итоги разобраны") + (r.cost > 0 ? " · " + fmtCost(r.cost) : ""));
+    }, function () { fail(); });
+  });
+  $("cal-recap-btn").addEventListener("click", function () { openRecapLoad(); });
+
+  /* The calendar assistant bar: the same as above the tasks, but it only knows the calendar. */
+  var cbar = { el: $("cbar"), input: $("cbar-input"), model: $("cbar-model"), send: $("cbar-send"), busy: false };
+  function growCbar() {
+    if (!cbar.input.value) { cbar.input.style.height = ""; return; }
+    cbar.input.style.height = "auto";
+    cbar.input.style.height = Math.min(cbar.input.scrollHeight, 150) + "px";
+  }
+  function renderCbar() {
+    cbar.model.textContent = quickModelName();
+    cbar.el.classList.toggle("busy", cbar.busy);
+    cbar.input.disabled = cbar.busy;
+    cbar.send.disabled = cbar.busy || !cbar.input.value.trim();
+    cbar.send.title = cbar.busy ? "Ассистент разбирает…" : "Отправить (Enter)";
+  }
+  function sendCbar(text) {
+    var v = String(text || "").trim();
+    if (!v || cbar.busy) return;
+    cbar.busy = true;
+    cbar.input.value = "";
+    growCbar();
+    renderCbar();
+    var fail = function (msg) {
+      cbar.busy = false;
+      if (!cbar.input.value) { cbar.input.value = v; growCbar(); }
+      renderCbar();
+      taskNote({ text: msg || "Ассистент не ответил. Попробуйте ещё раз.", failed: true });
+    };
+    api.calAssistant(v).then(function (r) {
+      if (!r || !r.ok) { fail(r && r.error); return; }
+      applyData(r);
+      cbar.busy = false;
+      render();
+      renderCbar();
+      taskNote({ text: r.reply, failed: r.failed, undoId: r.undoId, cost: r.cost, undoFn: api.calAssistantUndo, undoText: "Отменил: календарь вернулся как был до этого сообщения." });
+      if (state.page === "calendar") cbar.input.focus();
+    }, function () { fail(); });
+  }
+  cbar.el.addEventListener("submit", function (e) { e.preventDefault(); sendCbar(cbar.input.value); });
+  cbar.input.addEventListener("input", function () { growCbar(); cbar.send.disabled = cbar.busy || !cbar.input.value.trim(); });
+  cbar.input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.isComposing) {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        cbar.input.setRangeText("\n", cbar.input.selectionStart, cbar.input.selectionEnd, "end");
+        cbar.input.dispatchEvent(new Event("input"));
+      } else if (!e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        sendCbar(cbar.input.value);
+      }
+    } else if (e.key === "Escape" && cbar.input.value) {
+      e.stopPropagation();
+      cbar.input.value = "";
+      cbar.input.dispatchEvent(new Event("input"));
+    }
+  });
+  renderCbar();
+
   // A click on a reminder notification opens that day.
   api.onCalendarOpen(function (date) { openCalendarDay(date); });
   // The red "now" line moves on its own.
@@ -4098,10 +4455,10 @@
       acts.append(h("button", { type: "button", class: "tnote-undo", onclick: function () {
         var btn = this;
         btn.disabled = true;
-        call(api.tasksAssistantUndo(n.undoId)).then(function (r) {
+        call((n.undoFn || api.tasksAssistantUndo)(n.undoId)).then(function (r) {
           if (!r) { btn.disabled = false; return; }
           render();
-          text.textContent = "Отменил: задачи вернулись как были до этого сообщения.";
+          text.textContent = n.undoText || "Отменил: задачи вернулись как были до этого сообщения.";
           btn.remove();
           life(4);
         });

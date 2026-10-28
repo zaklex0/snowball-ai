@@ -180,6 +180,31 @@ const EVENT_KINDS = ['task', 'meet', 'call', 'shoot', 'edit'];
 const REMINDS = [0, 15, 30, 60, 1440];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+// The summary of a call that happened (loaded by the user, structured by an assistant): short text, decisions,
+// next steps (a step may become a task: `added` is the task id), meetings agreed on (a meeting may become an event:
+// `added` is the event id) and the full text it was made from.
+function normalizeRecap(r) {
+  if (!r || typeof r !== 'object') return null;
+  const list = (v, n) => (Array.isArray(v) ? v.slice(0, n) : []);
+  const itemId = (x) => (ID_RE.test(str(x && x.id)) ? x.id : newId('r'));
+  return {
+    brief: str(r.brief, 3000).trim(),
+    decisions: list(r.decisions, 30).map((x) => str(x, 500).trim()).filter(Boolean),
+    steps: list(r.steps, 40).map((s) => {
+      const t = s && typeof s === 'object' ? str(s.t, 500).trim() : '';
+      return t ? { id: itemId(s), t, who: str(s.who, 100).trim(), mine: !!s.mine, due: DATE_RE.test(str(s.due)) ? s.due : '', added: ID_RE.test(str(s.added)) ? s.added : '' } : null;
+    }).filter(Boolean),
+    meets: list(r.meets, 20).map((m) => {
+      const t = m && typeof m === 'object' ? str(m.t, 300).trim() : '';
+      const from = TIME_RE.test(str(m && m.from)) ? m.from : '';
+      return t ? { id: itemId(m), t, date: DATE_RE.test(str(m.date)) ? m.date : '', from, to: from && TIME_RE.test(str(m.to)) && m.to > from ? m.to : '', added: ID_RE.test(str(m.added)) ? m.added : '' } : null;
+    }).filter(Boolean),
+    source: str(r.source, 200).trim(),
+    text: str(r.text, 400000),
+    cost: num(r.cost),
+    madeAt: num(r.madeAt) || Date.now()
+  };
+}
 function normalizeEvent(e, fallbackTime) {
   if (!e || typeof e !== 'object' || !DATE_RE.test(str(e.date))) return null;
   const now = fallbackTime || Date.now();
@@ -194,6 +219,7 @@ function normalizeEvent(e, fallbackTime) {
     kind: EVENT_KINDS.includes(e.kind) ? e.kind : 'task',
     note: str(e.note, 5000).trim(),
     remind,
+    recap: normalizeRecap(e.recap),
     createdAt: num(e.createdAt) || now,
     updatedAt: num(e.updatedAt) || num(e.createdAt) || now
   };
@@ -515,8 +541,23 @@ class Store {
 
   /* ---------- calendar ---------- */
   // Sorted by day and time.
+  // The window gets the summary without the long source text (recapText gives it when it is opened).
   calendarView() {
-    return this.events.slice().sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from));
+    return this.events.slice().sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from))
+      .map((e) => (e.recap ? Object.assign({}, e, { recap: Object.assign({}, e.recap, { text: '', hasText: !!e.recap.text }) }) : e));
+  }
+  recapText(id) { const e = this.findEvent(id); return e && e.recap ? e.recap.text : ''; }
+  // Puts a summary on an event (null takes it off) without touching the event's other fields or the statistics.
+  setRecap(id, recap) {
+    return this.run(async () => {
+      const prev = this.findEvent(id);
+      if (!prev) return null;
+      const next = recap ? normalizeRecap(Object.assign({}, recap, !recap.text && prev.recap ? { text: prev.recap.text } : {})) : null;
+      const ev = Object.assign({}, prev, { recap: next, updatedAt: Date.now() });
+      this.events[this.events.indexOf(prev)] = ev;
+      await this.writeCalendar();
+      return ev;
+    });
   }
   findEvent(id) { return this.events.find((e) => e.id === id) || null; }
   writeCalendar() { return writeJson(this.calendarPath, { format: 'snowball-calendar', version: 1, events: this.events }); }
@@ -526,7 +567,9 @@ class Store {
     return this.run(async () => {
       const prev = input && input.id ? this.findEvent(input.id) : null;
       const now = Date.now();
-      const ev = normalizeEvent(Object.assign({}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now }));
+      // A change from the form or an assistant does not carry the summary: it stays as it was (setRecap changes it).
+      const keepRecap = prev && !(input && input.recap && typeof input.recap === 'object') ? { recap: prev.recap } : {};
+      const ev = normalizeEvent(Object.assign({}, input, keepRecap, { createdAt: prev ? prev.createdAt : now, updatedAt: now }));
       if (!ev) throw Object.assign(new Error('bad event'), { userMessage: 'Не получилось сохранить дело: проверьте день и время.' });
       const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
       // "Сохранить" without real changes is not an action on the statistics page.
@@ -536,6 +579,18 @@ class Store {
       else { if (this.findEvent(ev.id)) ev.id = newId('e'); this.events.push(ev); }
       await this.writeCalendar();
       await this.bump('calendar', 1);
+      return ev;
+    });
+  }
+
+  // An event exactly as it was (for «Отменить»): replaces the one with this id or puts it back; no statistics.
+  putEvent(input) {
+    return this.run(async () => {
+      const ev = normalizeEvent(input);
+      if (!ev) return null;
+      const prev = this.findEvent(ev.id);
+      if (prev) this.events[this.events.indexOf(prev)] = ev; else this.events.push(ev);
+      await this.writeCalendar();
       return ev;
     });
   }

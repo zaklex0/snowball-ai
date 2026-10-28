@@ -370,12 +370,30 @@
               <p class="meta" id="cal-meta"></p>
             </div>
             <div class="top-actions">
+              <button type="button" class="btn btn-ghost tr-help" id="cal-help" data-guide="calendar" title="Пошаговая инструкция с картинками: итоги созвонов">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.7M12 16.9h.01"/></svg>
+                Как пользоваться
+              </button>
               <button type="button" class="btn btn-primary" id="cal-add">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Добавить дело
               </button>
             </div>
           </header>
+
+          <div class="tbar-wrap cbar-wrap">
+            <form class="tbar" id="cbar">
+              <span class="tbar-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg></span>
+              <textarea class="tbar-input" id="cbar-input" rows="1" maxlength="2000" autocomplete="off" aria-label="Ассистент календаря" title="Enter — отправить, Ctrl + Enter — новая строка"
+                placeholder="Ассистент календаря: «созвон с Димой завтра в 15:00» или «что решили с Мариной?»"></textarea>
+              <span class="tbar-model" id="cbar-model" title="Ассистент календаря — всегда самая дешёвая модель с быстрыми размышлениями"></span>
+              <button type="submit" class="tbar-send" id="cbar-send" title="Отправить (Enter)" aria-label="Отправить" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+            </form>
+            <button type="button" class="btn btn-ghost cbar-recap" id="cal-recap-btn" title="Загрузить итоги созвона из другой программы: ассистент найдёт решения, шаги и новые созвоны">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h7.5L19 8v12.5H7zM14 3.5V8h5M9.5 12.5h6M9.5 16h6"/></svg>
+              Подгрузить итоги со звонка
+            </button>
+          </div>
 
           <div class="cal-toolbar">
             <div class="cal-view-wrap">
@@ -662,7 +680,29 @@
   </div>
 </dialog>
 
+<dialog class="cal-dialog recap-dlg" id="recap-dlg" aria-labelledby="rd-title">
+  <form class="cal-form" id="rd-form" novalidate>
+    <h2 id="rd-title">Подгрузить итоги со звонка</h2>
+    <p class="rd-hint">Вставьте итоги созвона из другой программы (например, Wispr Flow) или расшифровку. Ассистент найдёт главное, решения, следующие шаги и договорённости о новых созвонах и положит всё в дело календаря.</p>
+    <div class="field"><label class="field-label" for="rd-event">К какому делу</label><select class="input" id="rd-event"></select></div>
+    <div class="field" id="rd-date-field" hidden><label class="field-label" for="rd-date">День созвона</label><input class="input" id="rd-date" type="date"></div>
+    <div class="field"><label class="field-label" for="rd-text">Итоги или расшифровка</label><textarea class="textarea" id="rd-text" rows="10" placeholder="Вставьте сюда текст (Ctrl + V) или нажмите «Выбрать файл…»"></textarea></div>
+    <div class="editor-actions">
+      <button type="submit" class="btn btn-primary" id="rd-go">Разобрать итоги</button>
+      <button type="button" class="btn btn-ghost" id="rd-file">Выбрать файл…</button>
+      <button type="button" class="btn btn-ghost" id="rd-cancel">Отмена</button>
+      <span class="form-msg" id="rd-msg" role="status"></span>
+    </div>
+  </form>
+</dialog>
+
 <dialog class="cal-dialog" id="cal-dialog" aria-labelledby="cal-form-title">
+  <div class="cal-tabs" id="cal-tabs" role="tablist" hidden>
+    <button type="button" role="tab" data-tab="ev">Дело</button>
+    <button type="button" role="tab" data-tab="sum" id="cal-tab-sum">Итоги</button>
+    <button type="button" role="tab" data-tab="tr" id="cal-tab-tr" hidden>Расшифровка</button>
+  </div>
+  <div class="cal-recap" id="cal-recap" hidden></div>
   <form class="cal-form" id="cal-form" novalidate>
     <h2 id="cal-form-title">Новое дело</h2>
     <div class="field"><label class="field-label" for="cf-who">С кем (необязательно)</label><input class="input" id="cf-who" maxlength="200" autocomplete="off" placeholder="Например: Дима, Оля"></div>
@@ -756,6 +796,7 @@
 <script src="guides/guides.js"></script>
 <script src="guides/1.15.0/boxes.js"></script>
 <script src="guides/1.16.0/boxes.js"></script>
+<script src="guides/1.17.0/boxes.js"></script>
 <script src="capture-shortcut.js"></script>
 <script src="screenshots.js"></script>
 <script src="app.js"></script>

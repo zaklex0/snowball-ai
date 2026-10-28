@@ -27,6 +27,18 @@ http.createServer((req, res) => {
   req.on('end', () => {
     const body = Buffer.concat(chunks);
     res.setHeader('content-type', 'application/json');
+    if (req.url.startsWith('/v1/responses') && body.toString('utf8').includes('"name":"recap"')) {
+      // A call summary (the calendar guide): the same shape as RECAP_SCHEMA in main.js. Example people only.
+      const day = new Date(Date.now() + 86400000), p2 = (v) => String(v).padStart(2, '0');
+      const recap = { title: 'Мини-курс', who: 'Дима', brief: 'Решили сделать мини-курс коротким, до 30 минут, и собрать его с лёгким монтажом. Идеи готовит Гость, структуру — Дима. Следующий созвон завтра в 12:00.',
+        decisions: ['Мини-курс делаем коротким, до 30 минут', 'Финальный ролик собираем с лёгким монтажом'],
+        steps: [{ t: 'Подготовить идеи и примеры для мини-курса', who: 'Гость', mine: true, due: '' }, { t: 'Прислать концепт', who: 'Гость', mine: true, due: day.getFullYear() + '-' + p2(day.getMonth() + 1) + '-' + p2(day.getDate()) }, { t: 'Накидать структуру мини-курса', who: 'Дима', mine: false, due: '' }],
+        meets: [{ t: 'Созвон по мини-курсу', date: day.getFullYear() + '-' + p2(day.getMonth() + 1) + '-' + p2(day.getDate()), from: '12:00', to: '12:30' }] };
+      res.end(JSON.stringify({ id: 'resp_r', object: 'response', status: 'completed', output: [{ type: 'message', id: 'm2', role: 'assistant', status: 'completed',
+        content: [{ type: 'output_text', text: JSON.stringify(recap), annotations: [] }] }],
+        usage: { input_tokens: 900, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, total_tokens: 1200 } }));
+      return;
+    }
     if (req.url.startsWith('/v1/responses')) {
       res.end(JSON.stringify({ id: 'resp_1', object: 'response', status: 'completed', output: [{ type: 'message', id: 'm1', role: 'assistant', status: 'completed',
         content: [{ type: 'output_text', text: JSON.stringify(SUMMARY), annotations: [] }] }],

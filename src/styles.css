@@ -1800,3 +1800,53 @@ h1 .brand { color: var(--accent-strong); }
 .gd-row { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; align-items: start; }
 .gd-row .gd-pts li { padding: 4px 6px; }
 @media (max-width: 1100px) { .gd-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* Calendar assistant bar and the button for loading call summaries */
+.cbar-wrap { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.cbar-wrap .tbar { flex: 1; min-width: 0; }
+.cbar-recap { flex: none; display: inline-flex; align-items: center; gap: 8px; height: 50px; padding: 0 16px; white-space: nowrap; }
+.cbar-recap svg { width: 18px; height: 18px; }
+@media (max-width: 900px) { .cbar-wrap { flex-wrap: wrap; } .cbar-recap { height: 40px; } }
+.rd-hint { margin: 8px 0 0; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
+.recap-dlg .textarea { min-height: 180px; }
+
+/* The event window: two buttons on top, «Дело» (the usual form) and «Итоги» (the call summary, or a box to load one) */
+.cal-tabs button.has::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: 2px; }
+.cal-recap > .textarea { margin-top: 12px; }
+.cal-recap > .editor-actions { margin-top: 12px; }
+.cal-recap > .rd-hint { margin: 14px 0 0; }
+.cal-dialog.wide { width: min(760px, calc(100vw - 32px)); }
+.cal-tabs { display: flex; gap: 4px; margin: 18px 22px 0; padding: 3px; border-radius: 12px; background: var(--surface-2); width: fit-content; }
+.cal-tabs button { padding: 6px 14px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); font: inherit; font-size: 14px; cursor: pointer; }
+.cal-tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.cal-recap { padding: 16px 22px 22px; max-height: min(74vh, 720px); overflow-y: auto; }
+.rc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rc-head h2 { margin: 0; }
+.rc-head p { margin: 4px 0 0; color: var(--ink-soft); font-size: 14px; }
+.rc-src { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 14px 0 4px; color: var(--ink-soft); font-size: 13px; }
+.rc-src .pill { padding: 2px 10px; border-radius: 999px; background: var(--surface-2); }
+.rc-blk { margin-top: 16px; }
+.rc-blk h5 { margin: 0 0 6px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); font-weight: 600; }
+.rc-blk p, .rc-blk li { margin: 0; line-height: 1.55; font-size: 15px; }
+.rc-blk ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.rc-empty { color: var(--ink-soft); font-size: 14px; }
+.rc-step, .rc-meet { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rc-steps, .rc-meets { display: grid; gap: 6px; }
+.rc-step input { margin-top: 4px; }
+.rc-step .t, .rc-meet .t { flex: 1; min-width: 0; font-size: 15px; line-height: 1.45; }
+.rc-step .who, .rc-meet small { display: block; color: var(--ink-soft); font-size: 12.5px; }
+.rc-step.added .t { color: var(--ink-soft); }
+.rc-step.other { align-items: center; background: transparent; border-style: dashed; }
+.rc-step.other .t { color: var(--ink-soft); }
+.rc-step.other .dash { color: var(--ink-soft); width: 13px; text-align: center; }
+.rc-step.other .link-btn { white-space: nowrap; font-size: 13px; }
+.rc-ok { color: var(--accent-strong); font-size: 13px; white-space: nowrap; }
+.rc-act { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+.rc-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--line); }
+.rc-search { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rc-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--ink); font: inherit; font-size: 15px; }
+.rc-lines { margin-top: 12px; display: grid; gap: 6px; max-height: 280px; overflow-y: auto; }
+.rc-line { font-size: 14.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rc-line mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.cal-ev .flag, .cal-grid .ev .flag { display: inline-block; width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; opacity: .85; }
+.flag svg { width: 100%; height: 100%; display: block; }

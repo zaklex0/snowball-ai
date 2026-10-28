@@ -108,6 +108,13 @@ contextBridge.exposeInMainWorld('vsApi', {
   },
   tasksAssistant: (text) => ipcRenderer.invoke('tasks-assistant', text),
   tasksAssistantUndo: (undoId) => ipcRenderer.invoke('tasks-assistant-undo', undoId),
+  calAssistant: (text) => ipcRenderer.invoke('cal-assistant', text),
+  calAssistantUndo: (undoId) => ipcRenderer.invoke('cal-assistant-undo', undoId),
+  recapMake: (o) => ipcRenderer.invoke('recap-make', o),
+  recapRemake: (eventId) => ipcRenderer.invoke('recap-remake', eventId),
+  recapUpdate: (eventId, recap) => ipcRenderer.invoke('recap-update', eventId, recap),
+  recapText: (eventId) => ipcRenderer.invoke('recap-text', eventId),
+  recapPickFile: () => ipcRenderer.invoke('recap-pick-file'),
   calSave: (ev) => ipcRenderer.invoke('cal-save', ev),
   calDelete: (id) => ipcRenderer.invoke('cal-delete', id),
   onCalendarOpen: (fn) => {
