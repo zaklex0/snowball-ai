@@ -14,6 +14,7 @@
   --mac-acc-soft: color-mix(in srgb, var(--mac-acc) 15%, transparent);
 
   --mac-side: rgba(255, 255, 255, .40);
+  --mac-veil: rgba(238, 238, 242, .62);
   --mac-content: rgba(250, 250, 252, .86);
   --mac-raised: rgba(255, 255, 255, .86);
   --mac-raised-hover: #FFFFFF;
@@ -56,6 +57,7 @@
     --mac-acc-text: color-mix(in srgb, var(--mac-acc) 82%, #fff);
     --mac-acc-soft: color-mix(in srgb, var(--mac-acc) 22%, transparent);
     --mac-side: rgba(52, 52, 58, .42);
+    --mac-veil: rgba(24, 24, 28, .66);
     --mac-content: rgba(28, 28, 31, .84);
     --mac-raised: rgba(255, 255, 255, .12);
     --mac-raised-hover: rgba(255, 255, 255, .17);
@@ -124,7 +126,8 @@
       #141418;
   }
 }
-:where(html[data-theme="macos"].glass) body { background: transparent; }
+/* With glass: a veil of the theme colour under everything, so text on the sidebar and the tabs reads over a bright or busy desktop */
+:where(html[data-theme="macos"].glass) body { background: var(--mac-veil); }
 /* A light grain over everything, like matte glass; it stays under the page */
 :where(html[data-theme="macos"]) body::before {
   content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -350,6 +353,14 @@
 :where(html[data-theme="macos"]) .top-row:nth-child(n+2) .top-fill { background: color-mix(in srgb, var(--mac-acc) 66%, var(--surface-2)); }
 :where(html[data-theme="macos"]) .top-row:nth-child(n+4) .top-fill { background: color-mix(in srgb, var(--mac-acc) 40%, var(--surface-2)); }
 :where(html[data-theme="macos"]) .bchip { background: var(--mac-fill); }
+/* Activity: the accent through glass — the more actions, the less see-through; the busiest days get a highlight */
+:root[data-theme="macos"] { --heat-0: var(--mac-fill); --heat-1: color-mix(in srgb, var(--mac-acc) 22%, transparent); --heat-2: color-mix(in srgb, var(--mac-acc) 45%, transparent);
+  --heat-3: color-mix(in srgb, var(--mac-acc) 72%, transparent); --heat-4: var(--mac-acc); }
+:where(html[data-theme="macos"]) .heat .d { border-radius: 4px; transition: transform .12s; }
+:where(html[data-theme="macos"]) :is(.heat .d.l0, .legend i.l0) { box-shadow: none; }
+:where(html[data-theme="macos"]) :is(.heat .d.l3, .legend i.l3) { box-shadow: inset 0 .5px 0 rgba(255, 255, 255, .35); }
+:where(html[data-theme="macos"]) :is(.heat .d.l4, .legend i.l4) { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 0 6px color-mix(in srgb, var(--mac-acc) 45%, transparent); }
+:where(html[data-theme="macos"]) .heat .d:hover { transform: scale(1.35); outline: 0; box-shadow: 0 0 0 1.5px var(--surface), 0 2px 8px rgba(0, 0, 0, .3); }
 
 /* ---------- LLM: bubbles like iMessage, answers as plain text, the message box floats ---------- */
 :where(html[data-theme="macos"]) .bubble {
