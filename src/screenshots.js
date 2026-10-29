@@ -318,9 +318,13 @@
     };
     const fail = (e) => status(e.message || String(e), true);
     const run = (fn) => Promise.resolve().then(fn).catch(fail);
+    // The macOS theme comes as "macos:<accent>".
     function theme(t) {
-      if (document.documentElement.classList.contains('capture-external'))
-        document.documentElement.dataset.theme = t;
+      if (!document.documentElement.classList.contains('capture-external')) return;
+      const [name, accent] = String(t || 'system').split(':');
+      document.documentElement.dataset.theme = name;
+      if (accent) document.documentElement.dataset.accent = accent;
+      else delete document.documentElement.dataset.accent;
     }
     function keyState(r) {
       const keyLabel = window.SnowShortcut.format(r.shortcut);

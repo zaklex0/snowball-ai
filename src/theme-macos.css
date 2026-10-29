@@ -1,0 +1,543 @@
+/* Theme "macOS" (beta): the look of macOS Tahoe with "liquid glass" (mockups/macos-glass.html).
+   Every button stays where it is in styles.css; only surfaces, shapes and colours change.
+   - Glass: on Windows 11 main.js turns on the system acrylic (html.glass) and the page lets the blurred desktop through
+     the sidebar and the title bar; elsewhere (Windows 10, the screenshot editor) soft colour spots are painted instead.
+   - One accent colour (html[data-accent], «Тема › macOS ›»), light or dark from prefers-color-scheme (settings.macLook).
+   - Capsule buttons, segmented switches, menus that highlight the item in the accent colour, fine hairlines, a light grain.
+   Rules are wrapped in :where(...), so each keeps the weight of the plain rule it replaces in styles.css
+   and wins only because this file comes later; more specific rules there still win over these. */
+
+/* ---------- colours ---------- */
+:root[data-theme="macos"] {
+  --mac-acc: #F2793D; --mac-acc-ink: #FFFFFF;
+  --mac-acc-text: color-mix(in srgb, var(--mac-acc) 78%, #000);
+  --mac-acc-soft: color-mix(in srgb, var(--mac-acc) 15%, transparent);
+
+  --mac-side: rgba(255, 255, 255, .40);
+  --mac-content: rgba(250, 250, 252, .86);
+  --mac-raised: rgba(255, 255, 255, .86);
+  --mac-raised-hover: #FFFFFF;
+  --mac-fill: rgba(118, 118, 128, .11);
+  --mac-fill-2: rgba(118, 118, 128, .19);
+  --mac-menu: rgba(248, 248, 250, .80);
+  --mac-sheet: rgba(250, 250, 252, .92);
+  --mac-edge: rgba(255, 255, 255, .95);
+  --mac-hair: rgba(0, 0, 0, .085);
+  --mac-raise-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--mac-hair), 0 2px 8px rgba(0, 0, 0, .07);
+  --mac-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  --mac-grain-op: .05;
+
+  --bg: #F4F4F6; --glow: transparent; --titlebar: #ECECEF;
+  --surface: #FFFFFF; --surface-2: #F1F1F4; --line: rgba(0, 0, 0, .09);
+  --ink: #1D1D1F; --ink-soft: #6E6E73;
+  --accent: var(--mac-acc); --accent-hover: color-mix(in srgb, var(--mac-acc) 88%, #fff);
+  --accent-ink: var(--mac-acc-ink); --accent-strong: var(--mac-acc-text);
+  --row-hover: #F8F8FA; --drop: color-mix(in srgb, var(--mac-acc) 16%, #fff); --danger: #D70015;
+  --ok-bg: #E2F5E5; --ok-ink: #1E7B34;
+  --toast-bg: rgba(30, 30, 32, .94); --toast-ink: #FFFFFF; --scroll-thumb: rgba(0, 0, 0, .18);
+  --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 22px rgba(20, 20, 60, .06);
+  --pop-shadow: 0 0 0 .5px rgba(0, 0, 0, .12), 0 18px 50px rgba(20, 20, 60, .2);
+
+  --cat-static-bg: #E3F5E6; --cat-static-ink: #1E6B30; --cat-static-dot: #34C759;
+  --cat-video-bg:  #E1EEFF; --cat-video-ink:  #0B4FA8; --cat-video-dot:  #007AFF;
+  --cat-system-bg: #FFE5E3; --cat-system-ink: #B3261E; --cat-system-dot: #FF3B30;
+  --cat-other-bg:  #EEEEF1; --cat-other-ink:  #48484D; --cat-other-dot:  #8E8E93;
+  --ev-call: #AF52DE; --ev-call-bg: #F4E7FB;
+  --ev-shoot: #FF9500; --ev-shoot-bg: #FFF0DA;
+  --ev-edit: #30B0C7; --ev-edit-bg: #DFF4F8;
+
+  --font-display: "SF Pro Display", "Golos Text", "Segoe UI Variable Display", system-ui, sans-serif;
+  --font-body: "SF Pro Text", "Golos Text", "Segoe UI Variable Text", system-ui, sans-serif;
+  --font-mono: "SF Mono", "IBM Plex Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="macos"] {
+    --mac-acc: #FF8C52;
+    --mac-acc-text: color-mix(in srgb, var(--mac-acc) 82%, #fff);
+    --mac-acc-soft: color-mix(in srgb, var(--mac-acc) 22%, transparent);
+    --mac-side: rgba(52, 52, 58, .42);
+    --mac-content: rgba(28, 28, 31, .84);
+    --mac-raised: rgba(255, 255, 255, .12);
+    --mac-raised-hover: rgba(255, 255, 255, .17);
+    --mac-fill: rgba(118, 118, 128, .22);
+    --mac-fill-2: rgba(118, 118, 128, .32);
+    --mac-menu: rgba(44, 44, 48, .80);
+    --mac-sheet: rgba(36, 36, 40, .92);
+    --mac-edge: rgba(255, 255, 255, .16);
+    --mac-hair: rgba(255, 255, 255, .10);
+    --mac-raise-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .25);
+    --mac-grain-op: .06;
+
+    --bg: #1C1C1E; --titlebar: #2A2A2D;
+    --surface: #2C2C2E; --surface-2: #3A3A3C; --line: rgba(255, 255, 255, .10);
+    --ink: #F5F5F7; --ink-soft: #98989D;
+    --accent-hover: color-mix(in srgb, var(--mac-acc) 86%, #fff);
+    --row-hover: #323235; --drop: color-mix(in srgb, var(--mac-acc) 24%, #2C2C2E); --danger: #FF6961;
+    --ok-bg: #1F3A25; --ok-ink: #9BE3AE;
+    --toast-bg: rgba(245, 245, 247, .95); --toast-ink: #1D1D1F; --scroll-thumb: rgba(255, 255, 255, .2);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 26px rgba(0, 0, 0, .28);
+    --pop-shadow: 0 0 0 .5px rgba(0, 0, 0, .6), 0 18px 50px rgba(0, 0, 0, .5);
+
+    --cat-static-bg: #1F3A25; --cat-static-ink: #A6E9B6; --cat-static-dot: #30D158;
+    --cat-video-bg:  #13304F; --cat-video-ink:  #A9CFFF; --cat-video-dot:  #0A84FF;
+    --cat-system-bg: #4A1E1C; --cat-system-ink: #FFB4AE; --cat-system-dot: #FF453A;
+    --cat-other-bg:  #3A3A3C; --cat-other-ink:  #E5E5EA; --cat-other-dot:  #98989D;
+    --ev-call: #BF5AF2; --ev-call-bg: #3B2648;
+    --ev-shoot: #FF9F0A; --ev-shoot-bg: #48331A;
+    --ev-edit: #5AC8DC; --ev-edit-bg: #173E46;
+  }
+}
+/* Accent colours, as in macOS settings (a lighter shade in the dark look) */
+:root[data-theme="macos"][data-accent="blue"] { --mac-acc: #007AFF; }
+:root[data-theme="macos"][data-accent="purple"] { --mac-acc: #9B51E0; }
+:root[data-theme="macos"][data-accent="pink"] { --mac-acc: #F2468C; }
+:root[data-theme="macos"][data-accent="red"] { --mac-acc: #FF3B30; }
+:root[data-theme="macos"][data-accent="yellow"] { --mac-acc: #FFC21A; --mac-acc-ink: #1D1D1F; --mac-acc-text: #8F6A00; }
+:root[data-theme="macos"][data-accent="green"] { --mac-acc: #34B45A; }
+:root[data-theme="macos"][data-accent="graphite"] { --mac-acc: #8E8E93; --mac-acc-text: #5E5E63; }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="macos"][data-accent="blue"] { --mac-acc: #0A84FF; }
+  :root[data-theme="macos"][data-accent="purple"] { --mac-acc: #B46CF0; }
+  :root[data-theme="macos"][data-accent="pink"] { --mac-acc: #FF5FA2; }
+  :root[data-theme="macos"][data-accent="red"] { --mac-acc: #FF453A; }
+  :root[data-theme="macos"][data-accent="yellow"] { --mac-acc: #FFD60A; --mac-acc-text: #FFD60A; }
+  :root[data-theme="macos"][data-accent="green"] { --mac-acc: #30D158; }
+  :root[data-theme="macos"][data-accent="graphite"] { --mac-acc: #98989D; --mac-acc-text: #C7C7CC; }
+}
+
+/* ---------- the window: glass, or painted colour spots where Windows has no glass ---------- */
+:where(html[data-theme="macos"]) body {
+  background:
+    radial-gradient(55% 45% at 6% 8%, color-mix(in srgb, var(--mac-acc) 28%, #FFF4EC) 0, transparent 70%),
+    radial-gradient(50% 50% at 96% 4%, #CCD8FF 0, transparent 70%),
+    radial-gradient(70% 60% at 72% 104%, #D8D2FF 0, transparent 70%),
+    radial-gradient(45% 40% at 8% 96%, #FFDCE8 0, transparent 70%),
+    #ECEDF2;
+}
+@media (prefers-color-scheme: dark) {
+  :where(html[data-theme="macos"]) body {
+    background:
+      radial-gradient(55% 45% at 6% 8%, color-mix(in srgb, var(--mac-acc) 26%, #1B1B22) 0, transparent 70%),
+      radial-gradient(50% 50% at 96% 4%, #1E2A55 0, transparent 70%),
+      radial-gradient(70% 60% at 72% 104%, #2A2257 0, transparent 70%),
+      radial-gradient(45% 40% at 8% 96%, #3D1C33 0, transparent 70%),
+      #141418;
+  }
+}
+:where(html[data-theme="macos"].glass) body { background: transparent; }
+/* A light grain over everything, like matte glass; it stays under the page */
+:where(html[data-theme="macos"]) body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: var(--mac-grain); opacity: var(--mac-grain-op);
+}
+:where(html[data-theme="macos"]) ::selection { background: color-mix(in srgb, var(--mac-acc) 30%, transparent); }
+:where(html[data-theme="macos"]) :focus-visible { outline-color: color-mix(in srgb, var(--mac-acc) 70%, transparent); outline-width: 3px; }
+
+/* ---------- type: system-like, tight headings, no capital-letter labels ---------- */
+:where(html[data-theme="macos"]) h1 { font-weight: 600; letter-spacing: -.03em; }
+:where(html[data-theme="macos"]) h1 .brand { color: var(--ink-soft); }
+:where(html[data-theme="macos"]) :is(.editor h2, .state h2, .chat-empty h2, .card-title, .sd-head h2, .cal-dialog h2, .profile-dlg h2,
+  .cal-month-title, .cal-day-title, .stats-name, .home-tile b, .gen-name, .gd-head-row h2) { font-weight: 600; letter-spacing: -.02em; }
+:where(html[data-theme="macos"]) .eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+:where(html[data-theme="macos"]) :is(.side-h, .field-label, .menu-label, .table th, .mm-label, .ch-title, .cal-wd, .cw-day .wd,
+  .tp-block-h, .tcol-pop-h, .tr-sum h4, .tr-tip b) { font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+
+/* ---------- title bar and tabs (Safari: the open tab is a raised glass capsule) ---------- */
+:where(html[data-theme="macos"]) .titlebar { align-items: center; background: transparent; border-bottom: 0; }
+:where(html[data-theme="macos"]) .titlebar.catching { background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .tabs { align-items: center; gap: 3px; }
+:where(html[data-theme="macos"]) .tab { height: 30px; margin-bottom: 0; border: 0; border-radius: 10px; }
+:where(html[data-theme="macos"]) .tab:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tab.on { background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); }
+:where(html[data-theme="macos"]) .tab-x:hover { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) :is(.tab-busy, .tab-unread) { background: var(--accent); }
+:where(html[data-theme="macos"]) .tab-plus { border-radius: 50%; width: 28px; height: 28px; }
+:where(html[data-theme="macos"]) :is(.tab-plus:hover, .tab-plus[aria-expanded="true"]) { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+:where(html[data-theme="macos"]) .tab.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
+:where(html[data-theme="macos"]) .tab-slot { border-color: var(--accent); background: var(--mac-acc-soft); border-radius: 10px; }
+:where(html[data-theme="macos"]) .tab-ghost { border-color: var(--accent); background: var(--mac-sheet); border-radius: 14px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+:where(html[data-theme="macos"]) .tab-ghost-bar { background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .solo-back { border: 0; border-radius: 999px; background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); }
+
+/* ---------- the left panel: a floating pane of glass ---------- */
+:where(html[data-theme="macos"]) .side {
+  width: 228px; margin: 8px 0 8px 8px; padding: 0 10px 10px; border: 0; border-radius: 18px;
+  background: var(--mac-side);
+  box-shadow: inset 0 .5px 0 var(--mac-edge), inset 0 0 0 .5px color-mix(in srgb, var(--mac-edge) 40%, transparent), 0 0 0 .5px var(--mac-hair), 0 10px 30px rgba(20, 20, 60, .08);
+}
+@media (max-width: 900px) { :where(html[data-theme="macos"]) .side { width: 54px; padding: 6px 4px 8px; } }
+:where(html[data-theme="macos"]) .side-head { height: 34px; margin-top: 2px; }
+:where(html[data-theme="macos"]) .nav-icon:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .nav-icon[aria-current="page"] { background: var(--mac-raised); color: var(--accent-strong); box-shadow: var(--mac-raise-shadow); }
+:where(html[data-theme="macos"]) .nav-badge { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 0 1.5px var(--mac-raised-hover); }
+:where(html[data-theme="macos"]) .side-h { margin-left: 8px; color: var(--ink-soft); }
+:where(html[data-theme="macos"]) .up-ev:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .up-ev i { width: 8px; height: 8px; border-radius: 50%; }
+:where(html[data-theme="macos"]) .nav-item:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .nav-item[aria-current="page"] { background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); }
+:where(html[data-theme="macos"]) .nav-item[aria-current="page"] svg { color: var(--accent-strong); }
+:where(html[data-theme="macos"]) :is(.timer-row.running, .timer-row.paused) { background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); }
+:where(html[data-theme="macos"]) .timer-fill { background: var(--accent); }
+:where(html[data-theme="macos"]) :is(.timer-ico:hover, .timer-row.running .timer-ico:hover, .timer-row.paused .timer-ico:hover) { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .timer-presets button { border: 0; border-radius: 9px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .timer-presets button:hover { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .profile-btn { border: 0; border-radius: 14px; background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); }
+:where(html[data-theme="macos"]) :is(.profile-btn:hover, .profile-btn[aria-expanded="true"]) { background: var(--mac-raised-hover); }
+/* The assistant button: a round drop of liquid glass with a highlight on top */
+:where(html[data-theme="macos"]) .qa-btn {
+  position: relative; align-self: center; width: 46px; height: 46px; border-radius: 50%; color: var(--accent-ink);
+  background: radial-gradient(120% 120% at 30% 15%, color-mix(in srgb, var(--mac-acc) 55%, #fff), var(--mac-acc) 60%, color-mix(in srgb, var(--mac-acc) 80%, #000));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, .7), inset 0 -2px 4px rgba(0, 0, 0, .12), 0 6px 16px color-mix(in srgb, var(--mac-acc) 42%, transparent);
+  transition: transform .15s, filter .15s;
+}
+:where(html[data-theme="macos"]) .qa-btn::after { content: ""; position: absolute; left: 9px; right: 9px; top: 4px; height: 14px; border-radius: 50%; background: linear-gradient(180deg, rgba(255, 255, 255, .6), rgba(255, 255, 255, 0)); pointer-events: none; }
+:where(html[data-theme="macos"]) :is(.qa-btn:hover, .qa-btn[aria-expanded="true"]) { background: radial-gradient(120% 120% at 30% 15%, color-mix(in srgb, var(--mac-acc) 50%, #fff), var(--mac-acc) 60%, color-mix(in srgb, var(--mac-acc) 80%, #000)); filter: brightness(1.05); }
+:where(html[data-theme="macos"]) .qa-btn:active { transform: scale(.95); }
+:where(html[data-theme="macos"]) .avatar { background: linear-gradient(145deg, color-mix(in srgb, var(--mac-acc) 55%, #fff), var(--mac-acc)); color: var(--accent-ink); }
+
+/* ---------- the page: a calmer, more solid sheet beside the glass ---------- */
+:where(html[data-theme="macos"]) .scroller {
+  background: var(--mac-content); background-attachment: scroll;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px); mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
+}
+:where(html[data-theme="macos"]:not(.solo)) .scroller { border-top-left-radius: 16px; box-shadow: inset .5px .5px 0 var(--mac-hair); }
+:where(html[data-theme="macos"]) :is(.scroller, .textarea, .cw-body, .cal-timeline, .model-menu, .chat-history)::-webkit-scrollbar-thumb { border-radius: 10px; }
+
+/* ---------- buttons: capsules; the main one is the accent with a highlight ---------- */
+:where(html[data-theme="macos"]) .btn { border-radius: 999px; padding: 8px 16px; font-size: 14px; }
+:where(html[data-theme="macos"]) .btn-primary {
+  color: var(--accent-ink); font-weight: 600;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 80%, #fff), var(--mac-acc));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), inset 0 -1px 0 rgba(0, 0, 0, .08), 0 0 0 .5px color-mix(in srgb, var(--mac-acc) 70%, #000), 0 4px 14px color-mix(in srgb, var(--mac-acc) 30%, transparent);
+}
+:where(html[data-theme="macos"]) .btn-primary:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 72%, #fff), color-mix(in srgb, var(--mac-acc) 92%, #fff)); }
+:where(html[data-theme="macos"]) .btn-primary:active { transform: scale(.97); }
+:where(html[data-theme="macos"]) .btn-primary:disabled:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 80%, #fff), var(--mac-acc)); }
+:where(html[data-theme="macos"]) .btn-ghost { border-color: transparent; background: var(--surface); box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--line), 0 1px 3px rgba(0, 0, 0, .06); }
+:where(html[data-theme="macos"]) .btn-ghost:hover { background: var(--row-hover); }
+:where(html[data-theme="macos"]) .btn-ghost:active { transform: scale(.97); }
+:where(html[data-theme="macos"]) .btn-danger { background: var(--danger); color: #fff; }
+:where(html[data-theme="macos"]) .btn-sm { border-radius: 999px; }
+:where(html[data-theme="macos"]) .btn-mini { border-color: transparent; border-radius: 8px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .btn-mini:hover { background: var(--mac-fill-2); border-color: transparent; }
+:where(html[data-theme="macos"]) .copy { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .copy:hover { background: var(--accent-hover); border-color: transparent; }
+:where(html[data-theme="macos"]) .copy.done { background: var(--ok-bg); color: var(--ok-ink); }
+:where(html[data-theme="macos"]) .alpha { background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .cal-icon-btn { width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--surface); box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--line), 0 1px 3px rgba(0, 0, 0, .06); }
+:where(html[data-theme="macos"]) .cal-icon-btn:hover { background: var(--row-hover); }
+:where(html[data-theme="macos"]) .link-btn.danger { color: var(--danger); }
+
+/* ---------- menus and pop-ups: frosted glass, the item under the mouse in the accent colour ---------- */
+:where(html[data-theme="macos"]) :is(.menu, .model-menu, .tcol-pop, .timer-pop, .tr-tip) {
+  border: .5px solid var(--mac-hair); border-radius: 12px; background: var(--mac-menu);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow: inset 0 .5px 0 var(--mac-edge), var(--pop-shadow);
+}
+:where(html[data-theme="macos"]) .menu { padding: 5px; gap: 1px; }
+:where(html[data-theme="macos"]) .menu button { border-radius: 7px; padding: 7px 10px; font-size: 13.5px; }
+:where(html[data-theme="macos"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub, .mm-item:hover, .mm-item:focus-visible,
+  .model-menu .sub-wrap.open > .has-sub, .tcol-pop button:hover, .tcol-pop button:focus-visible) { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub, .mm-item:hover, .mm-item:focus-visible,
+  .model-menu .sub-wrap.open > .has-sub, .tcol-pop button:hover, .tcol-pop button:focus-visible) :is(svg, .sub-value, .sub-chev, .tick, .mm-sub, .mm-tick, .mm-warn, small, .ico) { color: var(--accent-ink); }
+:where(html[data-theme="macos"]) :is(.menu button:hover, .menu button:focus-visible, .sub-wrap.open > .has-sub, .mm-item:hover) .alpha { background: rgba(255, 255, 255, .25); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .tcol-pop button.danger:hover { background: var(--danger); color: #fff; }
+:where(html[data-theme="macos"]) :is(.menu hr, .model-menu hr) { margin: 4px 8px; border-top-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .menu-head { border-bottom-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .mm-item { border-radius: 7px; }
+:where(html[data-theme="macos"]) .mm-badge { border: 0; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .mm-note { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .timer-pop { border-radius: 14px; }
+
+/* «Тема › macOS ›»: look (segmented) and accent colours */
+.sw-macos { background: conic-gradient(from 200deg, #FF3B30, #FF9500, #FFCC00, #34C759, #007AFF, #AF52DE, #FF2D55, #FF3B30); }
+.menu .mac-look { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin: 2px 4px 4px; padding: 2px; border-radius: 9px; background: var(--mac-fill, rgba(118, 118, 128, .12)); }
+.menu .mac-look button { justify-content: center; padding: 5px 6px; border-radius: 7px; font-size: 12.5px; color: var(--ink-soft); white-space: nowrap; }
+.menu .mac-look button[aria-checked="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 .5px var(--line), 0 1px 3px rgba(0, 0, 0, .12); }
+.menu .mac-look button:hover, .menu .mac-look button:focus-visible { background: var(--surface-2); color: var(--ink); }
+.menu .mac-look button[aria-checked="true"]:hover { background: var(--surface); }
+:where(html[data-theme="macos"]) .menu .mac-look button:hover, :where(html[data-theme="macos"]) .menu .mac-look button:focus-visible { background: var(--mac-raised-hover); color: var(--ink); }
+.acc-dot { width: 15px; height: 15px; flex: none; border-radius: 50%; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), 0 0 0 .5px rgba(0, 0, 0, .2); }
+.acc-peach { background: #F2793D; } .acc-blue { background: #007AFF; } .acc-purple { background: #9B51E0; } .acc-pink { background: #F2468C; }
+.acc-red { background: #FF3B30; } .acc-yellow { background: #FFC21A; } .acc-green { background: #34B45A; } .acc-graphite { background: #8E8E93; }
+.menu .submenu.mac-sub { min-width: 290px; }
+.menu .mac-look { grid-template-columns: auto 1fr 1fr; }
+.menu .has-sub[data-sub="macos"] .sub-chev { margin-left: 4px; }
+.menu .has-sub[data-sub="macos"] .alpha { margin-left: 2px; }
+.menu .mac-sub .menu-label { margin: 0; padding-top: 6px; }
+.menu .mac-note { margin: 2px 10px 4px; font-size: 11.5px; line-height: 1.4; color: var(--ink-soft); }
+
+/* ---------- dialogs: sheets of frosted glass over a light veil ---------- */
+:where(html[data-theme="macos"]) :is(.settings-dlg, .cal-dialog, .profile-dlg, .viewer, .guide-dlg) {
+  border: .5px solid var(--mac-hair); border-radius: 22px; background: var(--mac-sheet);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8); backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px rgba(0, 0, 0, .12), 0 30px 80px rgba(0, 0, 0, .3);
+}
+:where(html[data-theme="macos"]) :is(.settings-dlg, .cal-dialog, .profile-dlg, .guide-dlg)::backdrop { background: rgba(0, 0, 0, .18); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+:where(html[data-theme="macos"]) .viewer::backdrop { background: rgba(0, 0, 0, .6); }
+:where(html[data-theme="macos"]) :is(.sd-head, .gd-head-row, .viewer-head) { border-bottom-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) :is(.sd-close, .gd-x) { border-radius: 50%; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) :is(.sd-close:hover, .gd-x:hover) { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .sd-nav { background: transparent; border-right-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .sd-item { border-radius: 8px; padding: 8px 11px; color: var(--ink); }
+:where(html[data-theme="macos"]) .sd-item:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .sd-item[aria-current="page"] { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .sd-item[aria-current="page"] .set-nav-dot { background: var(--accent-ink); }
+:where(html[data-theme="macos"]) .set-status.new { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) :is(.set-spend, .sd-sec > .card + .card) { border-top-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .set-dir-path { border-color: transparent; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .set-dir-path:hover { background: var(--mac-fill-2); border-color: transparent; }
+:where(html[data-theme="macos"]) .upd-notes { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .gd-pic { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .gd-side { border-left-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .viewer-body { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .viewer-nav { border: 0; background: var(--mac-menu); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+:where(html[data-theme="macos"]) .toast { border-radius: 14px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+:where(html[data-theme="macos"]) .utoast { border-radius: 14px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+:where(html[data-theme="macos"]) .banner { border: 0; border-radius: 16px; box-shadow: inset 3px 0 0 var(--accent), 0 0 0 .5px var(--line), var(--shadow); }
+:where(html[data-theme="macos"]) .banner .btn-mini { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) :is(.banner-bar span, .upd-bar span, .tr-bar b) { background: var(--accent); }
+:where(html[data-theme="macos"]) .test-note { border: 0; border-radius: 14px; background: color-mix(in srgb, #007AFF 9%, var(--surface)); box-shadow: inset 0 0 0 .5px color-mix(in srgb, #007AFF 25%, transparent); }
+:where(html[data-theme="macos"]) .test-note svg { color: #007AFF; }
+:where(html[data-theme="macos"]) :is(.foot kbd, .composer-hint kbd, .shortcuts kbd) { border: 0; background: var(--mac-fill); box-shadow: inset 0 -1px 0 var(--line); }
+
+/* ---------- fields: soft grey wells with an accent ring when typing ---------- */
+:where(html[data-theme="macos"]) :is(.input, .textarea) { border-color: transparent; border-radius: 10px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) :is(.input:focus, .textarea:focus) { border-color: color-mix(in srgb, var(--mac-acc) 70%, transparent); box-shadow: 0 0 0 3px var(--mac-acc-soft); background: var(--surface); }
+:where(html[data-theme="macos"]) .search .input { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .cat-option span { border-color: transparent; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .fchip { border-color: transparent; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .fchip:hover { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .fchip[aria-pressed="true"] { background: var(--surface); border-color: transparent; color: var(--ink); box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--line), 0 1px 4px rgba(0, 0, 0, .08); }
+:where(html[data-theme="macos"]) .fchip[aria-pressed="true"] .n { opacity: 1; color: var(--ink-soft); }
+:where(html[data-theme="macos"]) :is(.tile, .att-thumb) { border-color: transparent; box-shadow: 0 0 0 .5px var(--line), 0 2px 6px rgba(0, 0, 0, .08); }
+:where(html[data-theme="macos"]) .tile:hover { border-color: transparent; box-shadow: 0 0 0 2px var(--accent); }
+:where(html[data-theme="macos"]) .tile-add { border-color: var(--line); }
+:where(html[data-theme="macos"]) .tile-add:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .time-pick select, :where(html[data-theme="macos"]) .cal-form select.input { border-radius: 9px; }
+:where(html[data-theme="macos"]) .set-check-row input { accent-color: var(--mac-acc); }
+
+/* ---------- cards ---------- */
+:where(html[data-theme="macos"]) :is(.card, .editor, .chat-empty, .home-tile, .gen-card) { border-color: var(--line); border-radius: 18px; }
+:where(html[data-theme="macos"]) .editor.drop-over { border-color: var(--accent); }
+:where(html[data-theme="macos"]) .table th { background: transparent; }
+:where(html[data-theme="macos"]) .table tbody tr.editing td { background: var(--row-hover); }
+:where(html[data-theme="macos"]) .prompt-note { border-left: 0; background: color-mix(in srgb, #FFCC00 13%, var(--surface)); box-shadow: inset 0 0 0 .5px color-mix(in srgb, #FFCC00 35%, transparent); }
+:where(html[data-theme="macos"]) .prompt-note svg { color: #E08A00; }
+:where(html[data-theme="macos"]) .prompt-note.can-toggle:hover { background: color-mix(in srgb, #FFCC00 20%, var(--surface)); }
+/* Home: section tiles look like app icons, each in its own colour */
+:where(html[data-theme="macos"]) .home-tile { border-radius: 20px; }
+:where(html[data-theme="macos"]) .home-tile .ico {
+  --c: var(--mac-acc); width: 42px; height: 42px; border-radius: 11px; color: #fff;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--c) 68%, #fff), var(--c));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), inset 0 -1px 0 rgba(0, 0, 0, .08), 0 4px 12px color-mix(in srgb, var(--c) 32%, transparent);
+}
+:where(html[data-theme="macos"]) .home-tile:nth-child(1) .ico { --c: #FF9500; }
+:where(html[data-theme="macos"]) .home-tile:nth-child(2) .ico { --c: #FF3B30; }
+:where(html[data-theme="macos"]) .home-tile:nth-child(3) .ico { --c: #34C759; }
+:where(html[data-theme="macos"]) .home-tile:nth-child(4) .ico { --c: #AF52DE; }
+:where(html[data-theme="macos"]) .home-tile:nth-child(5) .ico { --c: #007AFF; }
+:where(html[data-theme="macos"]) .home-tile:nth-child(6) .ico { --c: #30B0C7; }
+:where(html[data-theme="macos"]) .home-tile:nth-child(7) .ico { --c: #FF2D55; }
+:where(html[data-theme="macos"]) .home-tile b { font-size: 16px; }
+
+/* ---------- statistics ---------- */
+:where(html[data-theme="macos"]) .metric { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .metric .v { font-weight: 600; letter-spacing: -.03em; }
+:where(html[data-theme="macos"]) .top-bar { border-radius: 999px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .top-fill { border-radius: 999px; background: linear-gradient(90deg, color-mix(in srgb, var(--mac-acc) 70%, #fff), var(--mac-acc)); }
+:where(html[data-theme="macos"]) .top-row:nth-child(n+2) .top-fill { background: color-mix(in srgb, var(--mac-acc) 66%, var(--surface-2)); }
+:where(html[data-theme="macos"]) .top-row:nth-child(n+4) .top-fill { background: color-mix(in srgb, var(--mac-acc) 40%, var(--surface-2)); }
+:where(html[data-theme="macos"]) .bchip { background: var(--mac-fill); }
+
+/* ---------- LLM: bubbles like iMessage, answers as plain text, the message box floats ---------- */
+:where(html[data-theme="macos"]) .bubble {
+  border-radius: 20px 20px 6px 20px; color: var(--accent-ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 82%, #fff), var(--mac-acc));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3), 0 4px 14px color-mix(in srgb, var(--mac-acc) 22%, transparent);
+}
+:where(html[data-theme="macos"]) .bot-mark { background: linear-gradient(145deg, color-mix(in srgb, var(--mac-acc) 55%, #fff), var(--mac-acc)); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .msg-main { background: none; border: 0; padding: 4px 0; }
+:where(html[data-theme="macos"]) .rt code { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .rt-code pre { background: var(--mac-fill); border-radius: 14px; }
+:where(html[data-theme="macos"]) .caret { background: var(--accent); }
+:where(html[data-theme="macos"]) .act-card { border: 0; border-radius: 16px; background: var(--surface); box-shadow: inset 3px 0 0 var(--accent), 0 0 0 .5px var(--line), var(--shadow); }
+:where(html[data-theme="macos"]) .act-card.settled { box-shadow: 0 0 0 .5px var(--line); }
+:where(html[data-theme="macos"]) .act-head svg { color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .act-text { background: var(--mac-fill); }
+/* The bottom edge blurs what scrolls under the message box, like the scroll edge in macOS */
+:where(html[data-theme="macos"]) .composer-dock {
+  background: none; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px); mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
+}
+:where(html[data-theme="macos"]) .composer { border-color: transparent; border-radius: 22px; box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--line), 0 8px 26px rgba(0, 0, 0, .08); }
+:where(html[data-theme="macos"]) .composer:focus-within { border-color: transparent; box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 1px color-mix(in srgb, var(--mac-acc) 60%, transparent), 0 0 0 4px var(--mac-acc-soft), 0 8px 26px rgba(0, 0, 0, .08); }
+:where(html[data-theme="macos"]) .composer textarea { caret-color: var(--accent); }
+:where(html[data-theme="macos"]) .model-btn { border-radius: 999px; background: var(--mac-fill); padding: 5px 11px; font-size: 13px; }
+:where(html[data-theme="macos"]) :is(.model-btn:hover, .model-btn[aria-expanded="true"]) { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .att-btn { border-radius: 50%; }
+:where(html[data-theme="macos"]) .att-btn:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) :is(.send-btn, .tbar-send) {
+  border-radius: 50%; color: var(--accent-ink);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 75%, #fff), var(--mac-acc));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 3px 10px color-mix(in srgb, var(--mac-acc) 32%, transparent);
+}
+:where(html[data-theme="macos"]) :is(.send-btn:hover, .tbar-send:hover) { background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 68%, #fff), color-mix(in srgb, var(--mac-acc) 90%, #fff)); }
+:where(html[data-theme="macos"]) .tbar-send:disabled { opacity: 1; background: var(--mac-fill-2); color: var(--ink-soft); box-shadow: none; }
+:where(html[data-theme="macos"]) .tbar.busy .tbar-send { background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .ch-open:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .ch-open[aria-current="true"] { background: var(--mac-acc-soft); box-shadow: none; }
+:where(html[data-theme="macos"]) .ch-open[aria-current="true"] .ch-name { color: var(--accent-strong); font-weight: 600; }
+:where(html[data-theme="macos"]) .ch-item.confirm { background: var(--mac-fill); }
+@media (max-width: 1080px) { :where(html[data-theme="macos"]) .chat-history { border-color: var(--line); border-radius: 18px; } }
+
+/* ---------- the small assistant window ---------- */
+:where(html[data-theme="macos"]) .qa {
+  border: .5px solid var(--mac-hair); border-radius: 22px; background: var(--mac-menu);
+  -webkit-backdrop-filter: blur(36px) saturate(1.8); backdrop-filter: blur(36px) saturate(1.8);
+  box-shadow: inset 0 .5px 0 var(--mac-edge), var(--pop-shadow);
+}
+:where(html[data-theme="macos"]) :is(.qa-head, .qa-form) { border-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .qa-mark { border-radius: 50%; background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .qa-close { border-radius: 50%; }
+:where(html[data-theme="macos"]) .qa-close:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .qa-form .input { border-radius: 999px; }
+
+/* ---------- calendar ---------- */
+:where(html[data-theme="macos"]) .cal-cell { border-color: var(--line); border-radius: 12px; }
+:where(html[data-theme="macos"]) .cal-cell:hover { transform: scale(1.02); box-shadow: 0 6px 16px -8px rgba(0, 0, 0, .25); }
+:where(html[data-theme="macos"]) .cal-cell.off { border-color: color-mix(in srgb, var(--cat-system-dot) 22%, var(--line)); }
+:where(html[data-theme="macos"]) :is(.cal-cell.today .num, .cw-day.today .num) { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .cal-cell.sel { outline-color: var(--accent); }
+:where(html[data-theme="macos"]) .cal-legend i { border-color: var(--line); border-radius: 4px; }
+:where(html[data-theme="macos"]) .cw-head { background: transparent; }
+:where(html[data-theme="macos"]) .cal-ev { border-left-width: 3px; border-radius: 10px; }
+:where(html[data-theme="macos"]) .cal-hour .slot:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .cal-badge { background: var(--cat-system-bg); }
+:where(html[data-theme="macos"]) .cal-form { border-color: var(--line); background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .cal-kinds span { border-color: transparent; background: var(--mac-fill); }
+
+/* ---------- tasks ---------- */
+:where(html[data-theme="macos"]) .tcol { background: color-mix(in srgb, var(--c) 5%, var(--mac-fill)); border-color: var(--mac-hair); border-radius: 18px; }
+:where(html[data-theme="macos"]) .tcol-more { border-radius: 50%; }
+:where(html[data-theme="macos"]) :is(.tcol-more:hover, .tcol-more[aria-expanded="true"]) { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .tcol-add { border-color: var(--line); }
+:where(html[data-theme="macos"]) .tcol-add:hover { border-color: var(--accent); background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .task { border-color: transparent; border-radius: 14px; box-shadow: 0 0 0 .5px var(--line), 0 2px 8px rgba(0, 0, 0, .05); }
+:where(html[data-theme="macos"]) .task:hover { border-color: transparent; box-shadow: 0 0 0 .5px var(--line), 0 6px 18px rgba(0, 0, 0, .1); }
+:where(html[data-theme="macos"]) .task.sel { border-color: transparent; box-shadow: 0 0 0 2px var(--accent), 0 6px 18px rgba(0, 0, 0, .1); }
+:where(html[data-theme="macos"]) .tchk.on { background: #34C759; border-color: #34C759; }
+:where(html[data-theme="macos"]) .tmark.p2 { background: #FF3B30; color: #fff; }
+:where(html[data-theme="macos"]) .tmark.p1 { background: color-mix(in srgb, #FF9500 18%, var(--surface)); color: color-mix(in srgb, #FF9500 70%, var(--ink)); }
+:where(html[data-theme="macos"]) .tmark.due.today { background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .tmini span { background: #34C759; }
+:where(html[data-theme="macos"]) .task-add:hover { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) :is(.task-input, .tcol-in) { border-color: var(--accent); }
+/* Segmented switches: «Доска / Список / Архив», «Текст / Тайминги / Кратко» */
+:where(html[data-theme="macos"]) :is(.tview, .tr-seg) { border: 0; border-radius: 999px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) :is(.tview button, .tr-seg button) { border-radius: 999px; }
+:where(html[data-theme="macos"]) :is(.tview button[aria-pressed="true"], .tr-seg button[aria-pressed="true"]) { background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); font-weight: 600; }
+:where(html[data-theme="macos"]) :is(.tsearch, .tsel, .tr-search, .tr-mbtn) { border-color: transparent; border-radius: 10px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) :is(.tsearch:focus-within, .tr-search:focus-within) { border-color: color-mix(in srgb, var(--mac-acc) 70%, transparent); box-shadow: 0 0 0 3px var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .tsel option { background: var(--surface); color: var(--ink); }
+:where(html[data-theme="macos"]) .trow { border-color: transparent; border-radius: 12px; box-shadow: 0 0 0 .5px var(--line); }
+:where(html[data-theme="macos"]) .trow:hover { border-color: transparent; box-shadow: 0 0 0 .5px var(--line), 0 4px 12px rgba(0, 0, 0, .08); }
+:where(html[data-theme="macos"]) .trow.sel { border-color: transparent; box-shadow: 0 0 0 2px var(--accent); }
+:where(html[data-theme="macos"]) :is(.tarch-info, .tlist-empty) { border-color: var(--line); }
+/* The assistant bars above the board and the calendar: a field like Spotlight */
+:where(html[data-theme="macos"]) .tbar { border-color: transparent; border-radius: 24px; box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--line), 0 6px 20px rgba(0, 0, 0, .06); }
+:where(html[data-theme="macos"]) .tbar:focus-within { border-color: transparent; box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 1px color-mix(in srgb, var(--mac-acc) 60%, transparent), 0 0 0 4px var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .tbar-ico { border-radius: 50%; background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .tbar-model { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tbar-send { border-radius: 50%; }
+/* Notifications of the tasks assistant */
+:where(html[data-theme="macos"]) .tnote {
+  border: .5px solid var(--mac-hair); border-radius: 18px; background: var(--mac-menu);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow: inset 0 .5px 0 var(--mac-edge), var(--pop-shadow);
+}
+:where(html[data-theme="macos"]) .tnote-ico { border-radius: 50%; background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .tnote::after { background: color-mix(in srgb, var(--mac-acc) 60%, transparent); }
+:where(html[data-theme="macos"]) .tnote-undo { border: 0; border-radius: 999px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tnote-undo:hover { background: var(--mac-fill-2); }
+/* The task panel on the right */
+:where(html[data-theme="macos"]) .tpanel {
+  border-left: .5px solid var(--mac-hair); background: var(--mac-sheet);
+  -webkit-backdrop-filter: blur(40px) saturate(1.8); backdrop-filter: blur(40px) saturate(1.8);
+  box-shadow: -18px 0 40px -24px rgba(0, 0, 0, .35);
+}
+:where(html[data-theme="macos"]) :is(.tp-head, .tp-foot) { border-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .tp-close { border-radius: 50%; }
+:where(html[data-theme="macos"]) .tp-close:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tp-title:focus { border-color: color-mix(in srgb, var(--mac-acc) 70%, transparent); background: var(--surface); }
+:where(html[data-theme="macos"]) :is(.tp-select, .tp-date) { border-color: transparent; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tp-opt { border-color: transparent; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tp-opt:hover { border-color: transparent; background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .tp-opt.on { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .tp-opt.p1.on { background: #FF9500; color: #fff; }
+:where(html[data-theme="macos"]) .tp-opt.p2.on { background: #FF3B30; color: #fff; }
+:where(html[data-theme="macos"]) .tp-tag { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tp-sub:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tl-step i { background: var(--accent); }
+:where(html[data-theme="macos"]) .tl-step.done i { background: #34C759; }
+:where(html[data-theme="macos"]) .tl-total { background: var(--mac-fill); }
+
+/* ---------- transcription ---------- */
+:where(html[data-theme="macos"]) .tr-new { border-radius: 999px; }
+:where(html[data-theme="macos"]) .tr-drop { border-color: var(--line); border-radius: 22px; }
+:where(html[data-theme="macos"]) .tr-drop.over { border-color: var(--accent); background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .tr-drop .big { border-radius: 14px; background: var(--mac-acc-soft); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .tr-nokey { border: 0; border-radius: 16px; box-shadow: inset 3px 0 0 var(--accent), 0 0 0 .5px var(--line); }
+:where(html[data-theme="macos"]) .tr-tl i.on { background: var(--accent); }
+:where(html[data-theme="macos"]) .tr-tl i { background: color-mix(in srgb, var(--mac-acc) 35%, var(--surface-2)); }
+:where(html[data-theme="macos"]) :is(.tr-tabs, .tr-acts, .tr-gone) { border-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .tr-text { border-color: transparent; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tr-text:focus { border-color: color-mix(in srgb, var(--mac-acc) 70%, transparent); background: var(--surface); }
+:where(html[data-theme="macos"]) .tr-cue:hover { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tr-cue.now { background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) :is(.tr-open:hover, .tr-item.on .tr-open) { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .tr-item.on .tr-open { background: var(--mac-acc-soft); }
+:where(html[data-theme="macos"]) .tr-who { color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .tr-sum-empty { border-color: var(--line); }
+
+/* ---------- generator: glass cards with a soft glow in the corner ---------- */
+:where(html[data-theme="macos"]) .gen-card { position: relative; overflow: hidden; border-radius: 22px; }
+:where(html[data-theme="macos"]) .gen-card::after { content: ""; position: absolute; right: -50px; bottom: -70px; width: 240px; height: 240px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 28%, transparent), transparent 70%); pointer-events: none; }
+:where(html[data-theme="macos"]) .gen-ico { border-radius: 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 68%, #fff), var(--c)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 4px 12px color-mix(in srgb, var(--c) 32%, transparent); }
+:where(html[data-theme="macos"]) .gen-soon { background: var(--mac-fill); }
+
+/* ---------- «Снимки» (screenshots.css loads before this file) ---------- */
+:where(html[data-theme="macos"]) .capture-nav { border: 0; border-radius: 12px; background: var(--mac-raised); box-shadow: var(--mac-raise-shadow); }
+:where(html[data-theme="macos"]) .capture-nav:hover { background: var(--mac-raised-hover); color: var(--ink); }
+:where(html[data-theme="macos"]) .capture-nav[aria-current="page"] { background: var(--mac-raised-hover); color: var(--accent-strong); }
+:where(html[data-theme="macos"]) .capture-nav kbd { padding: 1px 6px; border-radius: 6px; background: var(--mac-fill); font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-soft); }
+:where(html[data-theme="macos"]) .capture-shortcut-notice { border-color: var(--accent); border-radius: 12px; }
+:where(html[data-theme="macos"]) .capture-shortcut-value { border-color: transparent; border-radius: 8px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) :is(.capture-app button, .capture-app select) { border-color: transparent; border-radius: 9px; background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .capture-app button:hover { background: var(--mac-fill-2); }
+:where(html[data-theme="macos"]) .capture-app button.primary {
+  border-radius: 12px; color: var(--accent-ink); font-weight: 600;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 80%, #fff), var(--mac-acc));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 0 0 .5px color-mix(in srgb, var(--mac-acc) 70%, #000), 0 4px 14px color-mix(in srgb, var(--mac-acc) 28%, transparent);
+}
+:where(html[data-theme="macos"]) .capture-app button.primary:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--mac-acc) 72%, #fff), color-mix(in srgb, var(--mac-acc) 92%, #fff)); }
+:where(html[data-theme="macos"]) .capture-app .shot-actions { border-bottom-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .capture-app button.shot-key-btn { background: var(--mac-fill); }
+:where(html[data-theme="macos"]) .capture-app .shot-pop {
+  border: .5px solid var(--mac-hair); border-radius: 14px; background: var(--mac-menu);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8); backdrop-filter: blur(30px) saturate(1.8); box-shadow: inset 0 .5px 0 var(--mac-edge), var(--pop-shadow);
+}
+:where(html[data-theme="macos"]) .capture-app .shot-card { border-color: var(--line); border-radius: 14px; box-shadow: 0 2px 8px rgba(0, 0, 0, .05); }
+:where(html[data-theme="macos"]) .capture-app .shot-card.active { border-color: transparent; background: var(--surface); box-shadow: 0 0 0 2px var(--accent), 0 4px 14px color-mix(in srgb, var(--mac-acc) 20%, transparent); }
+:where(html[data-theme="macos"]) .capture-app .shot-work { border-color: var(--line); border-radius: 20px; box-shadow: var(--shadow); }
+:where(html[data-theme="macos"]) .capture-app .shot-bar { border-bottom-color: var(--mac-hair); }
+:where(html[data-theme="macos"]) .capture-app .shot-tools button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+:where(html[data-theme="macos"]) .capture-app input[type="range"] { accent-color: var(--mac-acc); }
+/* Under the picture: a checkerboard, as in Preview */
+:where(html[data-theme="macos"]) .capture-app .shot-stage { background: repeating-conic-gradient(var(--mac-fill) 0 25%, transparent 0 50%) 0 0 / 18px 18px, var(--surface); }
+:where(html[data-theme="macos"]) .capture-app .shot-toast { border: 0; border-radius: 14px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+
+@media (prefers-reduced-motion: reduce) {
+  :where(html[data-theme="macos"]) .cal-cell:hover { transform: none; }
+}

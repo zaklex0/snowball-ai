@@ -1,0 +1,84 @@
+/* Theme "Zaklex" for the «Снимки» section; was at the end of src/screenshots.css until 1.18.0. */
+:where(html[data-theme='zaklex']) .capture-shortcut-value {
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-shortcut-label,
+:where(html[data-theme='zaklex']) .capture-shortcut-message {
+  color: var(--zx-paper);
+}
+:where(html[data-theme='zaklex']) .capture-shortcut-message.error {
+  border-left: 3px solid var(--zx-red);
+  padding-left: 8px;
+}
+:where(html[data-theme='zaklex']) .capture-app button,
+:where(html[data-theme='zaklex']) .capture-app .shot-card,
+:where(html[data-theme='zaklex']) .capture-app .shot-work,
+:where(html[data-theme='zaklex']) .capture-nav {
+  border-radius: 0;
+}
+/* Zaklex uses the brand palette and hard shadows, with cream small text. */
+:where(html[data-theme='zaklex']) .capture-app button.shot-capture {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--zx-red);
+  color: var(--zx-paper);
+  box-shadow: 4px 4px 0 var(--zx-cyan);
+  border: 0;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+:where(html[data-theme='zaklex']) .capture-app button.shot-capture:hover {
+  background: var(--zx-deep);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-capture-icon {
+  display: block;
+  font-size: 20px;
+  line-height: 1;
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-pop {
+  border-radius: 0;
+  box-shadow: 5px 5px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-key-btn > span,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-btn kbd::after,
+:where(html[data-theme='zaklex']) .capture-app .shot-size,
+:where(html[data-theme='zaklex']) .capture-app .shot-library > p,
+:where(html[data-theme='zaklex']) .capture-app .shot-status,
+:where(html[data-theme='zaklex']) .capture-app .shot-tip,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-state,
+:where(html[data-theme='zaklex']) .capture-app .shot-count,
+:where(html[data-theme='zaklex']) .capture-app button.shot-delete {
+  color: var(--zx-paper);
+}
+:where(html[data-theme='zaklex']) .capture-app button.shot-delete:hover {
+  color: var(--zx-paper);
+  background: var(--zx-deep);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-status.error,
+:where(html[data-theme='zaklex']) .capture-app .shot-key-state.error {
+  border-left: 4px solid var(--zx-red);
+  padding-left: 10px;
+  color: var(--zx-paper);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-work {
+  box-shadow: 5px 5px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-card.active {
+  box-shadow: 3px 3px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-stage {
+  background-image: var(--zx-dots);
+  background-size: 12px 12px;
+}
+:where(html[data-theme='zaklex']) .capture-app .shot-toast {
+  border-radius: 0;
+  box-shadow: 5px 5px 0 var(--zx-cyan);
+}
+:where(html[data-theme='zaklex']) .capture-shortcut-notice {
+  color: var(--zx-paper);
+  border-radius: 0;
+  border-color: var(--zx-cyan);
+}

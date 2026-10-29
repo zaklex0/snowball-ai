@@ -18,8 +18,13 @@ const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 40;
 const SIDEBAR_WIDTH = 236;   // .side in styles.css; a window with one moved tab has no sidebar
 // "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
-// "zaklex" is a dark theme in the SHAPE MOTION style (src/theme-zaklex.css).
-const THEMES = ['system', 'light', 'dark', 'white', 'black', 'zaklex'];
+// "macos" (beta) is the macOS look with glass (src/theme-macos.css): its accent colour and light/dark come from
+// settings.macAccent and settings.macLook. "zaklex" was here until 1.17.1 (now in archive/theme-zaklex).
+const THEMES = ['system', 'light', 'dark', 'white', 'black', 'macos'];
+const MAC_ACCENTS = ['peach', 'blue', 'purple', 'pink', 'red', 'yellow', 'green', 'graphite'];
+const MAC_LOOKS = ['system', 'light', 'dark'];
+// Windows 11 22H2 and newer draw a blurred desktop behind the window (acrylic); older Windows get a painted background.
+const GLASS_OK = IS_WIN && Number(os.release().split('.')[2]) >= 22621;
 // What a tab on top of the window can show. LLM ("assistant") tabs may be open many times, one conversation each.
 const TAB_KINDS = ['home', 'prompts', 'calendar', 'tasks', 'assistant', 'transcribe', 'screenshots', 'generator', 'stats'];
 
@@ -120,22 +125,35 @@ async function openStore() {
 /* ---------- window ---------- */
 // 'system' follows Windows; the page's prefers-color-scheme and the title bar follow this too.
 function currentTheme() { return THEMES.includes(settings.theme) ? settings.theme : 'system'; }
+function macAccent() { return MAC_ACCENTS.includes(settings.macAccent) ? settings.macAccent : 'peach'; }
+function macLook() { return MAC_LOOKS.includes(settings.macLook) ? settings.macLook : 'system'; }
+// The removed "Zaklex" was a dark theme: its users get the dark macOS look instead.
+function migrateTheme(s) {
+  if (s.theme !== 'zaklex') return;
+  s.theme = 'macos';
+  if (!s.macLook) s.macLook = 'dark';
+}
 function applyTheme() {
   const t = currentTheme();
-  nativeTheme.themeSource = t === 'black' || t === 'zaklex' ? 'dark' : t === 'white' ? 'light' : t;
+  nativeTheme.themeSource = t === 'black' ? 'dark' : t === 'white' ? 'light' : t === 'macos' ? macLook() : t;
 }
+// The window shows the blurred desktop through the page (the macOS theme on Windows 11).
+function glassOn() { return GLASS_OK && currentTheme() === 'macos'; }
 
 // Title bar and window background for each theme (the page draws the rest).
+// macOS: the Windows buttons have no plate of their own, they sit on the glass like the rest of the bar.
 const WINDOW_COLORS = {
   light: { bar: '#F9E3D4', symbol: '#4B3128', bg: '#FCEEE4' },
   dark: { bar: '#2C201B', symbol: '#F5E6DC', bg: '#251B17' },
   white: { bar: '#F7F7F8', symbol: '#1F1F23', bg: '#FFFFFF' },
   black: { bar: '#000000', symbol: '#F2F2F2', bg: '#000000' },
-  zaklex: { bar: '#14110F', symbol: '#F0E3CE', bg: '#14110F' }
+  'macos-light': { bar: '#00000000', symbol: '#1D1D1F', bg: '#EDEDF0' },
+  'macos-dark': { bar: '#00000000', symbol: '#F5F5F7', bg: '#1E1E21' }
 };
 function windowColors() {
-  const t = currentTheme();
-  return WINDOW_COLORS[t === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : t];
+  const t = currentTheme(), dark = nativeTheme.shouldUseDarkColors;
+  if (t === 'macos') return WINDOW_COLORS[dark ? 'macos-dark' : 'macos-light'];
+  return WINDOW_COLORS[t === 'system' ? (dark ? 'dark' : 'light') : t];
 }
 // dim: a dialog is open over the window, so the page is darkened by its backdrop (see ::backdrop in styles.css); the Windows
 // buttons are drawn by the system above the page and are not darkened by it, so they get the same shade here.
@@ -146,11 +164,16 @@ function shade(hex, dark, a) {
 function overlayColors(dim) {
   const c = windowColors();
   if (!dim) return { color: c.bar, symbolColor: c.symbol, height: TITLEBAR_HEIGHT };
-  const zaklex = currentTheme() === 'zaklex', dark = zaklex ? [20, 17, 15] : [30, 18, 12], a = zaklex ? 0.72 : 0.55;
-  return { color: shade(c.bar, dark, a), symbolColor: shade(c.symbol, dark, a), height: TITLEBAR_HEIGHT };
+  // macOS: the bar is see-through, so it gets the same light veil as the page under a dialog (::backdrop in theme-macos.css)
+  if (currentTheme() === 'macos') return { color: '#0000002E', symbolColor: shade(c.symbol, [0, 0, 0], 0.18), height: TITLEBAR_HEIGHT };
+  return { color: shade(c.bar, [30, 18, 12], 0.55), symbolColor: shade(c.symbol, [30, 18, 12], 0.55), height: TITLEBAR_HEIGHT };
 }
 const dimmedWins = new WeakSet();
-function bgColor() { return windowColors().bg; }
+function bgColor() { return glassOn() ? '#00000000' : windowColors().bg; }
+function setGlass(w) {
+  if (!GLASS_OK) return;
+  try { w.setBackgroundMaterial(glassOn() ? 'acrylic' : 'none'); } catch (e) { /* older Windows */ }
+}
 
 function visibleBounds(b) {
   if (!b || !b.width || !b.height) return null;
@@ -173,6 +196,7 @@ function broadcast(channel, data, except) {
 function paintWindows() {
   if (captures) captures.theme();
   liveWins().forEach((w) => {
+    setGlass(w);
     w.setBackgroundColor(bgColor());
     if (IS_WIN) { try { w.setTitleBarOverlay(overlayColors(dimmedWins.has(w))); } catch (e) { /* older Windows */ } }
   });
@@ -191,6 +215,7 @@ function createWindow(opts) {
     title: APP_TITLE,
     show: false,
     backgroundColor: bgColor(),
+    ...(glassOn() ? { backgroundMaterial: 'acrylic' } : {}),
     icon: path.join(__dirname, 'assets', 'icon.png'),
     autoHideMenuBar: true,
     titleBarStyle: IS_WIN ? 'hidden' : 'default',
@@ -474,7 +499,7 @@ function syncOthers(r, except) {
   broadcast('sync', data, except);
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), captureShortcut: settings.captureShortcut || 'Alt+Z', captureNotice: captures ? captures.state().shortcutNotice : '', tabs: tabsSetting(), assistant: assistantInfo() };
+  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), macAccent: macAccent(), macLook: macLook(), glass: glassOn(), captureShortcut: settings.captureShortcut || 'Alt+Z', captureNotice: captures ? captures.state().shortcutNotice : '', tabs: tabsSetting(), assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -580,6 +605,19 @@ handle('set-theme', async (theme) => {
   saveSettings();
   return { ok: true, info: info() };
 });
+// «Тема › macOS ›»: the accent colour and light/dark of the macOS theme; choosing either also turns the theme on.
+handle('set-mac-style', async (style) => {
+  const s = style && typeof style === 'object' ? style : {};
+  if (s.accent !== undefined && !MAC_ACCENTS.includes(s.accent)) return { ok: false, error: 'Такого цвета нет.' };
+  if (s.look !== undefined && !MAC_LOOKS.includes(s.look)) return { ok: false, error: 'Такого оформления нет.' };
+  if (s.accent) settings.macAccent = s.accent;
+  if (s.look) settings.macLook = s.look;
+  settings.theme = 'macos';
+  applyTheme();
+  paintWindows();
+  saveSettings();
+  return { ok: true, info: info() };
+});
 
 // The tabs on top of the window, so they come back after a restart: [{ kind, chatId? }] and which one is open.
 function tabsSetting() {
@@ -674,7 +712,7 @@ handle('change-data-dir', async () => {
 // Both are zip archives (archive.js) with manifest.json on top; API keys never go into them.
 const BACKUP_EXT = 'snowball';
 const SHARE_EXT = 'snowprompt';
-const SETTINGS_IN_BACKUP = ['theme', 'assistantModel', 'assistantEffort', 'confirm', 'notify'];
+const SETTINGS_IN_BACKUP = ['theme', 'macAccent', 'macLook', 'assistantModel', 'assistantEffort', 'confirm', 'notify'];
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 function manifest(kind, counts) {
   return { name: 'manifest.json', data: JSON.stringify({ format: kind === 'backup' ? 'snowball-backup' : 'snowball-prompts', version: 1, app: app.getVersion(), createdAt: new Date().toISOString(), counts }, null, 2) };
@@ -753,6 +791,7 @@ async function openArchive(file) {
       try { look = JSON.parse(await fsp.readFile(path.join(tmp, 'settings.json'), 'utf8')); } catch (e) { look = null; }
       if (look && typeof look === 'object') {
         SETTINGS_IN_BACKUP.forEach((k) => { if (look[k] !== undefined) settings[k] = look[k]; });
+        migrateTheme(settings);
         if (!THEMES.includes(settings.theme)) settings.theme = 'system';
         applyTheme();
         paintWindows();
@@ -2694,6 +2733,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     loadSettings();
+    if (settings.theme === 'zaklex') { migrateTheme(settings); saveSettings(true); }
     loadKeys();
     applyTheme();
     try { await migrateLegacy(); } catch (e) { console.error('migrate', e); }
@@ -2705,7 +2745,8 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     pendingArchive = archiveFromArgs(process.argv);
-    captures = setupScreenshots({ dir: () => store.dir, theme: () => settings.theme || 'system', key: () => settings.captureShortcut,
+    // The editor window gets "macos:<accent>" for the macOS theme (src/screenshots.js splits it).
+    captures = setupScreenshots({ dir: () => store.dir, theme: () => (currentTheme() === 'macos' ? 'macos:' + macAccent() : currentTheme()), key: () => settings.captureShortcut,
       initialized: () => !!settings.captureShortcutInitialized,
       saveKey: key => { settings.captureShortcut = key; settings.captureShortcutInitialized = true; saveSettings(true); },
       record: async () => { await store.recordScreenshot(); broadcast('sync', { activity: store.activityView() }); } });

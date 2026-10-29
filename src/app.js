@@ -866,7 +866,7 @@
 
     if (state.info) {
       els.setDir.replaceChildren(h("span", { class: "ico", html: ICONS.folder, "aria-hidden": "true" }), h("code", { text: state.info.dataDir }));
-      markTheme(state.info.theme);
+      markTheme(state.info);
       renderAssistantSettings();
     }
 
@@ -1544,14 +1544,22 @@
     if (open) { var f = els.menu.querySelector("button"); if (f) f.focus(); }
   }
   // "Тема ›" and "Промты ›" open a second list to the right: on hover, on click or with the right arrow.
+  // Inside "Тема" the "macOS ›" item opens a third list (accent and light/dark); opening it keeps "Тема" open.
+  function subWrap(name) { var b = name && els.menu.querySelector(".has-sub[data-sub=\"" + name + "\"]"); return b ? b.closest(".sub-wrap") : null; }
+  function parentSub(w) { var p = w && w.parentElement.closest(".sub-wrap"); return p ? p.querySelector(".has-sub").dataset.sub : null; }
   function openSub(name, focusFirst) {
+    var target = subWrap(name);
     els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
-      var btn = w.querySelector(".has-sub"), on = !!name && btn.dataset.sub === name;
+      var btn = w.querySelector(".has-sub"), on = !!target && w.contains(target), was = w.classList.contains("open");
       w.classList.toggle("open", on);
       btn.setAttribute("aria-expanded", String(on));
-      if (on) fitSubmenu(w.querySelector(".submenu"));
-      if (on && focusFirst) { var f = w.querySelector(".submenu button[aria-checked=\"true\"]") || w.querySelector(".submenu button"); if (f) f.focus(); }
+      if (on && !was) fitSubmenu(w.querySelector(".submenu"));
     });
+    if (target && focusFirst) {
+      var list = target.querySelector(".submenu");
+      var f = list.querySelector(":scope > button[aria-checked=\"true\"], :scope > .sub-wrap > .has-sub[aria-checked=\"true\"], :scope > [role=\"group\"] > button[aria-checked=\"true\"]") || list.querySelector("button");
+      if (f) f.focus();
+    }
   }
   // The profile menu sits at the bottom of the window, so a list opened downwards could go under the Windows
   // taskbar. After opening, a list that does not fit moves up (or down) just enough to be fully visible.
@@ -1570,19 +1578,26 @@
   // only after a short pause: on the way it stays open. A hidden bridge in styles.css covers the gap.
   var subTimer = null;
   function subLater(fn, ms) { clearTimeout(subTimer); subTimer = setTimeout(fn, ms); }
-  function openSubName() { var b = els.menu.querySelector(".sub-wrap.open .has-sub"); return b ? b.dataset.sub : null; }
+  // The deepest open list (the third one when "macOS ›" is open).
+  function openSubWrap() { var all = els.menu.querySelectorAll(".sub-wrap.open"); return all.length ? all[all.length - 1] : null; }
   els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
     var name = w.querySelector(".has-sub").dataset.sub;
     w.addEventListener("mouseenter", function () {
-      var open = openSubName();
-      if (!open || open === name) { clearTimeout(subTimer); openSub(name); }
+      var open = openSubWrap();
+      // A list inside the open one (or the open one itself) opens at once; a list elsewhere waits a moment.
+      if (!open || open === w || open.contains(w)) { clearTimeout(subTimer); openSub(name); }
       else subLater(function () { openSub(name); }, 260);
     });
-    w.addEventListener("mouseleave", function () { subLater(function () { if (!w.contains(document.activeElement)) openSub(null); }, 350); });
+    // Leaving a list goes back to the list it sits in (or closes all for a top one).
+    w.addEventListener("mouseleave", function () { subLater(function () { if (!w.contains(document.activeElement)) openSub(parentSub(w)); }, 350); });
     w.querySelector(".has-sub").addEventListener("click", function () { clearTimeout(subTimer); openSub(name, true); });
   });
-  els.menu.querySelectorAll(":scope > button, :scope > hr").forEach(function (b) {
-    b.addEventListener("mouseenter", function () { subLater(function () { openSub(null); }, 260); });
+  // Plain items of a list close the lists opened from it.
+  [els.menu].concat(Array.prototype.slice.call(els.menu.querySelectorAll(".submenu"))).forEach(function (list) {
+    var own = list === els.menu ? null : list.closest(".sub-wrap").querySelector(".has-sub").dataset.sub;
+    list.querySelectorAll(":scope > button, :scope > hr, :scope > p, :scope > [role=\"group\"]").forEach(function (b) {
+      b.addEventListener("mouseenter", function () { subLater(function () { openSub(own); }, 260); });
+    });
   });
   els.menuBtn.addEventListener("click", function () { setMenu(els.menu.hidden); });
   document.addEventListener("mousedown", function (e) {
@@ -1591,31 +1606,43 @@
   els.menu.addEventListener("keydown", function (e) {
     var sub = document.activeElement && document.activeElement.closest(".submenu");
     var scope = sub || els.menu;
-    var items = Array.prototype.slice.call(scope.querySelectorAll(sub ? "button" : ":scope > button, :scope > .sub-wrap > .has-sub"));
+    var items = Array.prototype.slice.call(scope.querySelectorAll(":scope > button, :scope > .sub-wrap > .has-sub, :scope > [role=\"group\"] > button"));
     var i = items.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); setMenu(false); els.menuBtn.focus(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
     else if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); openSub(document.activeElement.dataset.sub, true); }
-    else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); var w = sub.closest(".sub-wrap"); openSub(null); w.querySelector(".has-sub").focus(); }
+    else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); var w = sub.closest(".sub-wrap"); openSub(parentSub(w)); w.querySelector(".has-sub").focus(); }
   });
-  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная", zaklex: "Zaklex" };
-  function markTheme(theme) {
-    var t = theme || "system";
+  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная", macos: "macOS" };
+  // info: theme, and for "macos" its accent colour (macAccent), light/dark (macLook) and whether the window is glass.
+  function markTheme(info) {
+    var t = (info && info.theme) || "system", root = document.documentElement;
     els.menu.querySelectorAll("button[data-theme]").forEach(function (b) {
       b.setAttribute("aria-checked", String(b.dataset.theme === t));
     });
+    els.menu.querySelectorAll("button[data-accent]").forEach(function (b) {
+      b.setAttribute("aria-checked", String(t === "macos" && b.dataset.accent === info.macAccent));
+    });
+    els.menu.querySelectorAll("button[data-look]").forEach(function (b) {
+      b.setAttribute("aria-checked", String(b.dataset.look === ((info && info.macLook) || "system")));
+    });
     els.themeValue.textContent = THEME_NAMES[t] || "";
     // "Белая" and "Чёрная" are colour sets on top of the light and dark ones (styles.css, :root[data-theme]);
-    // "Zaklex" sits on top of the dark one and also changes shapes and fonts (theme-zaklex.css).
-    if (t === "white" || t === "black" || t === "zaklex") document.documentElement.dataset.theme = t;
-    else delete document.documentElement.dataset.theme;
+    // "macOS" changes surfaces, shapes and the accent (theme-macos.css); with glass the desktop shows through the window.
+    if (t === "white" || t === "black" || t === "macos") root.dataset.theme = t;
+    else delete root.dataset.theme;
+    if (t === "macos") root.dataset.accent = info.macAccent || "peach";
+    else delete root.dataset.accent;
+    root.classList.toggle("glass", !!(info && info.glass));
   }
   // Theme items keep the menu open, so the change can be seen right away.
   els.menu.addEventListener("click", function (e) {
-    var b = e.target.closest("button[data-theme]");
+    var b = e.target.closest("button[data-theme], button[data-accent], button[data-look]");
     if (!b) return;
-    call(api.setTheme(b.dataset.theme)).then(function (r) { if (r) markTheme(r.info.theme); });
+    var req = b.dataset.theme ? api.setTheme(b.dataset.theme)
+      : api.setMacStyle(b.dataset.accent ? { accent: b.dataset.accent } : { look: b.dataset.look });
+    call(req).then(function (r) { if (r) markTheme(r.info); });
   });
   els.menu.addEventListener("click", function (e) {
     var b = e.target.closest("button[data-action]");

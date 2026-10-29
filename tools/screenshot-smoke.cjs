@@ -161,20 +161,21 @@ async function draw(page, tool, from, to) {
   const full = (await page.ev('window.vsApi.captureList()')).items[0]; assert.deepEqual({ width: full.width, height: full.height }, fullSize);
   await main.ev('shotCovers.forEach(w=>w.destroy());true');
   // Main app remains intact; changing theme also updates the standalone editor.
-  await page.ev("window.vsApi.setTheme('zaklex')");
-  await editor.until("document.documentElement.dataset.theme==='zaklex'");
+  await page.ev("window.vsApi.setMacStyle({ accent: 'blue' })");
+  await editor.until("document.documentElement.dataset.theme==='macos' && document.documentElement.dataset.accent==='blue'");
   const out = process.argv[2] || tmp; fs.mkdirSync(out, { recursive: true });
-  for (const theme of ['system', 'light', 'dark', 'white', 'black', 'zaklex']) {
+  for (const theme of ['system', 'light', 'dark', 'white', 'black', 'macos']) {
     await page.ev(`document.querySelector('button[data-theme="${theme}"]').click()`); await page.sleep(150);
     const bg = "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()";
     assert.equal(await page.ev(bg), await editor.ev(bg), theme + ' differs between windows');
-    if (theme === 'zaklex') {
-      // The capture button is a full-width red bar at the top of the left column.
-      assert.deepEqual(await editor.ev("(()=>{const b=document.querySelector('.shot-capture'),r=b.getBoundingClientRect(),l=document.querySelector('.shot-library').getBoundingClientRect();return [Math.round(r.width)===Math.round(l.width),getComputedStyle(b).backgroundColor,getComputedStyle(document.querySelector('.shot-tip')).color]})()"), [true,'rgb(225, 51, 43)','rgb(240, 227, 206)']);
+    if (theme === 'macos') {
+      // The capture button is a full-width accent bar at the top of the left column, in both windows the same blue.
+      const acc = "(()=>{const b=document.querySelector('.shot-capture'),r=b.getBoundingClientRect(),l=document.querySelector('.shot-library').getBoundingClientRect();return [Math.round(r.width)===Math.round(l.width),getComputedStyle(document.documentElement).getPropertyValue('--mac-acc').trim()]})()";
+      assert.deepEqual(await editor.ev(acc), await page.ev(acc));
     }
     for (const [name,target] of [['main',page],['editor',editor]]) { const png=await target.send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(out,`theme-${theme}-${name}.png`),Buffer.from(png.result.data,'base64')); }
   }
-  for (const [name, target] of [['screenshots-zaklex', editor], ['screenshots-light', page]]) {
+  for (const [name, target] of [['screenshots-macos', editor], ['screenshots-light', page]]) {
     if (name === 'screenshots-light') { await page.ev("document.querySelector('button[data-theme=light]').click()"); await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`); }
     await target.sleep(250);
     const fit = await target.ev("(() => {const canvas=document.querySelector('.shot-stage canvas').getBoundingClientRect(),stage=document.querySelector('.shot-stage').getBoundingClientRect(),viewport=document.querySelector('.scroller')?.getBoundingClientRect() || document.body.getBoundingClientRect();return {canvasBottom:canvas.bottom,stageBottom:stage.bottom,viewportBottom:viewport.bottom,canvasWidth:canvas.width,stageWidth:stage.width}})()");

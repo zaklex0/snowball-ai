@@ -7,8 +7,8 @@
 <title>Snowball.ai</title>
 <link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="theme-zaklex.css">
 <link rel="stylesheet" href="screenshots.css">
+<link rel="stylesheet" href="theme-macos.css">
 </head>
 <body>
 <div class="app">
@@ -82,9 +82,32 @@
                 <button type="button" role="menuitemradio" aria-checked="false" data-theme="black">
                   <span class="theme-swatch sw-black" aria-hidden="true"></span>Чёрная <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
                 </button>
-                <button type="button" role="menuitemradio" aria-checked="false" data-theme="zaklex">
-                  <span class="theme-swatch sw-zaklex" aria-hidden="true"></span>Zaklex <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
-                </button>
+                <hr>
+                <div class="sub-wrap">
+                  <button type="button" role="menuitemradio" aria-checked="false" class="has-sub" aria-haspopup="true" aria-expanded="false" data-sub="macos" data-theme="macos">
+                    <span class="theme-swatch sw-macos" aria-hidden="true"></span>macOS <span class="alpha">Бета</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><svg class="sub-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+                  </button>
+                  <div class="menu submenu mac-sub" role="menu" aria-label="Тема macOS" data-sub-of="macos">
+                    <p class="menu-label">Оформление</p>
+                    <div class="mac-look" role="group" aria-label="Оформление">
+                      <button type="button" role="menuitemradio" aria-checked="false" data-look="system" title="Светлое или тёмное, как в Windows">Как в Windows</button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-look="light">Светлое</button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-look="dark">Тёмное</button>
+                    </div>
+                    <p class="menu-label">Акцент</p>
+                    <div role="group" aria-label="Акцент">
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="peach"><span class="acc-dot acc-peach" aria-hidden="true"></span>Персиковый <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="blue"><span class="acc-dot acc-blue" aria-hidden="true"></span>Синий <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="purple"><span class="acc-dot acc-purple" aria-hidden="true"></span>Фиолетовый <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="pink"><span class="acc-dot acc-pink" aria-hidden="true"></span>Розовый <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="red"><span class="acc-dot acc-red" aria-hidden="true"></span>Красный <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="yellow"><span class="acc-dot acc-yellow" aria-hidden="true"></span>Жёлтый <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="green"><span class="acc-dot acc-green" aria-hidden="true"></span>Зелёный <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                      <button type="button" role="menuitemradio" aria-checked="false" data-accent="graphite"><span class="acc-dot acc-graphite" aria-hidden="true"></span>Графит <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                    </div>
+                    <p class="mac-note">Тема в бета-версии: будет дорабатываться.</p>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="sub-wrap">

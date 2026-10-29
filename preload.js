@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   pickAvatar: () => ipcRenderer.invoke('pick-avatar'),
   saveProfile: (input) => ipcRenderer.invoke('save-profile', input),
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
+  setMacStyle: (style) => ipcRenderer.invoke('set-mac-style', style),
   setTabs: (tabs) => ipcRenderer.invoke('set-tabs', tabs),
   windowOpen: (tabs, mode, point) => ipcRenderer.invoke('window-open', tabs, mode, point),
   windowReturn: (tab, x) => ipcRenderer.invoke('window-return', tab, x),
