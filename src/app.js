@@ -1911,7 +1911,7 @@
     if (r.whatsNew && upd.currentNotes) {
       var g = guideByVersion(r.whatsNew, r.whatsNewFrom), gNew = g && guideFresh(g.version, r.whatsNew, r.whatsNewFrom);
       showBanner("Snowball.ai обновлена до версии " + r.whatsNew + "." + (!g ? " Посмотрите, что нового и как этим пользоваться."
-        : gNew ? " Новое: раздел «" + g.title + "». Посмотрите по картинкам, как им пользоваться."
+        : gNew ? (g.news ? " Новое: " + g.news + ". Посмотрите по картинкам, как этим пользоваться." : " Новое: раздел «" + g.title + "». Посмотрите по картинкам, как им пользоваться.")
         : " В разделе «" + g.title + "» много нового. Посмотрите по картинкам, что изменилось."), {
         label: g ? "Как пользоваться" : "Что нового", close: "Понятно",
         onclick: function () { els.banner.hidden = true; if (g) openGuide(g); else openUpdates(true); },
@@ -5377,13 +5377,19 @@
         })),
         h("span", { class: "gd-count", text: "Шаг " + (gd.step + 1) + " из " + g.steps.length }),
         h("button", { type: "button", class: "btn btn-ghost", disabled: first ? "disabled" : null, onclick: function () { guideGo(-1); } }, "Назад"),
-        last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () { gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close(); setPage(g.section); } }, "Открыть раздел «" + g.title + "»")
+        // The guide of the macOS theme has no section of its own: its last button opens «Тема» in the profile menu.
+        last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () {
+          gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close();
+          if (g.section === "theme") { setMenu(true); openSub("theme", true); } else setPage(g.section);
+        } }, g.section === "theme" ? "Открыть меню «Тема»" : "Открыть раздел «" + g.title + "»")
           : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
   }
   // Delegation also covers guide buttons in sections mounted after the app starts.
   document.addEventListener('click', function (event) {
     var button = event.target.closest('[data-guide]');
-    if (button) { var g = guideOfSection(button.dataset.guide); if (g) openGuide(g); }
+    if (!button) return;
+    if (els.menu.contains(button)) setMenu(false);   // «Тема › macOS › Как пользоваться»
+    var g = guideOfSection(button.dataset.guide); if (g) openGuide(g);
   });
   api.onCaptureGuide(function () { var g = guideOfSection('screenshots'); if (g) openGuide(g); });
 

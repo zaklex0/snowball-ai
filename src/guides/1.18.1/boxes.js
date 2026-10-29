@@ -1,0 +1,3 @@
+// Made by tools/guide-shots/run.js: where the buttons are on each screenshot of this guide (pixels of 1280 × 820).
+window.GUIDE_BOXES = window.GUIDE_BOXES || {};
+window.GUIDE_BOXES["1.18.1"] = {"01-theme":{"profile":[10,760,161,48],"theme":[17,665,256,39],"macos":[284,766,236,39]},"01b-result":{"side":[8,8,228,804],"tab":[447,5,200,30],"tiles":[264,197,980,343],"qa":[180,756,46,46]},"02-sub":{"macos":[292,772,238,34],"look":[544,385,270,33],"accents":[540,450,278,288],"help":[540,749,278,34]},"02b-dark":{"add":[1077,140,161,35],"bar":[264,197,710,52],"nav":[78,64,28,34],"qa":[180,756,46,46]},"03-back":{"light":[292,621,238,34],"system":[292,586,238,34],"macos":[292,772,238,34]}};
