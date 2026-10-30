@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureGet: (id, token) => ipcRenderer.invoke('capture-get', id, token),
   captureSave: (id, token, value) => ipcRenderer.invoke('capture-save', id, token, value),
   captureCopy: (id, token, bytes) => ipcRenderer.invoke('capture-copy', id, token, bytes),
+  captureToLlm: (id, token, bytes) => ipcRenderer.invoke('capture-llm', id, token, bytes),
+  onCaptureLlm: fn => { const f = (_e, shot) => fn(shot); ipcRenderer.on('capture-llm', f); return () => ipcRenderer.removeListener('capture-llm', f); },
   captureStart: () => ipcRenderer.invoke('capture-start'),
   captureImport: (filePath) => ipcRenderer.invoke('capture-import', filePath),
   captureShortcut: key => ipcRenderer.invoke('capture-shortcut', key),

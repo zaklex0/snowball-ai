@@ -178,6 +178,7 @@
               <span class="shot-capture-label">Снять область</span>
             </button>
             <button data-action="import">Открыть картинку</button>
+            <button data-action="llm" title="Новый разговор в LLM, где этот снимок уже приложен">Отправить в LLM</button>
             <div class="shot-pop-wrap">
               <button class="shot-key-btn" data-pop="key" aria-expanded="false" title="Сочетание для снимка">
                 <span>Клавиши</span>
@@ -420,6 +421,7 @@
       $('[data-action="undo"]').disabled = !current?.ops.length;
       $('[data-action="redo"]').disabled = !current?.redo.length;
       $('[data-action="copy"]').disabled = !current;
+      $('[data-action="llm"]').disabled = !current;
       $('.shot-crop-actions').hidden = !current || !cropSelection;
       $('[data-action="reset-crop"]').hidden = !current?.crop;
       $('.shot-pressure-label').hidden = tool !== 'marker';
@@ -683,8 +685,9 @@
         await open(initialId && ids.has(initialId) ? initialId : items[0].id);
       initialId = null;
     }
-    async function copyShot(id) {
-      if (!(await flush())) return;
+    // The picture as it looks now: with the marks and the crop, as PNG bytes. Null if the marks could not be saved.
+    async function shotPng(id) {
+      if (!(await flush())) return null;
       let s = current;
       const t = token;
       if (!s || s.id !== id) {
@@ -694,8 +697,20 @@
       const c = rendered(s),
         blob = await new Promise((r) => c.toBlob(r, 'image/png'));
       if (!blob) throw Error('Не удалось подготовить изображение.');
-      check(await api.captureCopy(id, t, new Uint8Array(await blob.arrayBuffer())));
+      return { t, bytes: new Uint8Array(await blob.arrayBuffer()) };
+    }
+    async function copyShot(id) {
+      const png = await shotPng(id);
+      if (!png) return;
+      check(await api.captureCopy(id, png.t, png.bytes));
       status('Снимок с пометками скопирован — можно вставить через Ctrl + V');
+    }
+    // «Отправить снимок в LLM»: the main window opens a new LLM tab with this picture attached to the message box.
+    async function sendToLlm(id) {
+      const png = await shotPng(id);
+      if (!png) return;
+      check(await api.captureToLlm(id, png.t, png.bytes));
+      status('Снимок отправлен в новый разговор LLM — напишите вопрос и нажмите Enter');
     }
     const point = (e) => {
       const r = canvas.getBoundingClientRect();
@@ -884,6 +899,9 @@
     $('[data-action="redo"]').addEventListener('click', () => undo(true));
     $('[data-action="copy"]').addEventListener('click', () =>
       run(() => current && copyShot(current.id)),
+    );
+    $('[data-action="llm"]').addEventListener('click', () =>
+      run(() => current && sendToLlm(current.id)),
     );
     $('[data-action="capture"]').addEventListener('click', () =>
       run(async () => {

@@ -3284,6 +3284,12 @@
         } }));
     }));
   }
+  // «Отправить снимок в LLM» in «Снимки» (here or in the separate editor): a new LLM tab with the picture attached.
+  api.onCaptureLlm(function (shot) {
+    if (!shot || !shot.bytes) return;
+    openTab("assistant", { fresh: true });
+    addChatImages([new File([shot.bytes], (shot.name || "Снимок") + ".png", { type: "image/png" })]);
+  });
   els.chatAttach.addEventListener("click", function () { els.chatFile.value = ""; els.chatFile.click(); });
   els.chatFile.addEventListener("change", function () { if (els.chatFile.files.length) addChatImages(els.chatFile.files); });
   els.chatInput.addEventListener("paste", function (e) {

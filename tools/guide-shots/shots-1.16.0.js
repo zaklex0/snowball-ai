@@ -62,6 +62,14 @@ module.exports = async function ({ main, page, shot }) {
   await draw('focus', .64, .35, .91, .73);
   await ev('window.screenshotEditor.flush()');
   await guideShot('04-focus', { tool: '[data-tool=focus]', blur: '.shot-blur-label', image: '.shot-stage canvas', copy: '[data-action=copy]' });
+  // «Отправить в LLM»: the button, then the new LLM tab with the picture in the message box.
+  await guideShot('08-llm-button', { llm: '[data-action=llm]' });
+  await click('[data-action=llm]');
+  await until("document.querySelector('#chat-att .att-thumb:not(.loading)') && document.activeElement?.id === 'chat-input'");
+  await sleep(300);
+  await guideShot('09-llm-chat', { tab: '.tab.on', attach: '#chat-att .att-thumb', input: '#chat-input' });
+  await click('.capture-nav');
+  await until("!document.getElementById('view-screenshots').hidden");
   const deletedId = await ev("document.querySelector('.shot-card:last-child').dataset.id");
   await click('.shot-card:last-child .shot-delete');
   await until(`!document.querySelector('.shot-card[data-id=${JSON.stringify(deletedId)}]') && !document.querySelector('.shot-toast').hidden && document.querySelectorAll('.shot-card').length === 1`);

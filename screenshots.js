@@ -432,6 +432,23 @@ module.exports = function setupScreenshots(options) {
     await options.record();
     return {};
   });
+  // The picture goes to the main window, which opens a new LLM tab with it (app.js, onCaptureLlm).
+  handle('capture-llm', async (_w, id, t, bytes) => {
+    check(t);
+    const item = await storage.get(id),
+      size = pngSize(bytes);
+    const view = item.crop || item;
+    if (size.width !== view.width || size.height !== view.height)
+      throw Error('Размер изображения не совпадает со снимком.');
+    const main = options.main() || windows().find((w) => !w.__snowCapture);
+    if (!main) throw Error('Главное окно программы закрыто.');
+    if (main.isMinimized()) main.restore();
+    main.show();
+    main.focus();
+    main.webContents.send('capture-llm', { name: item.name, bytes });
+    await options.record();
+    return {};
+  });
   handle('capture-shortcut', async (w, next) => {
     if (recording && recording.window !== w) throw Error('Сочетание уже меняется в другом окне.');
     try {

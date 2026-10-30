@@ -2746,7 +2746,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     pendingArchive = archiveFromArgs(process.argv);
     // The editor window gets "macos:<accent>" for the macOS theme (src/screenshots.js splits it).
-    captures = setupScreenshots({ dir: () => store.dir, theme: () => (currentTheme() === 'macos' ? 'macos:' + macAccent() : currentTheme()), key: () => settings.captureShortcut,
+    captures = setupScreenshots({ dir: () => store.dir, main: () => (win && !win.isDestroyed() ? win : null), theme: () => (currentTheme() === 'macos' ? 'macos:' + macAccent() : currentTheme()), key: () => settings.captureShortcut,
       initialized: () => !!settings.captureShortcutInitialized,
       saveKey: key => { settings.captureShortcut = key; settings.captureShortcutInitialized = true; saveSettings(true); },
       record: async () => { await store.recordScreenshot(); broadcast('sync', { activity: store.activityView() }); } });
