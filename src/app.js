@@ -2907,10 +2907,23 @@
     kids.push(foot || cardButtons(msg, a, "Сохранить"));
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
+  function skillTypeCard(msg, a) {
+    var before = skillType(a.prevCategory), after = skillType(a.category);
+    var kids = [
+      h("div", { class: "act-head" }, icon("doc"), h("span", { text: "Изменить категорию скилла «" + a.title + "»?" })),
+      h("div", { class: "act-when was", text: "Было: " + (before ? before.label : "Без категории") }),
+      h("div", { class: "act-when", text: "Станет: " + (after ? after.label : "Без категории") }),
+      a.text ? h("div", { class: "act-text sk-act-text", text: a.text }) : null
+    ];
+    var foot = cardFooter(msg, a, "Категория скилла изменена", "Отменено, категория не изменилась", function () { openSkills(); });
+    kids.push(foot || cardButtons(msg, a, "Изменить"));
+    return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
+  }
   function actionCard(msg, a) {
     if (/^calendar-/.test(a.kind)) return calendarCard(msg, a);
     if (/^task-/.test(a.kind)) return taskCard(msg, a);
     if (a.kind === "skill-add") return skillCard(msg, a);
+    if (a.kind === "skill-set-type") return skillTypeCard(msg, a);
     var cat = categoryOf(a.category);
     var kids = [
       h("div", { class: "act-head" }, icon("spark"), h("span", { text: "Создать промт «" + a.title + "»?" })),
@@ -2933,7 +2946,7 @@
   var DONE_TOASTS = {
     "calendar-add": "Дело «%» добавлено в календарь", "calendar-update": "Дело «%» изменено", "calendar-delete": "Дело «%» удалено",
     "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "create-prompt": "Промт «%» добавлен",
-    "skill-add": "Скилл «%» сохранён во вкладку «Скиллы»"
+    "skill-add": "Скилл «%» сохранён во вкладку «Скиллы»", "skill-set-type": "Категория скилла «%» изменена"
   };
   function decide(msg, a, accept) {
     if (a.status) return;
@@ -3030,6 +3043,7 @@
       : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + colName(t.status) + "»"
       : a.kind === "task-delete" ? "Удалить задачу «" + t.title + "»"
       : a.kind === "skill-add" ? "Сохранить скилл «" + a.title + "» во вкладку «Скиллы»"
+      : a.kind === "skill-set-type" ? "Изменить категорию скилла «" + a.title + "» на «" + (skillType(a.category) || {}).label + "»"
       : "Создать промт «" + a.title + "»";
     var how = a.status === "done" ? "сделано" : a.status === "canceled" ? "пользователь отменил" : a.status === "undone" ? "сделано, но пользователь отменил"
       : a.status === "failed" ? "не получилось" : "пользователь не ответил";
@@ -3115,7 +3129,8 @@
       if (m.failed) out.failed = true;
       if (m.cost) out.cost = m.cost;
       if (m.actions && m.actions.length) out.actions = m.actions.map(function (a) {
-        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev, task: a.task, prevTask: a.prevTask };
+        return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, skillId: a.skillId, prevCategory: a.prevCategory,
+          status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev, task: a.task, prevTask: a.prevTask };
       });
       return out;
     });

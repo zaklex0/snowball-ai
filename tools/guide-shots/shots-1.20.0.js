@@ -81,5 +81,22 @@ module.exports = async function ({ main, page, shot }) {
   await ev("document.activeElement && document.activeElement.blur()");
   await sleep(500);
   await shot('04-llm', { file: '.msg-user .bubble-doc', card: '.act-card' });
+  // Recheck a saved skill's category from the same LLM page, with a fake API and example data.
+  const suno = path.join(dir, 'suno-prompter.skill');
+  await writeZip(suno, [{ name: 'suno-prompter/SKILL.md', data: '---\nname: Suno Prompter\n---\n\n# Suno Prompter\n\nПомогает создавать музыкальные запросы и тексты песен для Suno.\n' }]);
+  const newKey = await ev("vsApi.assistantCheckKey('openai', 'sk-test-guide-0000000000')");
+  if (!newKey || !newKey.ok) throw new Error('fake key for recheck');
+  await add(suno, 'code', 'Помогает составлять музыкальные запросы и тексты песен для Suno.');
+  await page.send('Page.reload', {});
+  await until("document.querySelector('#side-name')?.textContent === 'Гость'");
+  await closeDialogs();
+  await click('[data-page="assistant"]');
+  await click('#chat-new');
+  await sleep(400);
+  await ev("(() => { const input = document.getElementById('chat-input'); input.value = 'Перепроверь категорию Suno Prompter'; input.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('chat-send').click(); return 1; })()");
+  await until("!!document.querySelector('.act-card .act-buttons button')", 30000);
+  await ev("document.activeElement && document.activeElement.blur()");
+  await sleep(400);
+  await shot('05-reclassify', { card: '.act-card', before: '.act-when.was', after: '.act-when:not(.was)', confirm: '.act-buttons button' });
   return shot.boxes;
 };

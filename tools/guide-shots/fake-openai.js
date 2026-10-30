@@ -21,6 +21,26 @@ function pieceText(bytes) {
   console.log('piece', secs.toFixed(2), 's →', best && Math.abs(best.sec - secs) < 0.4 ? 'known' : 'unknown');
   return best && Math.abs(best.sec - secs) < 0.4 ? best.text : 'Фраза номер ' + (++n) + '.';
 }
+function skillRecheckStream(body, res) {
+  const input = Array.isArray(body.input) ? body.input : [];
+  const outputs = input.filter((x) => x.type === 'function_call_output');
+  const stage = outputs.length;
+  let item = null;
+  if (stage === 0) item = { name: 'skills_list', arguments: '{}' };
+  else if (stage === 1) {
+    const list = JSON.parse(outputs[0].output);
+    item = { name: 'skill_read', arguments: JSON.stringify({ id: list.find((s) => s.title === 'Suno Prompter').id }) };
+  } else if (stage === 2) {
+    const skill = JSON.parse(outputs[1].output);
+    item = { name: 'skill_set_type', arguments: JSON.stringify({ id: skill.id, revision: skill.revision, type: 'audio', reason: 'В инструкции — музыкальные запросы и тексты песен для Suno, поэтому подходит «Аудио».' }) };
+  }
+  if (item) Object.assign(item, { type: 'function_call', id: 'fc_' + stage, call_id: 'call_' + stage, status: 'completed' });
+  const response = { id: 'resp_skill_' + stage, object: 'response', status: 'completed', output: item ? [item] : [],
+    usage: { input_tokens: 100, input_tokens_details: { cached_tokens: 0 }, output_tokens: 20, total_tokens: 120 } };
+  res.setHeader('content-type', 'text/event-stream; charset=utf-8');
+  if (!item) res.write('data: ' + JSON.stringify({ type: 'response.output_text.delta', delta: 'Проверил содержимое: это скилл для музыки и песен. Категорию лучше сменить на «Аудио».' }) + '\n\n');
+  res.end('data: ' + JSON.stringify({ type: 'response.completed', response }) + '\n\ndata: [DONE]\n\n');
+}
 http.createServer((req, res) => {
   const chunks = [];
   req.on('data', (c) => chunks.push(c));
@@ -55,6 +75,13 @@ http.createServer((req, res) => {
         content: [{ type: 'output_text', text: JSON.stringify(skill), annotations: [] }] }],
         usage: { input_tokens: 2400, input_tokens_details: { cached_tokens: 0 }, output_tokens: 700, total_tokens: 3100 } })), Number(process.env.FAKE_DELAY) || 600);
       return;
+    }
+    if (req.url.startsWith('/v1/responses')) {
+      const request = JSON.parse(body.toString('utf8'));
+      if (request.stream && JSON.stringify(request.input || []).includes('Перепроверь категорию Suno Prompter')) {
+        skillRecheckStream(request, res);
+        return;
+      }
     }
     if (req.url.startsWith('/v1/responses')) {
       res.end(JSON.stringify({ id: 'resp_1', object: 'response', status: 'completed', output: [{ type: 'message', id: 'm1', role: 'assistant', status: 'completed',

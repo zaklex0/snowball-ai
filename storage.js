@@ -307,6 +307,10 @@ function normalizeAction(a) {
   // Task cards carry the task, and for a change also how it was before.
   if (a.task && typeof a.task === 'object') out.task = normalizeTask(a.task);
   if (a.prevTask && typeof a.prevTask === 'object') out.prevTask = normalizeTask(a.prevTask);
+  if (a.kind === 'skill-set-type') {
+    out.skillId = ID_RE.test(str(a.skillId)) ? a.skillId : '';
+    out.prevCategory = str(a.prevCategory, 60);
+  }
   return out;
 }
 // A picture in a message: its file is "Файлы чатов/<chat id>/<stored>". Skill files are kept the same way.

@@ -1150,7 +1150,7 @@ const SYSTEM_PROMPT = [
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
   'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
   'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, transcribe — «Транскрибация» (текст, тайминги и субтитры из аудио и видео), generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
-  'На странице «Промты» есть вкладка «Скиллы»: там пользователь хранит скиллы — инструкции для ИИ-ассистентов (файл .md или архив .zip либо .skill). skills_list показывает их. Если пользователь приложил к сообщению файл скилла (в сообщении есть строка «ссылка для skill_add: …») и просит сохранить его («закинь в хранилище», «сохрани скилл»), прочитай файл и вызови skill_add: название — из name в файле или коротко по смыслу, тип — static (картинки), video (видео), audio (звук, музыка и речь), text (тексты и сценарии) или code (программирование и технические задачи), описание — 5–6 простых предложений по-русски: что это за скилл, для чего, как работает и что внутри.',
+  'На странице «Промты» есть вкладка «Скиллы»: там пользователь хранит скиллы — инструкции для ИИ-ассистентов (файл .md или архив .zip либо .skill). skills_list показывает их id, название и текущий тип; skill_read даёт сохранённый текст главного файла, состав архива и revision. Если пользователь просит перепроверить или изменить категорию уже сохранённого скилла, найди его через skills_list, прочитай через skill_read и только после этого вызови skill_set_type с тем же revision, подходящим типом и короткой причиной. Типы: static — картинки, video — видео, audio — звук, музыка и речь, text — тексты и сценарии, code — программирование и технические задачи. Если пользователь приложил новый файл скилла (в сообщении есть строка «ссылка для skill_add: …») и просит сохранить его («закинь в хранилище», «сохрани скилл»), прочитай файл и вызови skill_add: название — из name в файле или коротко по смыслу, тип — один из пяти перечисленных, описание — 5–6 простых предложений по-русски: что это за скилл, для чего, как работает и что внутри.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
 
@@ -1270,8 +1270,26 @@ const TOOLS = [
   },
   {
     name: 'skills_list',
-    description: 'Показывает скиллы пользователя со страницы «Промты» → «Скиллы»: название, тип и начало описания.',
+    description: 'Показывает скиллы пользователя со страницы «Промты» → «Скиллы»: id, название, тип и начало описания. Используй id для skill_read.',
     parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
+  },
+  {
+    name: 'skill_read',
+    description: 'Читает уже сохранённый скилл: текст главного файла и список файлов архива. Вызови перед изменением его категории.',
+    parameters: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', description: 'id скилла из skills_list' } } }
+  },
+  {
+    name: 'skill_set_type',
+    description: 'Предлагает изменить категорию уже сохранённого скилла после skill_read (или показывает карточку для подтверждения — это скажет результат).',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['id', 'revision', 'type', 'reason'],
+      properties: {
+        id: { type: 'string', description: 'id скилла из skills_list и skill_read' },
+        revision: { type: 'integer', description: 'revision из ответа skill_read; подтверждает, что скилл был прочитан и с тех пор не менялся' },
+        type: { type: 'string', enum: SKILL_TYPES, description: 'Новая категория: static, video, audio, text или code' },
+        reason: { type: 'string', description: 'Коротко по-русски: почему содержимое скилла относится к этой категории' }
+      }
+    }
   },
   {
     name: 'skill_add',
@@ -1296,6 +1314,8 @@ const TOOLS = [
   }
 ];
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const SKILL_TYPE_NAMES = { static: 'Статика', video: 'Видео', audio: 'Аудио', text: 'Текст', code: 'Code' };
+function skillTypeName(type) { return SKILL_TYPE_NAMES[type] || 'Без категории'; }
 
 // Runs one tool call: { output } goes back to the model, { action } becomes a card in the chat.
 // With confirmations off the card is applied by runAssistant before the model continues, so the output says "сделано".
@@ -1329,8 +1349,25 @@ function runTool(name, input) {
   }
   if (name === 'tasks_list') return { output: tasksForModel() };
   if (name === 'skills_list') {
-    const list = store.skillsView().map((s) => ({ title: s.title, type: s.type, file: s.file.name, desc: s.desc.slice(0, 300) }));
+    const list = store.skillsView().map((s) => ({ id: s.id, title: s.title, type: s.type, file: s.file.name, desc: s.desc.slice(0, 300) }));
     return { output: list.length ? JSON.stringify(list) : 'Скиллов пока нет.' };
+  }
+  if (name === 'skill_read') {
+    const s = store.findSkill(String(a.id || ''));
+    if (!s) return { output: 'Скилла с таким id нет. Найди его через skills_list.', error: true };
+    return { output: JSON.stringify({ id: s.id, revision: s.updatedAt, title: s.title, type: s.type, desc: s.desc, file: s.file.name,
+      main: s.main, files: s.inside.slice(0, 150).map((f) => f.path), text: s.text.slice(0, 60000) }) };
+  }
+  if (name === 'skill_set_type') {
+    const s = store.findSkill(String(a.id || ''));
+    if (!s) return { output: 'Скилла с таким id нет. Найди его через skills_list.', error: true };
+    if (s.updatedAt !== a.revision) return { output: 'Скилл изменился после чтения. Прочитай его ещё раз через skill_read.', error: true };
+    if (!SKILL_TYPES.includes(a.type)) return { output: 'Ошибка: неизвестная категория скилла.', error: true };
+    if (s.type === a.type) return { output: 'У скилла «' + s.title + '» уже стоит эта категория. Менять ничего не нужно.' };
+    const reason = String(a.reason || '').trim().slice(0, 500);
+    if (!reason) return { output: 'Ошибка: объясни, почему новая категория подходит скиллу.', error: true };
+    return { output: after('Изменить категорию скилла «' + s.title + '»: ' + skillTypeName(s.type) + ' → ' + skillTypeName(a.type)),
+      action: { kind: 'skill-set-type', skillId: s.id, revision: s.updatedAt, title: s.title, prevCategory: s.type, category: a.type, text: reason } };
   }
   if (name === 'skill_add') {
     const file = chatFileOf(a.attachment);
@@ -2818,6 +2855,14 @@ async function applyAction(action) {
     const skill = await store.addSkill({ path: file, name: action.fileName, title: action.title, type: action.category, desc: action.text, descBy: action.model || 'manual' });
     return { undo: { skillId: skill.id }, extra: { skillId: skill.id } };
   }
+  if (action.kind === 'skill-set-type') {
+    const s = store.findSkill(action.skillId);
+    if (!s) throw userError('Этого скилла уже нет.');
+    if (s.updatedAt !== action.revision || s.type !== action.prevCategory) throw userError('Скилл изменился. Попросите ассистента перепроверить его ещё раз.');
+    if (!SKILL_TYPES.includes(action.category)) throw userError('Такой категории скиллов нет.');
+    const saved = await store.saveSkill({ id: s.id, type: action.category });
+    return { undo: { skillType: { id: s.id, before: s.type, revision: saved.updatedAt } }, extra: { skillId: s.id } };
+  }
   throw userError('Такое действие ассистент пока не умеет.');
 }
 
@@ -2843,6 +2888,11 @@ handle('assistant-undo', async (actionId) => {
   if (u.taskId) await store.deleteTask(u.taskId);
   if (u.restoreTask) await store.putTask(u.restoreTask);   // exactly as it was, not counted again
   if (u.skillId) await store.deleteSkill(u.skillId);
+  if (u.skillType) {
+    const s = store.findSkill(u.skillType.id);
+    if (!s || s.updatedAt !== u.skillType.revision) throw userError('Скилл уже изменился. Верните прежнюю категорию вручную, если нужно.');
+    await store.saveSkill({ id: s.id, type: u.skillType.before });
+  }
   return ok({ date: u.restore ? u.restore.date : undefined });
 });
 
