@@ -309,8 +309,8 @@ function normalizeAction(a) {
   if (a.prevTask && typeof a.prevTask === 'object') out.prevTask = normalizeTask(a.prevTask);
   return out;
 }
-// A picture in a message: its file is "Файлы чатов/<chat id>/<stored>". A skill file sent to LLM (.md or .zip) is kept the same way.
-const STORED_RE = /^[A-Za-z0-9_-]{1,64}\.(jpg|png|md|zip)$/;
+// A picture in a message: its file is "Файлы чатов/<chat id>/<stored>". Skill files are kept the same way.
+const STORED_RE = /^[A-Za-z0-9_-]{1,64}\.(jpg|png|md|zip|skill)$/;
 function normalizeChatImages(list) {
   return (Array.isArray(list) ? list : []).slice(0, CHAT_IMAGES_MAX).map((x) => {
     if (!x || typeof x !== 'object' || !STORED_RE.test(str(x.stored))) return null;
@@ -385,13 +385,13 @@ async function readTranscripts(dir) {
   return out;
 }
 
-/* ---------- «Скиллы»: instructions for assistants, a .md file or a .zip archive kept as it was ---------- */
-const SKILL_TYPES = ['static', 'video', 'code'];
+/* ---------- «Скиллы»: instructions for assistants, a .md file or a .zip/.skill archive kept as it was ---------- */
+const SKILL_TYPES = ['static', 'video', 'audio', 'text', 'code'];
 const SKILL_TEXT_MAX = 200000;     // the main Markdown file, for search, the description and the assistant
 const SKILL_INSIDE_MAX = 300;      // files of an archive listed in the record
 const SKILL_MD_SIZE = 2 * 1024 * 1024;
 const SKILL_ZIP_SIZE = 200 * 1024 * 1024;
-const skillKind = (name) => (/\.zip$/i.test(name) ? 'zip' : /\.(md|markdown)$/i.test(name) ? 'md' : '');
+const skillKind = (name) => { const archive = /\.(zip|skill)$/i.exec(name); return archive ? archive[1].toLowerCase() : /\.(md|markdown)$/i.test(name) ? 'md' : ''; };
 function normalizeSkill(s) {
   if (!s || typeof s !== 'object' || !ID_RE.test(str(s.id))) return null;
   const f = s.file && typeof s.file === 'object' ? s.file : {};
@@ -431,9 +431,9 @@ function skillTitle(text, fileName, inside) {
 async function readSkillFile(file, name) {
   const kind = skillKind(name || file);
   const bad = (msg) => { const e = new Error('bad skill'); e.userMessage = msg; return e; };
-  if (!kind) throw bad('Скилл — это файл .md или архив .zip.');
+  if (!kind) throw bad('Скилл — это файл .md или архив .zip либо .skill.');
   const st = await fsp.stat(file);
-  if (!st.isFile()) throw bad('Это папка, а нужен файл .md или архив .zip.');
+  if (!st.isFile()) throw bad('Это папка, а нужен файл .md или архив .zip либо .skill.');
   if (kind === 'md') {
     if (st.size > SKILL_MD_SIZE) throw bad('Файл .md больше 2 МБ — это не похоже на скилл.');
     const text = (await fsp.readFile(file, 'utf8')).replace(/^﻿/, '');
@@ -508,7 +508,7 @@ class Store {
     if (!ID_RE.test(str(id))) throw new Error('bad id');
     return path.join(this.transcriptsRoot, id + '.json');
   }
-  // A skill file sent with an LLM message (.md or .zip, as it is), beside the pictures of the conversation.
+  // A skill file sent with an LLM message (.md, .zip or .skill), beside the pictures of the conversation.
   async saveChatFile(chatId, name, bytes) {
     const kind = skillKind(name);
     if (!kind) throw new Error('bad kind');
@@ -969,7 +969,7 @@ class Store {
     return this.run(async () => {
       const o = input || {};
       const name = sanitizeName(str(o.name, 300) || (o.path ? path.basename(String(o.path)) : ''));
-      if (!skillKind(name)) { const e = new Error('bad skill'); e.userMessage = 'Скилл — это файл .md или архив .zip.'; throw e; }
+      if (!skillKind(name)) { const e = new Error('bad skill'); e.userMessage = 'Скилл — это файл .md или архив .zip либо .skill.'; throw e; }
       let id = newId('k');
       while (this.findSkill(id)) id = newId('k');
       const dir = this.skillDir(id);

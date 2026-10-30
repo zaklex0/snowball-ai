@@ -15,9 +15,12 @@ module.exports = async function ({ main, page, shot }) {
 
   // Example skills, made up for the guide.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'snowball-guide-skills-'));
-  const covers = path.join(dir, 'covers.md'), reels = path.join(dir, 'reels-script.md'), site = path.join(dir, 'landing-builder.zip');
+  const covers = path.join(dir, 'covers.md'), reels = path.join(dir, 'reels-script.md');
+  const audio = path.join(dir, 'podcast-voice.md'), article = path.join(dir, 'article-editor.md'), site = path.join(dir, 'landing-builder.skill');
   fs.writeFileSync(covers, '---\nname: Обложки роликов\n---\n\n# Обложки роликов\n\nСначала сюжет, потом свет, камера и детали.\n');
   fs.writeFileSync(reels, '---\nname: Сценарий рилса\n---\n\n# Сценарий рилса\n\nХук в первые 2 секунды, три сцены, призыв в конце.\n');
+  fs.writeFileSync(audio, '---\nname: Голос для подкаста\n---\n\n# Голос для подкаста\n\nПодготовь текст для озвучки и подскажи интонацию.\n');
+  fs.writeFileSync(article, '---\nname: Редактор статьи\n---\n\n# Редактор статьи\n\nУлучши структуру и ясность текста, сохрани авторский голос.\n');
   await writeZip(site, [
     { name: 'landing-builder/SKILL.md', data: '---\nname: Сборщик лендингов\n---\n\n# Сборщик лендингов\n\nСобирает страницу из блоков.\n' },
     { name: 'landing-builder/blocks/hero.html', data: '<section>hero</section>' },
@@ -30,11 +33,13 @@ module.exports = async function ({ main, page, shot }) {
   };
   const key = await ev("vsApi.assistantCheckKey('openai', 'sk-test-guide-0000000000')");
   if (!key || !key.ok) throw new Error('fake key: ' + JSON.stringify(key));
-  await add(site, 'code', 'Собирает одностраничный сайт из готовых блоков: шапка, преимущества, отзывы, подвал. Ассистент спрашивает, о чём страница, и подбирает блоки. Внутри архива — инструкция и шаблоны блоков.');
   const reelsId = await add(reels, 'video', '');
   await ev(`vsApi.skillDescribe('${reelsId}', true)`);
   const coversId = await add(covers, '', '');
   await ev(`vsApi.skillDescribe('${coversId}', false)`);
+  await add(audio, 'audio', 'Помогает подготовить выпуск подкаста: разбивает текст на смысловые части, отмечает паузы и предлагает интонацию для озвучки.');
+  await add(article, 'text', 'Помогает улучшить статью: выстраивает понятную структуру, сокращает повторы и сохраняет авторский стиль.');
+  await add(site, 'code', 'Собирает одностраничный сайт из готовых блоков: шапка, преимущества, отзывы, подвал. Ассистент спрашивает, о чём страница, и подбирает блоки. Внутри архива — инструкция и шаблоны блоков.');
 
   // Refresh this window's own state after the direct API saves (sync is sent only to other windows).
   await ev("localStorage.setItem('libView', 'prompts')");

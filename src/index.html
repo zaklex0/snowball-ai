@@ -187,7 +187,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Добавить промт <kbd class="kh">Ctrl + N</kbd>
               </button>
-              <button type="button" class="btn btn-primary" id="skill-add-btn" title="Выбрать файл .md или архив .zip со скиллом">
+              <button type="button" class="btn btn-primary" id="skill-add-btn" title="Выбрать файл .md или архив .zip либо .skill со скиллом">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Добавить скилл <kbd class="kh">Ctrl + N</kbd>
               </button>
@@ -197,9 +197,9 @@
           <div class="lib-seg" id="lib-row" hidden>
             <div class="tview" id="lib-seg" role="group" aria-label="Что показать">
               <button type="button" data-lib="prompts" aria-pressed="true" title="Промты для картинок и видео">Промты <span class="n" id="lib-n-prompts"></span></button>
-              <button type="button" data-lib="skills" aria-pressed="false" title="Скиллы — инструкции для ассистентов: файл .md или архив .zip">Скиллы <span class="n" id="lib-n-skills"></span></button>
+              <button type="button" data-lib="skills" aria-pressed="false" title="Скиллы — инструкции для ассистентов: файл .md или архив .zip либо .skill">Скиллы <span class="n" id="lib-n-skills"></span></button>
             </div>
-            <span class="lib-why" id="lib-why">Инструкции для ассистентов: файл .md или архив .zip</span>
+            <span class="lib-why" id="lib-why">Инструкции для ассистентов: файл .md или архив .zip либо .skill</span>
             <button type="button" class="btn-mini sk-help" id="sk-help" data-guide="skills" title="Пошаговая инструкция с картинками">Как пользоваться</button>
           </div>
 
@@ -553,10 +553,10 @@
                   <div class="att-row" id="chat-att" hidden></div>
                   <textarea id="chat-input" rows="1" maxlength="20000" placeholder="Напишите сообщение…"></textarea>
                   <div class="composer-bar">
-                    <button type="button" class="att-btn" id="chat-attach" title="Приложить картинку или скилл (.md, .zip). Картинку можно вставить через Ctrl + V, любой файл — перетащить в окно" aria-label="Приложить картинку или скилл">
+                    <button type="button" class="att-btn" id="chat-attach" title="Приложить картинку или скилл (.md, .zip, .skill). Картинку можно вставить через Ctrl + V, любой файл — перетащить в окно" aria-label="Приложить картинку или скилл">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.2-8.2a3.3 3.3 0 0 1 4.7 4.7l-8.2 8.2a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/></svg>
                     </button>
-                    <input type="file" id="chat-file" accept="image/*,.md,.markdown,.zip" multiple hidden>
+                    <input type="file" id="chat-file" accept="image/*,.md,.markdown,.zip,.skill" multiple hidden>
                     <div class="model-wrap">
                       <div class="model-menu" id="model-menu" role="dialog" aria-label="Модель и размышления" hidden></div>
                       <button type="button" class="model-btn" id="model-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="model-menu" title="Выбрать модель">
@@ -572,7 +572,13 @@
                     </button>
                   </div>
                 </form>
-                <p class="composer-hint"><kbd>Enter</kbd> — отправить, <kbd>Shift</kbd> + <kbd>Enter</kbd> — новая строка, <kbd>Esc</kbd> — остановить ответ</p>
+                <div class="composer-foot">
+                  <p class="composer-hint"><kbd>Enter</kbd> — отправить, <kbd>Shift</kbd> + <kbd>Enter</kbd> — новая строка, <kbd>Esc</kbd> — остановить ответ</p>
+                  <button type="button" class="btn-mini chat-new-dock" id="chat-new-dock" title="Начать новый разговор (Ctrl + Shift + N)" hidden>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    Новый разговор
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -727,6 +733,8 @@
               <dt><kbd>Ctrl</kbd> + <kbd>Tab</kbd></dt><dd>Следующая вкладка (с <kbd>Shift</kbd> — предыдущая)</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>K</kbd></dt><dd>Маленькое окно ассистента</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>N</kbd></dt><dd>Новый промт</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd></dt><dd>Новый разговор в LLM</dd>
+              <dt><kbd>Ctrl</kbd> + <kbd>B</kbd></dt><dd>Свернуть или развернуть левую панель</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>F</kbd></dt><dd>Поиск по промтам</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>,</kbd></dt><dd>Настройки</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></dt><dd>Крупнее, мельче, обычный масштаб</dd>
@@ -863,6 +871,7 @@
 <script src="guides/1.18.1/boxes.js"></script>
 <script src="guides/1.19.2/boxes.js"></script>
 <script src="guides/1.20.0/boxes.js"></script>
+<script src="guides/1.20.1/boxes.js"></script>
 <script src="capture-shortcut.js"></script>
 <script src="screenshots.js"></script>
 <script src="app.js"></script>

@@ -43,6 +43,8 @@
 
   --cat-static-bg: #E3F5E6; --cat-static-ink: #1E6B30; --cat-static-dot: #34C759;
   --cat-video-bg:  #E1EEFF; --cat-video-ink:  #0B4FA8; --cat-video-dot:  #007AFF;
+  --cat-audio-bg:  #DDF7F4; --cat-audio-ink:  #14635D; --cat-audio-dot:  #30B0A5;
+  --cat-text-bg:   #FFF0DA; --cat-text-ink:   #8A5300; --cat-text-dot:   #FF9500;
   --cat-system-bg: #FFE5E3; --cat-system-ink: #B3261E; --cat-system-dot: #FF3B30;
   --cat-other-bg:  #EEEEF1; --cat-other-ink:  #48484D; --cat-other-dot:  #8E8E93;
   --cat-code-bg:   #F1E6FB; --cat-code-ink:   #6A2C9C; --cat-code-dot:   #AF52DE;
@@ -85,6 +87,8 @@
 
     --cat-static-bg: #1F3A25; --cat-static-ink: #A6E9B6; --cat-static-dot: #30D158;
     --cat-video-bg:  #13304F; --cat-video-ink:  #A9CFFF; --cat-video-dot:  #0A84FF;
+    --cat-audio-bg:  #174440; --cat-audio-ink:  #A5E8E1; --cat-audio-dot:  #5AC8BE;
+    --cat-text-bg:   #48331A; --cat-text-ink:   #FFE0A8; --cat-text-dot:   #FF9F0A;
     --cat-system-bg: #4A1E1C; --cat-system-ink: #FFB4AE; --cat-system-dot: #FF453A;
     --cat-other-bg:  #3A3A3C; --cat-other-ink:  #E5E5EA; --cat-other-dot:  #98989D;
     --cat-code-bg:   #3B2648; --cat-code-ink:   #E2C6F7; --cat-code-dot:   #BF5AF2;
@@ -386,11 +390,9 @@
 :where(html[data-theme="macos"]) .act-card.settled { box-shadow: 0 0 0 .5px var(--line); }
 :where(html[data-theme="macos"]) .act-head svg { color: var(--accent-strong); }
 :where(html[data-theme="macos"]) .act-text { background: var(--mac-fill); }
-/* The bottom edge blurs what scrolls under the message box, like the scroll edge in macOS */
-:where(html[data-theme="macos"]) .composer-dock {
-  background: none; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 12px); mask-image: linear-gradient(to bottom, transparent 0, #000 12px);
-}
+/* Under the message box the page is solid: messages fade out above it and do not show through the hint line
+   (a blur alone let a coloured message show through and cut it off at a strange edge) */
+:where(html[data-theme="macos"]) .composer-dock { background: linear-gradient(to bottom, transparent, var(--mac-content) 26%); }
 :where(html[data-theme="macos"]) .composer { border-color: transparent; border-radius: 12px; box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--line), 0 8px 26px rgba(0, 0, 0, .08); }
 :where(html[data-theme="macos"]) .composer:focus-within { border-color: transparent; box-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 1px color-mix(in srgb, var(--mac-acc) 60%, transparent), 0 0 0 4px var(--mac-acc-soft), 0 8px 26px rgba(0, 0, 0, .08); }
 :where(html[data-theme="macos"]) .composer textarea { caret-color: var(--accent); }

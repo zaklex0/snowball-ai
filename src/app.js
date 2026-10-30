@@ -2973,7 +2973,7 @@
         return h("button", { type: "button", class: "bubble-img", title: im.name + " — открыть", onclick: function () { call(api.chatImageOpen(chatId, im.stored)); } },
           h("img", { src: chatImageUrl(chatId, im.stored), alt: im.name }));
       })) : null;
-      // Skill files (.md, .zip): a chip with the name; a click opens the file in Windows.
+      // Skill files (.md, .zip, .skill): a chip with the name; a click opens the file in Windows.
       var files = docs.length ? h("div", { class: "bubble-docs" }, docs.map(function (im) {
         return h("button", { type: "button", class: "bubble-doc", title: im.name + " — открыть", onclick: function () { call(api.chatImageOpen(chatId, im.stored)); } },
           h("b", { text: docExt(im.stored) }), h("span", { text: im.name }));
@@ -3319,9 +3319,9 @@
   function addChatImages(files) {
     var se = chat;
     if (state.page !== "assistant") return;
-    var docs = Array.prototype.filter.call(files || [], function (f) { return /\.(md|markdown|zip)$/i.test(f.name); });
+    var docs = Array.prototype.filter.call(files || [], function (f) { return /\.(md|markdown|zip|skill)$/i.test(f.name); });
     var list = Array.prototype.filter.call(files || [], function (f) { return /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(f.name); });
-    if (!list.length && !docs.length) { toast("Приложить можно картинки и скиллы — файлы .md или .zip."); return; }
+    if (!list.length && !docs.length) { toast("Приложить можно картинки и скиллы — файлы .md, .zip или .skill."); return; }
     se.attach = se.attach || [];
     if (docs.length) addChatDocs(se, docs);
     if (!list.length) return;
@@ -3351,9 +3351,9 @@
     updateCostHint();
     els.chatInput.focus();
   }
-  // Skill files (.md, .zip) go as they are (at most 20 MB); the model gets their text and can keep them in «Скиллы».
-  function isChatDoc(stored) { return /\.(md|zip)$/i.test(String(stored || "")); }
-  function docExt(name) { return /\.zip$/i.test(String(name || "")) ? "zip" : "md"; }
+  // Skill files (.md, .zip, .skill) go as they are (at most 20 MB); the model gets their text and can keep them in «Скиллы».
+  function isChatDoc(stored) { return /\.(md|zip|skill)$/i.test(String(stored || "")); }
+  function docExt(name) { return /\.skill$/i.test(String(name || "")) ? "skill" : /\.zip$/i.test(String(name || "")) ? "zip" : "md"; }
   function addChatDocs(se, files) {
     var room = ATTACH_MAX - se.attach.length;
     if (room <= 0) { toast("В одно сообщение — не больше " + ATTACH_MAX + " файлов."); return; }
@@ -3438,6 +3438,12 @@
     els.chatInput.focus();
   });
   els.chatNew.addEventListener("click", newChat);
+  // A long conversation scrolls the header away: then «Новый разговор» shows up under the message box too
+  // (as soon as the header button is not fully seen: a sliver of it under the tab strip cannot be clicked).
+  $("chat-new-dock").addEventListener("click", newChat);
+  if (window.IntersectionObserver) new IntersectionObserver(function (list) {
+    $("chat-new-dock").hidden = list[list.length - 1].intersectionRatio >= 0.99;
+  }, { root: els.scroller, threshold: [0, 0.99] }).observe(els.chatNew);
   els.chatHistoryBtn.addEventListener("click", function () { setHistoryOpen(!els.chatHistory.classList.contains("open")); });
   refreshChats();
 
@@ -4054,13 +4060,15 @@
   }
 
   /* ---------- «Скиллы» on the «Промты» page (mockups/skills.html) ----------
-     A skill is an instruction for assistants: one .md file or a .zip archive, kept as it was (main.js skill-*, storage.js addSkill).
+     A skill is an instruction for assistants: one .md file or a .zip/.skill archive, kept as it was (main.js skill-*, storage.js addSkill).
      The switch «Промты / Скиллы» under the title picks the list (remembered as libView). A skill comes from «Добавить скилл»
-     (Ctrl + N here), by dropping .md/.zip on the page, or from LLM (the skill_add card). Its description (5–6 sentences)
+     (Ctrl + N here), by dropping .md/.zip/.skill on the page, or from LLM (the skill_add card). Its description (5–6 sentences)
      and type are written by GPT-6.1 Sol (without a ChatGPT key, Claude Haiku); both can be changed by hand. */
   var SKILL_TYPES = [
     { key: "static", label: "Статика", cls: "cat-static" },
     { key: "video", label: "Видео", cls: "cat-video" },
+    { key: "audio", label: "Аудио", cls: "cat-audio" },
+    { key: "text", label: "Текст", cls: "cat-text" },
     { key: "code", label: "Code", cls: "cat-code" }
   ];
   // draft: the new skill's form ({ path, name, size, kind, files, title, type, desc }); edit: { id, title, type, desc } of the row being changed;
@@ -4091,7 +4099,7 @@
       norm(s.file.name).indexOf(q) !== -1 || s.inside.some(function (f) { return norm(f.path).indexOf(q) !== -1; });
   }
   function skillFileLine(s) {
-    var what = s.file.kind === "zip" ? "Архив · " + s.files + " " + plural(s.files, "файл", "файла", "файлов") + " · " + fmtSize(s.file.size) : s.file.name + " · " + fmtSize(s.file.size);
+    var what = s.file.kind !== "md" ? "Архив · " + s.files + " " + plural(s.files, "файл", "файла", "файлов") + " · " + fmtSize(s.file.size) : s.file.name + " · " + fmtSize(s.file.size);
     return h("div", { class: "sk-file", title: s.file.name }, h("b", { class: s.file.kind, text: s.file.kind }), h("span", { text: what }));
   }
 
@@ -4125,7 +4133,7 @@
       skEls.state.replaceChildren(
         h("div", { class: "dots", "aria-hidden": "true" }, SKILL_TYPES.map(function (t) { return h("i", { class: t.cls }); })),
         h("h2", { text: "Здесь будут ваши скиллы" }),
-        h("p", { text: "Скилл — это инструкция для ассистента: файл .md или архив .zip. Добавьте его кнопкой или перетащите файл сюда — ассистент сам напишет, что это за скилл, и выберет тип. Так все скиллы хранятся в одном месте и не потеряются при переезде на другую модель или аккаунт." }),
+        h("p", { text: "Скилл — это инструкция для ассистента: файл .md или архив .zip либо .skill. Добавьте его кнопкой или перетащите файл сюда — ассистент сам напишет, что это за скилл, и выберет тип. Так все скиллы хранятся в одном месте и не потеряются при переезде на другую модель или аккаунт." }),
         sk.draft ? null : h("button", { type: "button", class: "btn btn-primary", onclick: pickSkill }, "Добавить первый скилл"));
       return;
     }
@@ -4203,7 +4211,7 @@
   // «Что внутри»: the files of an archive and the beginning of the main Markdown file, without downloading.
   function skillInside(s) {
     var kids = [];
-    if (s.file.kind === "zip") {
+    if (s.file.kind !== "md") {
       kids.push(h("span", { class: "cap", text: "Файлы в архиве" + (s.files > s.inside.length ? " (первые " + s.inside.length + " из " + s.files + ")" : "") }),
         h("ul", null, s.inside.slice(0, 60).map(function (f) {
           return h("li", { class: f.path === s.main ? "main" : null }, h("span", { text: f.path }), h("span", { text: fmtSize(f.size) }));
@@ -4298,7 +4306,7 @@
         h("div", { class: "field full" }, h("span", { class: "field-label", text: "Файл скилла" }),
           h("div", { class: "sk-picked" }, h("span", { class: "tile doc" }, h("span", { class: "ext", text: d.kind })),
             h("div", null, h("div", { class: "t", text: d.name }),
-              h("div", { class: "s", text: (d.kind === "zip" ? "Архив · " + d.files + " " + plural(d.files, "файл", "файла", "файлов") + " · " : "") + fmtSize(d.size) + (d.main ? " · главный файл " + d.main : "") })),
+              h("div", { class: "s", text: (d.kind !== "md" ? "Архив · " + d.files + " " + plural(d.files, "файл", "файла", "файлов") + " · " : "") + fmtSize(d.size) + (d.main ? " · главный файл " + d.main : "") })),
             h("span", { class: "spacer" }),
             h("button", { type: "button", class: "btn-mini", onclick: pickSkill }, "Выбрать другой…"))),
         h("div", { class: "field full" }, h("label", { class: "field-label", for: "skf-desc", text: "Описание" }),
@@ -4976,7 +4984,7 @@
     if (!hasFiles(e)) return;
     e.preventDefault();
     if (state.page === "screenshots") { e.dataTransfer.dropEffect = "copy"; return; }
-    // «Скиллы»: a .md or .zip can be let go anywhere on the page.
+    // «Скиллы»: a .md, .zip or .skill can be let go anywhere on the page.
     if (state.page === "prompts" && state.lib === "skills") { e.dataTransfer.dropEffect = "copy"; skEls.view.classList.add("drop-over"); return; }
     // «Транскрибация»: a file can be let go anywhere on the page, the drop zone lights up.
     if (state.page === "transcribe") {
@@ -4998,9 +5006,9 @@
     if (state.page === "assistant") { clearDrag(); addChatImages(e.dataTransfer.files); return; }
     if (state.page === "prompts" && state.lib === "skills") {
       clearDrag();
-      var paths = Array.prototype.filter.call(e.dataTransfer.files || [], function (f) { return /\.(md|markdown|zip)$/i.test(f.name); })
+      var paths = Array.prototype.filter.call(e.dataTransfer.files || [], function (f) { return /\.(md|markdown|zip|skill)$/i.test(f.name); })
         .map(function (f) { return api.pathForFile(f); }).filter(Boolean);
-      if (!paths.length) { toast("Скилл — это файл .md или архив .zip."); return; }
+      if (!paths.length) { toast("Скилл — это файл .md или архив .zip либо .skill."); return; }
       if (paths.length === 1) api.skillInspect(paths[0]).then(function (r) { if (r && r.ok) openSkillForm(r); else toast((r && r.error) || "Файл не открылся", true); });
       else addSkillFiles(paths);
       return;
@@ -5838,7 +5846,7 @@
         last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () {
           gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close();
           if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section === "skills") openSkills(); else if (g.section !== "sidebar") setPage(g.section);
-        } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : g.section === "skills" ? "Открыть «Скиллы»" : "Открыть раздел «" + g.title + "»")
+        } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : g.section === "skills" ? "Открыть «Скиллы»" : g.section === "assistant" ? "Открыть LLM" : "Открыть раздел «" + g.title + "»")
           : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
   }
   // Delegation also covers guide buttons in sections mounted after the app starts.
@@ -5935,6 +5943,7 @@
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyK") { e.preventDefault(); setQuick(els.qa.hidden); return; }
     if (mod && !e.shiftKey && !e.altKey && e.code === "Comma") { e.preventDefault(); openSettings(); return; }
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyB" && !isSolo()) { e.preventDefault(); toggleSide(); return; }
+    if (mod && e.shiftKey && !e.altKey && e.code === "KeyN" && state.page === "assistant") { e.preventDefault(); newChat(); return; }
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();
       setPage("prompts");

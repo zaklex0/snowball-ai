@@ -1096,7 +1096,7 @@ async function* stubSource(messages, signal) {
   // A skill file with the message: the stub offers to keep it, without a description (ChatGPT or Claude write one).
   const doc = lastUser && /Вложение: «([^»]+)», ссылка для skill_add: (\S+)/.exec(lastUser.content);
   if (doc) {
-    let title = doc[1].replace(/\.(md|markdown|zip)$/i, '');
+    let title = doc[1].replace(/\.(md|markdown|zip|skill)$/i, '');
     try { const f = await readSkillFile(chatFileOf(doc[2]), doc[1]); title = skillTitle(f.text, doc[1], f.inside); } catch (e) { /* the file name will do */ }
     const r = runTool('skill_add', { attachment: doc[2], title, type: '', desc: '' });
     answer = r.action
@@ -1150,7 +1150,7 @@ const SYSTEM_PROMPT = [
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
   'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
   'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, transcribe — «Транскрибация» (текст, тайминги и субтитры из аудио и видео), generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
-  'На странице «Промты» есть вкладка «Скиллы»: там пользователь хранит скиллы — инструкции для ИИ-ассистентов (файл .md или архив .zip). skills_list показывает их. Если пользователь приложил к сообщению файл скилла (в сообщении есть строка «ссылка для skill_add: …») и просит сохранить его («закинь в хранилище», «сохрани скилл»), прочитай файл и вызови skill_add: название — из name в файле или коротко по смыслу, тип — static (картинки), video (видео) или code (программирование и всё техническое), описание — 5–6 простых предложений по-русски: что это за скилл, для чего, как работает и что внутри.',
+  'На странице «Промты» есть вкладка «Скиллы»: там пользователь хранит скиллы — инструкции для ИИ-ассистентов (файл .md или архив .zip либо .skill). skills_list показывает их. Если пользователь приложил к сообщению файл скилла (в сообщении есть строка «ссылка для skill_add: …») и просит сохранить его («закинь в хранилище», «сохрани скилл»), прочитай файл и вызови skill_add: название — из name в файле или коротко по смыслу, тип — static (картинки), video (видео), audio (звук, музыка и речь), text (тексты и сценарии) или code (программирование и технические задачи), описание — 5–6 простых предложений по-русски: что это за скилл, для чего, как работает и что внутри.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
 
@@ -1275,13 +1275,13 @@ const TOOLS = [
   },
   {
     name: 'skill_add',
-    description: 'Сохраняет приложенный к сообщению файл скилла (.md или .zip) на страницу «Промты» → «Скиллы» вместе с названием, типом и описанием (или показывает карточку для подтверждения — это скажет результат).',
+    description: 'Сохраняет приложенный к сообщению файл скилла (.md, .zip или .skill) на страницу «Промты» → «Скиллы» вместе с названием, типом и описанием (или показывает карточку для подтверждения — это скажет результат).',
     parameters: {
       type: 'object', additionalProperties: false, required: ['attachment', 'title', 'type', 'desc'],
       properties: {
         attachment: { type: 'string', description: 'Ссылка на вложение из строки «ссылка для skill_add: …» в сообщении пользователя' },
         title: { type: 'string', description: 'Название скилла: name из его файла или коротко по смыслу' },
-        type: { type: 'string', enum: ['static', 'video', 'code'], description: 'static — картинки, video — видео, code — программирование и всё техническое' },
+        type: { type: 'string', enum: SKILL_TYPES, description: 'static — картинки, video — видео, audio — звук и речь, text — тексты и сценарии, code — технические задачи' },
         desc: { type: 'string', description: 'Описание по-русски: 5–6 простых предложений одним абзацем — что это за скилл, для чего, как работает и что внутри' }
       }
     }
@@ -1663,7 +1663,7 @@ async function withImages(messages) {
 // A skill file in a message is "<chat id>/<stored>": that is what skill_add gets back from the model.
 const chatFileNames = new Map();   // that reference -> the file's own name
 function chatFileOf(ref) {
-  const m = /^([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9_-]{1,64}\.(md|zip))$/.exec(String(ref || ''));
+  const m = /^([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9_-]{1,64}\.(md|zip|skill))$/.exec(String(ref || ''));
   return m ? store.chatImagePath(m[1], m[2]) : null;
 }
 const currentModelId = () => { const m = currentModel(); return m ? m.id : ''; };
@@ -1672,7 +1672,7 @@ async function docText(d) {
   try {
     const r = await readSkillFile(d.path, d.name);
     const list = r.inside.slice(0, 150).map((f) => '- ' + f.path).join('\n');
-    return head + (r.kind === 'zip' ? '\nАрхив, файлов: ' + r.files + (list ? '\n' + list : '') : '') +
+    return head + (r.kind !== 'md' ? '\nАрхив, файлов: ' + r.files + (list ? '\n' + list : '') : '') +
       '\n' + (r.text ? 'Текст ' + (r.main || d.name) + ':\n```\n' + r.text.slice(0, 60000) + '\n```' : 'Текстового файла .md нет.');
   } catch (e) {
     return head + '\n(файл не прочитался: ' + (e.userMessage || 'его нет') + ')';
@@ -1739,10 +1739,10 @@ handle('assistant-send', async function (messages, opts) {
       const out = { role: m.role, content: m.content.slice(0, 100000) };
       const files = m.role === 'user' && chatId && Array.isArray(m.images) ? m.images.map((x) => store.chatImagePath(chatId, x)).filter(Boolean).slice(0, 6) : [];
       if (files.length) out.files = files;
-      // Skill files (.md, .zip): [{ stored, name }]; they reach the model as text.
+      // Skill files (.md, .zip, .skill): [{ stored, name }]; they reach the model as text.
       const docs = m.role === 'user' && chatId && Array.isArray(m.docs) ? m.docs.slice(0, 6).map((d) => {
         const p = d && store.chatImagePath(chatId, String(d.stored || ''));
-        if (!p || !/\.(md|zip)$/.test(p)) return null;
+        if (!p || !/\.(md|zip|skill)$/.test(p)) return null;
         const ref = chatId + '/' + d.stored;
         const name = String(d.name || d.stored).slice(0, 200);
         chatFileNames.set(ref, name);
@@ -2639,13 +2639,13 @@ handle('assistant-reset', async () => {
   return { ok: true };
 });
 
-/* «Скиллы» on the «Промты» page: instructions for assistants, a .md file or a .zip archive, kept as they were
+/* «Скиллы» on the «Промты» page: instructions for assistants, a .md file or a .zip/.skill archive, kept as they were
    (storage.js addSkill). The description (5–6 sentences) and the type are written by one request to GPT-6.1 Sol
    with medium thinking (without a ChatGPT key, Claude Haiku); its price goes to the spending like any answer. */
 const SKILL_PROMPT = [
   'Ты разбираешь скилл — набор инструкций для ИИ-ассистента (ChatGPT, Claude и других). Тебе дан список его файлов и текст главного файла.',
   'desc — описание для человека, который не программист: 5–6 простых предложений по-русски, одним абзацем, без разметки и без списков. Скажи, что это за скилл, для чего он нужен и когда его брать, как он работает (что делает ассистент по шагам) и что лежит внутри, если файлов несколько. Не выдумывай того, чего нет в файлах.',
-  'type — для чего скилл: static — картинки (промты для генерации изображений, фото, иллюстрации, персонажи), video — видео (промты для видео-моделей, монтаж, клипы, сценарии роликов), code — программирование, интерфейсы, сайты, автоматизация, документы и всё остальное техническое. Если не подходит ни одно точно, выбери ближайшее по смыслу.'
+  'type — для чего скилл: static — картинки (изображения, фото, иллюстрации, персонажи), video — видео (генерация, монтаж, клипы и визуальные сцены), audio — звук (музыка, голос, озвучка, подкасты, обработка аудио), text — тексты (статьи, книги, сценарии, диалоги, редактура, перевод), code — программирование и технические задачи (интерфейсы, сайты, автоматизация). Выбери основное назначение скилла; сценарий без видео относится к text, а сценарий ролика с кадрами и монтажом — к video. Если не подходит ни одно точно, выбери ближайшее по смыслу.'
 ].join('\n\n');
 const SKILL_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['desc', 'type'],
@@ -2655,7 +2655,7 @@ function skillModel() { return keys.openai ? modelById('gpt-6.1-sol') : keys.ant
 // What the model reads about a skill: the file, the list of files of an archive and the main Markdown text.
 function skillInput(s) {
   const list = s.inside.slice(0, 150).map((f) => '- ' + f.path + ' (' + Math.max(1, Math.round(f.size / 1024)) + ' КБ)').join('\n');
-  return 'Файл: ' + s.file.name + (s.file.kind === 'zip' ? ', архив, файлов: ' + s.files + (s.files > 150 ? ' (показаны первые 150)' : '') + '\n' + list : '') +
+  return 'Файл: ' + s.file.name + (s.file.kind !== 'md' ? ', архив, файлов: ' + s.files + (s.files > 150 ? ' (показаны первые 150)' : '') + '\n' + list : '') +
     '\n\n' + (s.text ? 'Главный файл' + (s.main ? ' (' + s.main + ')' : '') + ':\n' + s.text.slice(0, 60000) : 'Текстового файла .md в архиве нет.');
 }
 async function skillData(model, input, signal) {
@@ -2709,7 +2709,7 @@ const skillAllowed = new Set();   // only files the user picked or dropped can b
 const skillDownloads = new Map(); // skill id -> where it was last saved, for «Показать в папке»
 async function inspectSkill(file) {
   file = String(file || '');
-  if (!skillKind(file)) return { ok: false, error: 'Скилл — это файл .md или архив .zip.' };
+  if (!skillKind(file)) return { ok: false, error: 'Скилл — это файл .md или архив .zip либо .skill.' };
   try {
     const r = await readSkillFile(file, path.basename(file));
     skillAllowed.add(file);
@@ -2721,8 +2721,8 @@ async function inspectSkill(file) {
 }
 handle('skill-pick', async function () {
   const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
-    title: 'Выберите скилл: файл .md или архив .zip', properties: ['openFile'],
-    filters: [{ name: 'Скиллы', extensions: ['md', 'markdown', 'zip'] }]
+    title: 'Выберите скилл: файл .md или архив .zip либо .skill', properties: ['openFile'],
+    filters: [{ name: 'Скиллы', extensions: ['md', 'markdown', 'zip', 'skill'] }]
   });
   if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
   return inspectSkill(r.filePaths[0]);
@@ -2753,11 +2753,11 @@ handle('skill-download', async function (id) {
   const s = store.findSkill(String(id || ''));
   const file = s && store.skillFilePath(s.id);
   if (!file || !fs.existsSync(file)) return { ok: false, error: 'Файла этого скилла нет в папке с данными.' };
-  const ext = s.file.kind === 'zip' ? 'zip' : path.extname(s.file.name).slice(1) || 'md';
+  const ext = path.extname(s.file.name).slice(1) || 'md';
   const r = await dialog.showSaveDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
     title: 'Сохранить скилл «' + s.title + '»',
     defaultPath: path.join(app.getPath('downloads'), s.file.name),
-    filters: [{ name: s.file.kind === 'zip' ? 'Архив скилла' : 'Скилл', extensions: [ext] }]
+    filters: [{ name: s.file.kind !== 'md' ? 'Архив скилла' : 'Скилл', extensions: [ext] }]
   });
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
   await fsp.copyFile(file, r.filePath);
@@ -2770,9 +2770,9 @@ handle('skill-reveal', async (id) => {
   shell.showItemInFolder(file);
   return { ok: true };
 });
-// A skill file for an LLM message (.md or .zip as it is, at most 20 MB), beside the pictures of the conversation.
+// A skill file for an LLM message (.md, .zip or .skill as it is, at most 20 MB), beside the pictures of the conversation.
 handle('chat-file-save', async (chatId, name, bytes) => {
-  if (!skillKind(String(name || ''))) return { ok: false, error: 'В LLM можно приложить картинки, а также скиллы: .md или .zip.' };
+  if (!skillKind(String(name || ''))) return { ok: false, error: 'В LLM можно приложить картинки, а также скиллы: .md, .zip или .skill.' };
   if (!bytes || !(bytes.byteLength > 0) || bytes.byteLength > 20 * 1024 * 1024) return { ok: false, error: 'Этот файл больше 20 МБ.' };
   const file = await store.saveChatFile(chatId, name, bytes);
   return { ok: true, image: file };

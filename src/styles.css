@@ -27,6 +27,8 @@
 
   --cat-static-bg: #D3EBC9; --cat-static-ink: #2D5824; --cat-static-dot: #4F9A40;
   --cat-video-bg:  #CFE0F6; --cat-video-ink:  #22487A; --cat-video-dot:  #3C78C8;
+  --cat-audio-bg:  #CDEDEA; --cat-audio-ink:  #205C56; --cat-audio-dot:  #2E9A92;
+  --cat-text-bg:   #F8E7C4; --cat-text-ink:   #745116; --cat-text-dot:   #D9982A;
   --cat-system-bg: #F7CBC6; --cat-system-ink: #7A2620; --cat-system-dot: #D0493E;
   --cat-other-bg:  #EEDFD4; --cat-other-ink:  #5A4234; --cat-other-dot:  #A48474;
   --cat-code-bg:   #E6DCF6; --cat-code-ink:   #4A2F78; --cat-code-dot:   #8A5CC8;   /* skills only: «Code» */
@@ -64,6 +66,8 @@
     --pop-shadow: 0 14px 34px -10px rgba(0, 0, 0, .7);
     --cat-static-bg: #2F4A2A; --cat-static-ink: #D3EBC9; --cat-static-dot: #8CCB7C;
     --cat-video-bg:  #283F5E; --cat-video-ink:  #CFE0F6; --cat-video-dot:  #86B4F0;
+    --cat-audio-bg:  #1F4643; --cat-audio-ink:  #B7E7E2; --cat-audio-dot:  #6CCFC6;
+    --cat-text-bg:   #4A3A1B; --cat-text-ink:   #F8E7C4; --cat-text-dot:   #F0BE5E;
     --cat-system-bg: #5C2B28; --cat-system-ink: #F7CBC6; --cat-system-dot: #F08A80;
     --cat-other-bg:  #45352D; --cat-other-ink:  #EEDFD4; --cat-other-dot:  #B99A8A;
     --cat-code-bg:   #3D2F57; --cat-code-ink:   #E6DCF6; --cat-code-dot:   #B994E6;
@@ -369,6 +373,8 @@ button { cursor: pointer; }
 /* Category colour sets */
 .cat-static { --chip-bg: var(--cat-static-bg); --chip-ink: var(--cat-static-ink); --dot: var(--cat-static-dot); }
 .cat-video  { --chip-bg: var(--cat-video-bg);  --chip-ink: var(--cat-video-ink);  --dot: var(--cat-video-dot); }
+.cat-audio  { --chip-bg: var(--cat-audio-bg);  --chip-ink: var(--cat-audio-ink);  --dot: var(--cat-audio-dot); }
+.cat-text   { --chip-bg: var(--cat-text-bg);   --chip-ink: var(--cat-text-ink);   --dot: var(--cat-text-dot); }
 .cat-system { --chip-bg: var(--cat-system-bg); --chip-ink: var(--cat-system-ink); --dot: var(--cat-system-dot); }
 .cat-code   { --chip-bg: var(--cat-code-bg);   --chip-ink: var(--cat-code-ink);   --dot: var(--cat-code-dot); }
 .cat-other  { --chip-bg: var(--cat-other-bg);  --chip-ink: var(--cat-other-ink);  --dot: var(--cat-other-dot); }
@@ -916,6 +922,11 @@ h1 .brand { color: var(--accent-strong); }
 .send-btn .i-stop, .composer.busy .send-btn .i-send { display: none; }
 .composer.busy .send-btn .i-stop { display: block; }
 .composer-hint { margin: 7px 4px 0; font-size: 12.5px; color: var(--ink-soft); }
+/* Under the message box: the hint, and «Новый разговор» once the header has scrolled away */
+.composer-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.composer-foot .composer-hint { flex: 1; min-width: 0; }
+.chat-new-dock { margin-top: 7px; padding: 4px 10px; font-size: 12.5px; }
+.chat-new-dock[hidden] { display: none; }
 
 /* Settings page */
 .set-card { padding: 20px 22px; display: grid; gap: 16px; }
@@ -1908,7 +1919,7 @@ h1 .brand { color: var(--accent-strong); }
   flex: none; font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px;
   background: var(--cat-other-bg); color: var(--cat-other-ink);
 }
-.sk-file b.zip, .bubble-doc b, .att-doc-in b { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent-strong); }
+.sk-file b.zip, .sk-file b.skill, .bubble-doc b, .att-doc-in b { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent-strong); }
 .btn-mini.dl { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn-mini.dl:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
@@ -1951,7 +1962,7 @@ h1 .brand { color: var(--accent-strong); }
 .sk-auto .pill .ico svg { width: 14px; height: 14px; display: block; }
 .cat-option.sk-auto-opt span::before { background: none; border: 1.5px dashed var(--ink-soft); width: 8px; height: 8px; }
 
-/* LLM: skill files (.md, .zip) in the message box and in a sent message */
+/* LLM: skill files (.md, .zip, .skill) in the message box and in a sent message */
 .att-thumb.att-doc { width: auto; max-width: 220px; padding: 0 30px 0 10px; display: flex; align-items: center; }
 .att-doc-in { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; }
 .att-doc-in span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
