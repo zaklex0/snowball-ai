@@ -7,7 +7,7 @@
 window.GUIDES = [
   // The macOS theme is not a section: section "theme" is opened by «Тема › macOS › Как пользоваться», its last button opens
   // «Тема» in the profile menu, and news is what the banner after the update says is new.
-  { version: "1.18.1", section: "theme", news: "тема «macOS» с выбором цвета", title: "Тема macOS", steps: [
+  { version: "1.18.1", updated: "1.19.1", section: "theme", news: "тема «macOS» с выбором цвета", title: "Тема macOS", steps: [
     { title: "Как включить тему", lead: "Тема меняет только вид программы: все кнопки и разделы остаются на своих местах. Вернуть прежний вид можно в любой момент.", frames: [
       { name: "1. Откройте меню", shot: "01-theme", points: [
         { box: "theme", at: [150, 470], label: "Тема", text: "Нажмите кнопку профиля внизу слева (с вашим ником), в меню наведите мышку на «Тема» — справа откроется список тем." },

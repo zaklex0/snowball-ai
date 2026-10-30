@@ -394,6 +394,8 @@ h1 .brand { color: var(--accent-strong); }
 .btn-ghost { background: transparent; border-color: var(--line); color: var(--ink); }
 .btn-ghost:hover { background: var(--surface-2); }
 .btn svg { width: 16px; height: 16px; flex: none; }
+/* Shortcut hints next to an action; only the macOS theme shows them (theme-macos.css) */
+.kh { display: none; }
 .btn-icon { padding: 10px; }
 .btn-icon svg { width: 18px; height: 18px; }
 

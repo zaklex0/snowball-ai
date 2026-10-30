@@ -1912,6 +1912,7 @@
       var g = guideByVersion(r.whatsNew, r.whatsNewFrom), gNew = g && guideFresh(g.version, r.whatsNew, r.whatsNewFrom);
       showBanner("Snowball.ai обновлена до версии " + r.whatsNew + "." + (!g ? " Посмотрите, что нового и как этим пользоваться."
         : gNew ? (g.news ? " Новое: " + g.news + ". Посмотрите по картинкам, как этим пользоваться." : " Новое: раздел «" + g.title + "». Посмотрите по картинкам, как им пользоваться.")
+        : g.news ? " Обновлено: " + g.title + ". Посмотрите по картинкам, что изменилось."
         : " В разделе «" + g.title + "» много нового. Посмотрите по картинкам, что изменилось."), {
         label: g ? "Как пользоваться" : "Что нового", close: "Понятно",
         onclick: function () { els.banner.hidden = true; if (g) openGuide(g); else openUpdates(true); },
@@ -5482,6 +5483,7 @@
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyT") { e.preventDefault(); setTabMenu(true); return; }
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyW") { e.preventDefault(); closeTab(tabs.active); return; }
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyK") { e.preventDefault(); setQuick(els.qa.hidden); return; }
+    if (mod && !e.shiftKey && !e.altKey && e.code === "Comma") { e.preventDefault(); openSettings(); return; }
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();
       setPage("prompts");

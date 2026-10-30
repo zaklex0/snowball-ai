@@ -1,0 +1,1423 @@
+<!doctype html>
+<html lang="ru" data-t="light" data-acc="peach">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тема macOS: сверка со скиллом</title>
+<link rel="stylesheet" href="../src/fonts.css">
+<style>
+/* =====================================================================
+   Snowball.ai — редизайн в стиле macOS Tahoe («жидкое стекло»).
+   Расположение всех кнопок и разделов — как в версии 1.17.1.
+   Меняется только внешний вид: стекло, воздух, мягкие тени, зерно.
+   ===================================================================== */
+:root{
+  --font:"SF Pro Text",-apple-system,"Golos Text","Segoe UI Variable Text",system-ui,sans-serif;
+  --mono:"SF Mono","IBM Plex Mono",ui-monospace,Consolas,monospace;
+
+  --acc:#f2793d;
+  --text:#1d1d1f; --text2:rgba(60,60,67,.74); --text3:rgba(60,60,67,.46);
+  --sep:rgba(60,60,67,.13);
+  --win-bg:rgba(238,238,242,.62);
+  --content:rgba(250,250,252,.86);
+  --glass:rgba(255,255,255,.40);
+  --glass-strong:rgba(255,255,255,.78);
+  --glass-edge:rgba(255,255,255,.95);
+  --card:rgba(255,255,255,.66);
+  --fill:rgba(118,118,128,.11); --fill2:rgba(118,118,128,.2);
+  --shadow-card:0 1px 2px rgba(20,20,40,.04),0 6px 22px rgba(30,30,70,.06);
+  --menu:rgba(250,250,252,.72);
+  --grain-op:.09; --grain-blend:multiply;
+
+  --red:#ff3b30; --orange:#ff9500; --yellow:#ffcc00; --green:#34c759; --teal:#30b0c7; --blue:#007aff; --indigo:#5856d6; --purple:#af52de; --pink:#ff2d55;
+  --cell:rgba(255,255,255,.55);
+  --off:color-mix(in srgb,var(--red) 11%,var(--cell));
+  --busy1:color-mix(in srgb,var(--green) 13%,var(--cell));
+  --busy2:color-mix(in srgb,var(--green) 24%,var(--cell));
+  --busy3:color-mix(in srgb,var(--green) 38%,var(--cell));
+}
+:root[data-t="dark"]{
+  --text:#f5f5f7; --text2:rgba(235,235,245,.66); --text3:rgba(235,235,245,.36);
+  --sep:rgba(255,255,255,.10);
+  --win-bg:rgba(24,24,28,.66);
+  --content:rgba(28,28,31,.84);
+  --glass:rgba(255,255,255,.07);
+  --glass-strong:rgba(255,255,255,.13);
+  --glass-edge:rgba(255,255,255,.30);
+  --card:rgba(255,255,255,.055);
+  --fill:rgba(118,118,128,.22); --fill2:rgba(118,118,128,.34);
+  --shadow-card:0 1px 2px rgba(0,0,0,.25),0 8px 26px rgba(0,0,0,.25);
+  --menu:rgba(40,40,46,.72);
+  --grain-op:.10; --grain-blend:overlay;
+  --cell:rgba(255,255,255,.045);
+}
+:root[data-acc="peach"]{--acc:#f2793d}
+:root[data-acc="blue"]{--acc:#0a84ff}
+:root[data-acc="purple"]{--acc:#9b5cf6}
+:root[data-acc="graphite"]{--acc:#8e8e93}
+:root{--acc-soft:color-mix(in srgb,var(--acc) 15%,transparent);--acc-ink:color-mix(in srgb,var(--acc) 82%,var(--text))}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%}
+body{font-family:var(--font);font-size:13px;color:var(--text);-webkit-font-smoothing:antialiased;
+  display:flex;gap:28px;align-items:flex-start;justify-content:center;padding:36px 28px 60px;
+  background:
+    radial-gradient(55% 45% at 12% 8%,#ffd3b8 0,transparent 70%),
+    radial-gradient(50% 50% at 92% 12%,#c3d2ff 0,transparent 70%),
+    radial-gradient(70% 55% at 70% 100%,#a9b8f0 0,transparent 70%),
+    radial-gradient(45% 40% at 20% 90%,#f6c3d6 0,transparent 70%),
+    linear-gradient(160deg,#f4e3da,#d3dbf3);
+  background-attachment:fixed}
+:root[data-t="dark"] body{background:
+    radial-gradient(55% 45% at 12% 8%,#5b2f2a 0,transparent 70%),
+    radial-gradient(50% 50% at 92% 12%,#1f2f6b 0,transparent 70%),
+    radial-gradient(70% 55% at 70% 100%,#2c2466 0,transparent 70%),
+    radial-gradient(45% 40% at 20% 90%,#4a1f3c 0,transparent 70%),
+    linear-gradient(160deg,#17151c,#0d1020);background-attachment:fixed}
+body::after{content:"";position:fixed;inset:0;pointer-events:none;opacity:var(--grain-op);mix-blend-mode:var(--grain-blend);background-image:var(--grain);z-index:0}
+:root{--grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .9 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* ---------- «жидкое стекло» ---------- */
+.lg{position:relative;isolation:isolate;background:var(--glass);
+  -webkit-backdrop-filter:blur(26px) saturate(1.9);backdrop-filter:blur(26px) saturate(1.9);
+  box-shadow:inset 0 .6px 0 var(--glass-edge),inset 0 0 0 .6px color-mix(in srgb,var(--glass-edge) 35%,transparent),0 0 0 .5px rgba(0,0,0,.06),0 10px 30px rgba(20,20,60,.08)}
+.lg::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:-1;
+  background:linear-gradient(180deg,rgba(255,255,255,.42),rgba(255,255,255,0) 38%),
+             radial-gradient(90% 55% at 50% -12%,rgba(255,255,255,.35),transparent 70%);opacity:.9}
+:root[data-t="dark"] .lg::before{opacity:.28}
+:root[data-t="dark"] .lg{box-shadow:inset 0 .6px 0 var(--glass-edge),inset 0 0 0 .6px rgba(255,255,255,.08),0 0 0 .5px rgba(0,0,0,.5),0 10px 30px rgba(0,0,0,.3)}
+/* «линза»: в Chromium (а Electron — это Chromium) стекло ещё и чуть преломляет то, что под ним */
+.lens{-webkit-backdrop-filter:blur(4px) saturate(1.8);backdrop-filter:blur(4px) saturate(1.8)}
+.lens{backdrop-filter:blur(3px) url(#lens) saturate(1.8)}
+
+/* ---------- окно ---------- */
+.win{width:1280px;height:820px;flex:none;position:relative;display:flex;border-radius:8px;overflow:hidden;z-index:1;
+  background:var(--win-bg);-webkit-backdrop-filter:blur(60px) saturate(1.8);backdrop-filter:blur(60px) saturate(1.8);
+  box-shadow:0 0 0 1px rgba(0,0,0,.14),0 30px 90px rgba(30,30,80,.28),0 8px 24px rgba(30,30,80,.12)}
+:root[data-t="dark"] .win{box-shadow:0 0 0 1px rgba(255,255,255,.10),0 30px 90px rgba(0,0,0,.6)}
+.win::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:1;opacity:var(--grain-op);mix-blend-mode:var(--grain-blend);background-image:var(--grain)}
+/* цветные «ауры» под стеклом: просвечивают сквозь панель и карточки, как обои сквозь окна macOS */
+.aura{position:absolute;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.aura i{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55}
+.aura i:nth-child(1){left:-80px;top:220px;width:340px;height:340px;background:color-mix(in srgb,var(--acc) 70%,#ffd0b0)}
+.aura i:nth-child(2){left:40px;bottom:-140px;width:300px;height:300px;background:#a9b9ff}
+.aura i:nth-child(3){right:-120px;top:-120px;width:420px;height:320px;background:#ffd6e6;opacity:.45}
+.aura i:nth-child(4){right:180px;bottom:-200px;width:460px;height:320px;background:#bfe6dc;opacity:.35}
+:root[data-t="dark"] .aura i{opacity:.28}
+
+/* ---------- левая панель ---------- */
+.side{width:236px;flex:none;padding:8px 0 8px 8px;position:relative;z-index:3}
+.side-panel{height:100%;border-radius:18px;display:flex;flex-direction:column;padding:12px 10px 10px}
+.side-head{display:flex;align-items:center;gap:9px;padding:2px 6px 0;height:24px;font-weight:600;font-size:13.5px;letter-spacing:-.01em}
+.logo{width:20px;height:20px;border-radius:6px;background:linear-gradient(145deg,#ffb38a,var(--acc));box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 6px color-mix(in srgb,var(--acc) 40%,transparent);display:grid;place-items:center}
+.logo::after{content:"";width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.9)}
+.side-icons{display:flex;gap:1px;margin:16px 0 10px}
+.nav-icon{flex:0 1 30px;height:32px;border-radius:10px;display:grid;place-items:center;color:var(--text2);position:relative;transition:background .15s,color .15s}
+.nav-icon svg{width:17px;height:17px}
+.nav-icon:hover{background:var(--fill);color:var(--text)}
+.nav-icon.on{color:var(--acc-ink);background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 2px 8px rgba(0,0,0,.08)}
+.nav-badge{position:absolute;top:0;right:-1px;min-width:15px;height:15px;padding:0 4px;border-radius:8px;background:var(--acc);color:#fff;font-size:9.5px;font-weight:700;line-height:15px;text-align:center;box-shadow:0 0 0 1.5px color-mix(in srgb,var(--win-bg) 100%,white 40%)}
+.capture-nav{display:flex;align-items:center;gap:9px;width:100%;height:38px;padding:0 10px 0 11px;border-radius:12px;font-weight:500;font-size:13px}
+.capture-nav kbd{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--text3);padding:2px 6px;border-radius:6px;background:var(--fill)}
+.capture-nav.on{color:var(--acc-ink)}
+.side-h{font-size:11px;font-weight:600;color:var(--text3);padding:0 6px;margin:20px 0 4px}
+.up-day{font-size:11px;color:var(--text3);padding:8px 6px 3px}
+.up-ev{display:flex;align-items:center;gap:8px;width:100%;padding:5px 7px;border-radius:8px;font-size:12.5px;text-align:left}
+.up-ev:hover{background:var(--fill)}
+.up-ev i{width:7px;height:7px;border-radius:50%;background:var(--k);flex:none}
+.up-ev .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.up-ev .tm{font-size:11.5px;color:var(--text3);font-variant-numeric:tabular-nums}
+.up-ev.now{background:color-mix(in srgb,var(--k) 13%,transparent)}
+.up-ev.now .tm{color:var(--k);font-weight:600}
+.up-ev.now i{animation:glow 2.2s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--k) 25%,transparent)}}
+.side-bottom{margin-top:auto;display:flex;flex-direction:column;gap:2px}
+.nav-item{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;border-radius:10px;font-size:13px;width:100%;text-align:left;color:var(--text)}
+.nav-item svg{color:var(--text2)}
+.nav-item:hover{background:var(--fill)}
+.nav-item.on{background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep)}
+.nav-item.on svg{color:var(--acc-ink)}
+.profile-row{display:flex;gap:8px;margin-top:6px;align-items:center}
+.profile-btn{flex:1;display:flex;align-items:center;gap:9px;height:44px;padding:0 10px 0 8px;border-radius:14px;font-weight:600;font-size:13px}
+.avatar{width:28px;height:28px;border-radius:50%;flex:none;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;background:linear-gradient(145deg,#ffb38a,var(--acc));box-shadow:inset 0 1px 0 rgba(255,255,255,.45)}
+.profile-btn .chev{margin-left:auto;color:var(--text3);width:14px;height:14px}
+.qa-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none;
+  background:radial-gradient(120% 120% at 30% 15%,color-mix(in srgb,var(--acc) 55%,white),var(--acc) 60%,color-mix(in srgb,var(--acc) 80%,black));
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.7),inset 0 -2px 4px rgba(0,0,0,.12),0 6px 16px color-mix(in srgb,var(--acc) 45%,transparent);position:relative}
+.qa-btn::after{content:"";position:absolute;left:9px;right:9px;top:4px;height:14px;border-radius:50%;background:linear-gradient(180deg,rgba(255,255,255,.65),rgba(255,255,255,0))}
+.qa-btn svg{width:19px;height:19px}
+
+/* ---------- правая часть: вкладки + страница ---------- */
+.main-col{flex:1;min-width:0;display:flex;flex-direction:column;position:relative;z-index:2}
+.titlebar{height:40px;flex:none;display:flex;align-items:center;padding-left:8px;gap:4px}
+.tabs{display:flex;gap:3px;min-width:0}
+.tab{height:30px;display:flex;align-items:center;gap:7px;padding:0 8px 0 11px;border-radius:10px;font-size:12.5px;color:var(--text2);max-width:210px;min-width:0;position:relative}
+.tab svg.i{width:14px;height:14px}
+.tab .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tab:hover{background:var(--fill);color:var(--text)}
+.tab.on{color:var(--text);font-weight:500}
+.tab .x{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;opacity:0;color:var(--text3);margin-left:2px}
+.tab .x svg{width:11px;height:11px;stroke-width:2.2}
+.tab:hover .x,.tab.on .x{opacity:1}
+.tab .x:hover{background:var(--fill2);color:var(--text)}
+.tab .dot{width:7px;height:7px;border-radius:50%;background:var(--acc);flex:none}
+.tab .dot.live{animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.25}}
+.tab-plus{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--text2)}
+.tab-plus:hover{background:var(--fill);color:var(--text)}
+.drag{flex:1;align-self:stretch}
+/* кнопки окна — Windows 11, как сейчас (их рисует сама Windows через titleBarOverlay) */
+.winctl{display:flex;align-self:stretch}
+.winctl button{width:46px;height:40px;display:grid;place-items:center;color:var(--text)}
+.winctl svg{width:10px;height:10px;stroke:currentColor;stroke-width:1;fill:none}
+.winctl button:hover{background:var(--fill)}
+.winctl .close:hover{background:#c42b1c;color:#fff}
+
+.scroller{flex:1;overflow:auto;padding:0 30px 32px 30px;background:var(--content);border-top-left-radius:16px;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 14px);mask-image:linear-gradient(to bottom,transparent 0,#000 14px);
+  scrollbar-width:thin;scrollbar-color:var(--fill2) transparent}
+.view{display:none}
+.view.on{display:block}
+.top{display:flex;align-items:flex-end;gap:16px;padding:26px 0 20px}
+.top-text{flex:1;min-width:0}
+.eyebrow{font-size:12.5px;color:var(--text3);font-weight:500}
+h1{font-size:32px;font-weight:600;letter-spacing:-.03em;line-height:1.12;margin:3px 0 5px}
+h1 .brand{color:var(--text3)}
+.meta{color:var(--text2);font-size:13.5px}
+.top-actions{display:flex;gap:8px;align-items:center}
+
+/* ---------- кнопки, поля, карточки ---------- */
+.btn{height:32px;display:inline-flex;align-items:center;gap:7px;padding:0 14px;border-radius:999px;font-size:13px;font-weight:500;white-space:nowrap;
+  background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 1px 3px rgba(0,0,0,.05);transition:transform .12s,filter .12s}
+.btn:hover{filter:brightness(1.03)}
+.btn:active{transform:scale(.97)}
+.btn svg.i{width:15px;height:15px}
+.btn-primary{color:#fff;font-weight:600;background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 78%,white),var(--acc));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -1px 0 rgba(0,0,0,.08),0 0 0 .5px color-mix(in srgb,var(--acc) 70%,black),0 5px 16px color-mix(in srgb,var(--acc) 32%,transparent)}
+.btn-sm{height:26px;padding:0 10px;font-size:12px;gap:5px}
+.btn-sm svg.i{width:13px;height:13px}
+.btn-quiet{background:transparent;box-shadow:none;color:var(--text2)}
+.btn-quiet:hover{background:var(--fill);color:var(--text)}
+.btn-danger{color:var(--red)}
+.link{color:var(--acc-ink);font-weight:500}
+.icon-btn{width:32px;height:32px;border-radius:50%;display:grid;place-items:center}
+.card{background:var(--card);border-radius:18px;box-shadow:var(--shadow-card),inset 0 0 0 .5px var(--sep);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px)}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--fill);gap:2px}
+.seg button{height:26px;padding:0 14px;border-radius:999px;font-size:12.5px;color:var(--text2);font-weight:500}
+.seg button.on{color:var(--text);font-weight:600;background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 2px 6px rgba(0,0,0,.1)}
+.search{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:11px;background:var(--fill);color:var(--text3);font-size:13px;min-width:0}
+.search svg{width:15px;height:15px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.c-static{--c:var(--green)}.c-video{--c:var(--blue)}.c-system{--c:var(--red)}
+.chip.cat{color:color-mix(in srgb,var(--c) 75%,var(--text));background:color-mix(in srgb,var(--c) 14%,transparent);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--c) 30%,transparent)}
+.chip.cat::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--c)}
+.pill-beta{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;color:var(--acc-ink);background:var(--acc-soft);vertical-align:7px;letter-spacing:0}
+.muted{color:var(--text3)}
+
+/* ассистент-полоса (календарь, задачи) */
+.bar-row{display:flex;gap:10px;margin-bottom:18px}
+.abar{flex:1;display:flex;align-items:center;gap:10px;height:46px;padding:0 7px 0 8px;border-radius:23px;min-width:0}
+.abar .sp{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:var(--acc-ink);background:var(--acc-soft);flex:none}
+.abar .ph{flex:1;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.abar .mdl{font-size:11.5px;color:var(--text2);padding:4px 9px;border-radius:999px;background:var(--fill);white-space:nowrap}
+.send{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex:none;color:#fff;background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 75%,white),var(--acc));box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 10px color-mix(in srgb,var(--acc) 35%,transparent)}
+.send.off{background:var(--fill2);color:var(--text3);box-shadow:none}
+.send svg{width:15px;height:15px;stroke-width:2.2}
+
+/* ---------- Главная ---------- */
+.home-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.home-tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:18px;border-radius:20px;min-height:150px;text-align:left;transition:transform .18s}
+.home-tile:hover{transform:translateY(-2px)}
+.home-tile b{font-size:15px;font-weight:600;margin-top:auto}
+.home-tile span{font-size:12.5px;color:var(--text2);line-height:1.4}
+.app-ico{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;color:#fff;margin-bottom:12px;
+  background:linear-gradient(160deg,color-mix(in srgb,var(--c) 70%,white),var(--c));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -1px 0 rgba(0,0,0,.08),0 4px 12px color-mix(in srgb,var(--c) 35%,transparent)}
+.app-ico svg{width:22px;height:22px;stroke-width:1.9}
+
+/* ---------- Промты ---------- */
+.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+.toolbar .search{flex:1;max-width:420px}
+.filters{display:flex;gap:6px}
+.fchip{height:30px;padding:0 12px;border-radius:999px;font-size:12.5px;font-weight:500;color:var(--text2);display:inline-flex;align-items:center;gap:6px}
+.fchip b{font-weight:500;color:var(--text3)}
+.fchip:hover{background:var(--fill)}
+.fchip.on{color:var(--text);background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 1px 4px rgba(0,0,0,.07)}
+.fchip .d{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.ptable{width:100%;border-collapse:collapse}
+.ptable th{font-size:11.5px;font-weight:600;color:var(--text3);text-align:left;padding:14px 18px 10px;border-bottom:.5px solid var(--sep)}
+.ptable td{padding:18px;vertical-align:top;border-bottom:.5px solid var(--sep)}
+.ptable tr:last-child td{border-bottom:0}
+.ptable tbody tr:hover td{background:color-mix(in srgb,var(--fill) 45%,transparent)}
+.c-name{width:262px}.c-type{width:120px}
+.pname{font-weight:600;font-size:14px;letter-spacing:-.01em}
+.when{font-size:11.5px;color:var(--text3);margin-top:3px}
+.row-actions{display:flex;gap:2px;margin-top:12px;flex-wrap:wrap;margin-left:-8px}
+.ptext{font-family:var(--mono);font-size:12.2px;line-height:1.6;color:var(--text);padding:12px 14px;border-radius:12px;background:var(--fill);position:relative;max-height:84px;overflow:hidden}
+.ptext::after{content:"";position:absolute;left:0;right:0;bottom:0;height:30px;background:linear-gradient(transparent,color-mix(in srgb,var(--card) 10%,transparent));pointer-events:none}
+.pnote{display:flex;gap:9px;margin-top:8px;padding:10px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;color:var(--text2);background:color-mix(in srgb,var(--yellow) 12%,transparent);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--yellow) 30%,transparent)}
+.pnote svg{color:color-mix(in srgb,var(--orange) 80%,var(--text));margin-top:1px}
+.pbar{display:flex;align-items:center;gap:2px;margin-top:8px}
+.pbar .chars{font-size:11.5px;color:var(--text3);margin-left:6px}
+.pbar .sp{flex:1}
+.files{display:flex;gap:8px;margin-top:10px}
+.ftile{width:62px;height:62px;border-radius:12px;box-shadow:inset 0 0 0 .5px var(--sep),0 2px 6px rgba(0,0,0,.08);background:var(--g)}
+
+/* ---------- Календарь ---------- */
+.cal-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.cal-title{font-size:21px;font-weight:600;letter-spacing:-.02em;margin-left:8px}
+.cal{display:grid;grid-template-columns:1fr 360px;gap:14px}
+.cal-month{padding:14px 14px 12px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px}
+.cal-grid .h{font-size:11px;font-weight:600;color:var(--text3);padding:2px 8px 6px}
+.cal-grid .h.we{color:color-mix(in srgb,var(--red) 75%,var(--text3))}
+.day{height:74px;border-radius:12px;padding:6px 8px;background:var(--cell);box-shadow:inset 0 0 0 .5px var(--sep);font-size:12.5px;font-weight:600;position:relative;cursor:pointer;transition:transform .12s}
+.day:hover{transform:scale(1.025)}
+.day.out{opacity:.38}
+.day.off{background:var(--off);color:color-mix(in srgb,var(--red) 80%,var(--text))}
+.day.b1{background:var(--busy1)}.day.b2{background:var(--busy2)}.day.b3{background:var(--busy3)}
+.day.off.busy{box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--green) 55%,transparent)}
+.day.today .n{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:11px;background:var(--acc);color:#fff;margin:-2px 0 0 -3px}
+.day.sel{box-shadow:inset 0 0 0 2px var(--acc),0 4px 14px color-mix(in srgb,var(--acc) 22%,transparent)}
+.day .ev{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:500;color:var(--text2);margin-top:5px;white-space:nowrap;overflow:hidden}
+.day .ev i{width:5px;height:5px;border-radius:50%;background:var(--k);flex:none}
+.day .hol{position:absolute;left:8px;bottom:6px;font-size:9.5px;font-weight:500;opacity:.85}
+.cal-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;padding:0 4px;font-size:11.5px;color:var(--text3)}
+.cal-legend span{display:flex;align-items:center;gap:5px}
+.cal-legend i{width:12px;height:12px;border-radius:4px;box-shadow:inset 0 0 0 .5px var(--sep)}
+.cal-day{padding:16px 16px 10px;display:flex;flex-direction:column;min-height:0}
+.cal-day-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.cal-day-head h2{font-size:17px;font-weight:600;letter-spacing:-.015em}
+.cal-day-head p{font-size:12px;color:var(--text3);margin-top:2px}
+.timeline{position:relative;height:420px;overflow:hidden}
+.hr{height:46px;border-top:.5px solid var(--sep);font-size:11px;color:var(--text3);padding:4px 0 0;font-variant-numeric:tabular-nums}
+.tev{position:absolute;z-index:1;left:52px;right:4px;border-radius:10px;padding:6px 10px 6px 12px;font-size:12px;background:color-mix(in srgb,var(--k) 15%,var(--card));box-shadow:inset 3px 0 0 var(--k),inset 0 0 0 .5px color-mix(in srgb,var(--k) 30%,transparent)}
+.tev b{font-weight:600}
+.tev small{display:block;color:var(--text2);font-size:11px;margin-top:2px}
+.tev .kind{position:absolute;right:10px;top:6px;font-size:11px;color:var(--text3)}
+.tev.now{animation:evnow 2.4s ease-in-out infinite}
+@keyframes evnow{50%{box-shadow:inset 3px 0 0 var(--k),inset 0 0 0 1.5px color-mix(in srgb,var(--k) 60%,transparent),0 0 0 4px color-mix(in srgb,var(--k) 14%,transparent)}}
+.nowline{position:absolute;left:44px;right:0;height:0;border-top:1.5px solid var(--red);z-index:0}
+.nowline::before{content:"";position:absolute;left:-4px;top:-4.5px;width:7px;height:7px;border-radius:50%;background:var(--red)}
+.foot{font-size:12px;color:var(--text3);margin-top:14px;line-height:1.5}
+.k-call{--k:var(--purple)}.k-shoot{--k:var(--orange)}.k-meet{--k:var(--blue)}.k-edit{--k:var(--teal)}.k-task{--k:var(--green)}
+
+/* ---------- Задачи ---------- */
+.tfilters{display:flex;gap:8px;align-items:center;margin-bottom:16px}
+.tfilters .search{width:260px}
+.sel{height:30px;display:inline-flex;align-items:center;gap:6px;padding:0 10px 0 12px;border-radius:9px;font-size:12.5px;background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 1px 2px rgba(0,0,0,.05)}
+.sel svg{width:12px;height:12px;color:var(--text3)}
+.board{display:flex;gap:10px;align-items:flex-start;overflow-x:auto;padding-bottom:6px}
+.col{width:205px;flex:none;border-radius:18px;padding:10px;background:color-mix(in srgb,var(--fill) 60%,transparent);box-shadow:inset 0 0 0 .5px var(--sep)}
+.col-head{display:flex;align-items:center;gap:7px;padding:4px 6px 10px;font-size:12.5px;font-weight:600}
+.col-head .cnt{color:var(--text3);font-weight:500}
+.col-head .tag-dot{width:8px;height:8px;border-radius:3px;background:var(--cc,var(--text3))}
+.col-head .r{margin-left:auto;display:flex;color:var(--text3)}
+.col-head .r svg{width:14px;height:14px}
+.col-head .r button{width:24px;height:24px;border-radius:7px;display:grid;place-items:center}
+.col-head .r button:hover{background:var(--fill2)}
+.task{display:flex;gap:10px;padding:11px 12px;border-radius:14px;margin-bottom:8px;background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 2px 8px rgba(20,20,60,.05);cursor:grab}
+.task:hover{box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 6px 18px rgba(20,20,60,.1)}
+.tcheck{width:18px;height:18px;border-radius:50%;border:1.5px solid color-mix(in srgb,var(--text3) 80%,transparent);flex:none;margin-top:1px;display:grid;place-items:center}
+.task.done .tcheck{background:var(--green);border-color:var(--green);color:#fff}
+.tcheck svg{width:11px;height:11px;stroke-width:3}
+.task .tt{font-size:13px;line-height:1.35;font-weight:500}
+.task.done .tt{text-decoration:line-through;color:var(--text3)}
+.marks{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;align-items:center}
+.mk{font-size:10.5px;font-weight:600;height:19px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;gap:4px;color:var(--text2);background:var(--fill)}
+.mk.prio2{color:#fff;background:var(--red)}
+.mk.prio1{color:color-mix(in srgb,var(--orange) 80%,var(--text));background:color-mix(in srgb,var(--orange) 16%,transparent)}
+.mk.late{color:var(--red);background:color-mix(in srgb,var(--red) 12%,transparent)}
+.mk.tag{color:color-mix(in srgb,var(--c) 70%,var(--text));background:color-mix(in srgb,var(--c) 14%,transparent)}
+.mk.sub i{width:22px;height:3px;border-radius:2px;background:var(--fill2);position:relative;overflow:hidden}
+.mk.sub i::after{content:"";position:absolute;inset:0 75% 0 0;background:var(--green)}
+.mk svg{width:11px;height:11px}
+.add-row{display:flex;align-items:center;gap:7px;width:100%;height:32px;padding:0 8px;border-radius:10px;color:var(--text3);font-size:12.5px;font-weight:500}
+.add-row:hover{background:var(--fill2);color:var(--text)}
+.add-row svg{width:14px;height:14px}
+.new-col{width:108px;flex:none;height:44px;border-radius:14px;border:1.5px dashed var(--sep);color:var(--text3);font-weight:500;display:flex;align-items:center;justify-content:center;gap:6px}
+.hint{font-size:12px;color:var(--text3);margin-top:14px;line-height:1.5}
+
+/* ---------- LLM ---------- */
+.note-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;font-size:12.5px;color:var(--text2);margin-bottom:14px;background:color-mix(in srgb,var(--blue) 8%,transparent);box-shadow:inset 0 0 0 .5px color-mix(in srgb,var(--blue) 22%,transparent)}
+.note-bar svg{color:var(--blue)}
+.chat-layout{display:grid;grid-template-columns:220px 1fr;gap:16px;height:540px}
+.chat-hist{padding:12px 8px;overflow:auto}
+.chat-hist h2{font-size:11px;font-weight:600;color:var(--text3);padding:0 8px 6px}
+.ch-day{font-size:11px;color:var(--text3);padding:10px 8px 3px}
+.ch-item{display:flex;align-items:center;gap:6px;padding:7px 8px;border-radius:9px;font-size:12.5px;width:100%;text-align:left}
+.ch-item span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ch-item .x{opacity:0;color:var(--text3);flex:none}
+.ch-item .x svg{width:12px;height:12px}
+.ch-item:hover{background:var(--fill)}.ch-item:hover .x{opacity:1}
+.ch-item.on{background:var(--acc-soft);font-weight:600;color:var(--acc-ink)}
+.chat-col{display:flex;flex-direction:column;min-width:0}
+.chat{flex:1;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:6px 6px 14px}
+.msg-u{align-self:flex-end;max-width:72%;padding:10px 14px;border-radius:20px 20px 6px 20px;color:#fff;font-size:13.5px;line-height:1.5;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--acc) 82%,white),var(--acc));box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 4px 14px color-mix(in srgb,var(--acc) 25%,transparent)}
+.msg-a{max-width:86%;font-size:13.5px;line-height:1.6}
+.msg-a p+p,.msg-a p+ol,.msg-a ol+p{margin-top:8px}
+.msg-a ol{padding-left:20px}
+.code{margin-top:10px;border-radius:14px;overflow:hidden;background:color-mix(in srgb,var(--text) 5%,var(--card));box-shadow:inset 0 0 0 .5px var(--sep)}
+.code-h{display:flex;align-items:center;padding:6px 8px 6px 12px;font-size:11px;color:var(--text3);border-bottom:.5px solid var(--sep)}
+.code-h .btn{margin-left:auto}
+.code pre{font-family:var(--mono);font-size:12px;line-height:1.6;padding:10px 12px;white-space:pre-wrap}
+.cost{font-size:11px;color:var(--text3);margin-top:6px}
+.acard{max-width:420px;padding:12px 14px;border-radius:16px}
+.acard .ttl{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px}
+.acard .ttl i{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;color:#fff;background:var(--purple)}
+.acard .ttl i svg{width:14px;height:14px}
+.acard p{font-size:12.5px;color:var(--text2);margin:6px 0 10px 34px}
+.acard .r{display:flex;gap:6px;margin-left:34px}
+.composer{border-radius:22px;padding:12px 12px 10px 16px}
+.composer .ph{color:var(--text3);font-size:13.5px;min-height:22px}
+.cbar{display:flex;align-items:center;gap:6px;margin-top:10px}
+.model-btn{height:28px;display:inline-flex;align-items:center;gap:5px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;color:var(--text2);background:var(--fill)}
+.model-btn svg{width:12px;height:12px}
+.model-btn:hover{background:var(--fill2);color:var(--text)}
+.cbar .est{font-size:11.5px;color:var(--text3)}
+.cbar .sp{flex:1}
+.chint{font-size:11px;color:var(--text3);text-align:center;margin-top:8px}
+kbd.k{font-family:var(--font);font-size:10.5px;padding:1px 5px;border-radius:5px;background:var(--fill);box-shadow:inset 0 -1px 0 var(--sep)}
+
+/* ---------- Транскрибация ---------- */
+.tr-layout{display:grid;grid-template-columns:1fr 270px;gap:16px}
+.player{height:330px;border-radius:20px;position:relative;overflow:hidden;background:radial-gradient(80% 90% at 30% 20%,#4a3b63,#211a2e 70%);box-shadow:0 10px 30px rgba(20,10,40,.25)}
+.player h3{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-size:30px;font-weight:600;letter-spacing:-.02em}
+.player h3 small{font-size:17px;color:#ffc7a8;margin-top:6px;font-weight:600}
+.subt{position:absolute;left:50%;bottom:66px;transform:translateX(-50%);padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.55);color:#fff;font-size:14px;text-align:center;line-height:1.35;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.pctl{position:absolute;left:14px;right:14px;bottom:14px;height:40px;border-radius:20px;display:flex;align-items:center;gap:12px;padding:0 14px;color:#fff;font-size:12px;
+  background:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(20px) saturate(1.6);backdrop-filter:blur(20px) saturate(1.6);box-shadow:inset 0 .6px 0 rgba(255,255,255,.5),0 0 0 .5px rgba(255,255,255,.12)}
+.pctl .bar{flex:1;height:4px;border-radius:2px;background:rgba(255,255,255,.25);position:relative}
+.pctl .bar::after{content:"";position:absolute;inset:0 76% 0 0;border-radius:2px;background:#fff}
+.pctl svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2}
+.strip{display:flex;gap:4px;margin:8px 4px 14px}
+.strip i{height:5px;border-radius:3px;background:color-mix(in srgb,var(--acc) 30%,transparent)}
+.strip i.on{background:var(--acc)}
+.tr-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.tr-row .meta2{margin-left:auto;font-size:12px;color:var(--text3)}
+.trtext{padding:14px 16px;font-size:13.5px;line-height:1.65}
+.tr-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.tr-new{width:100%;height:40px;justify-content:center;font-size:13.5px}
+.tr-hist{margin-top:12px;padding:12px 8px}
+.tr-hist h2{font-size:11px;font-weight:600;color:var(--text3);padding:0 8px 8px}
+.tr-hist .search{margin:0 4px 6px;height:32px}
+.tr-it{display:flex;gap:10px;padding:8px;border-radius:11px;width:100%;text-align:left}
+.tr-it:hover{background:var(--fill)}
+.tr-it.on{background:var(--acc-soft)}
+.tr-it .fi{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex:none;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
+.tr-it b{display:block;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.tr-it small{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:180px}
+
+/* ---------- Снимки ---------- */
+.shots{display:grid;grid-template-columns:190px 1fr;gap:16px;padding-top:20px;height:770px}
+.shot-actions{display:flex;flex-direction:column;gap:8px}
+.shot-actions .btn{width:100%;height:38px;justify-content:flex-start;border-radius:12px}
+.shot-actions .btn kbd{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--text3)}
+.my-h{font-size:12.5px;font-weight:600;margin:14px 4px 8px;display:flex;gap:6px}
+.my-h span{color:var(--text3);font-weight:500}
+.scard{border-radius:14px;padding:8px;margin-bottom:10px}
+.scard.on{box-shadow:inset 0 0 0 2px var(--acc),var(--shadow-card)}
+.sthumb{height:92px;border-radius:9px;background:linear-gradient(135deg,#e8efe9,#d8e4dc);position:relative;overflow:hidden}
+.sthumb::before{content:"";position:absolute;left:12%;top:20%;width:76%;height:60%;background:#fff;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.sthumb::after{content:"";position:absolute;left:58%;top:36%;width:22%;height:28%;background:#f3a77f;border-radius:2px}
+.scard p{font-size:11.5px;margin:7px 2px 4px;color:var(--text2)}
+.scard .r{display:flex;align-items:center}
+.scard .r .btn:last-child{margin-left:auto}
+.editor{display:flex;flex-direction:column;border-radius:20px;overflow:hidden}
+.shot-bar{display:flex;align-items:center;gap:6px;padding:8px 10px;flex-wrap:wrap;border-bottom:.5px solid var(--sep)}
+.tools{display:inline-flex;padding:3px;border-radius:12px;background:var(--fill);gap:1px}
+.tools button{height:28px;padding:0 10px;border-radius:9px;font-size:12px;font-weight:500;color:var(--text2)}
+.tools button.on{color:var(--text);background:var(--glass-strong);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px var(--sep),0 2px 6px rgba(0,0,0,.1)}
+.tools button svg{width:14px;height:14px}
+.swatch{width:22px;height:22px;border-radius:50%;background:#e2483d;box-shadow:inset 0 0 0 2px rgba(255,255,255,.8),0 0 0 .5px var(--sep)}
+.slider{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text2)}
+.slider i{width:64px;height:4px;border-radius:2px;background:var(--fill2);position:relative}
+.slider i::before{content:"";position:absolute;inset:0 var(--v) 0 0;border-radius:2px;background:var(--acc)}
+.slider i::after{content:"";position:absolute;top:50%;left:calc(100% - var(--v));width:16px;height:16px;border-radius:50%;transform:translate(-50%,-50%);background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.1)}
+.status{font-size:11.5px;color:var(--text3);margin-left:auto}
+.stage{flex:1;display:flex;justify-content:center;align-items:flex-start;padding:22px;background:repeating-conic-gradient(var(--fill) 0 25%,transparent 0 50%) 0 0/18px 18px}
+.canvas{width:620px;height:300px;background:#e5ede8;border-radius:4px;padding:28px;box-shadow:0 12px 40px rgba(0,0,0,.15);position:relative}
+.canvas div{background:#fffdf9;height:100%;padding:24px 26px;color:#3d5f50;font-family:Arial,sans-serif}
+.canvas b{font-size:24px;display:block;margin-bottom:16px}
+.canvas p{font-size:15px;margin-bottom:12px;color:#5b6b63}
+.canvas .mark{position:absolute;left:46px;top:100px;width:330px;height:22px;border-radius:11px;background:rgba(226,72,61,.32)}
+.canvas .box{position:absolute;right:68px;top:104px;width:140px;height:84px;background:#f3a77f}
+
+/* ---------- Генератор ---------- */
+.gen-lead{color:var(--text2);font-size:14px;max-width:560px;line-height:1.55;margin-bottom:18px}
+.gen-grid{display:grid;grid-template-columns:repeat(2,minmax(0,330px));gap:16px}
+.gen-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:22px;border-radius:22px;min-height:210px;text-align:left;position:relative;overflow:hidden}
+.gen-card::after{content:"";position:absolute;right:-40px;bottom:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--c) 30%,transparent),transparent 70%);pointer-events:none}
+.gen-card b{font-size:17px;font-weight:600;margin-top:auto}
+.gen-card span{color:var(--text2);font-size:13px}
+.gen-soon{position:absolute;top:18px;right:18px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--fill);color:var(--text2)}
+
+/* ---------- Статистика ---------- */
+.stat-card{padding:20px;margin-bottom:14px}
+.sprof{display:flex;align-items:center;gap:14px}
+.sprof .avatar{width:56px;height:56px;font-size:22px}
+.sprof b{font-size:18px;font-weight:600;letter-spacing:-.015em;display:block}
+.sprof .btn{margin-left:auto}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px}
+.metric{padding:14px;border-radius:14px;background:var(--fill)}
+.metric b{font-size:24px;font-weight:600;letter-spacing:-.03em;display:block}
+.metric span{font-size:12px;color:var(--text2)}
+.card-title{font-size:15px;font-weight:600;letter-spacing:-.01em;margin-bottom:14px}
+.use{display:grid;grid-template-columns:120px 1fr 44px;gap:10px;align-items:center;font-size:12.5px;margin-bottom:9px}
+.use i{height:10px;border-radius:5px;background:var(--fill)}
+.use i b{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,color-mix(in srgb,var(--c) 70%,white),var(--c))}
+.use em{font-style:normal;color:var(--text3);text-align:right;font-variant-numeric:tabular-nums}
+.heat{display:grid;grid-auto-flow:column;grid-template-rows:repeat(7,11px);gap:3px}
+.heat i{width:11px;height:11px;border-radius:3px;background:var(--fill)}
+.heat i.l1{background:color-mix(in srgb,var(--acc) 28%,var(--fill))}.heat i.l2{background:color-mix(in srgb,var(--acc) 52%,var(--fill))}.heat i.l3{background:color-mix(in srgb,var(--acc) 76%,var(--fill))}.heat i.l4{background:var(--acc)}
+.heat-foot{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text3);margin-top:10px;align-items:center}
+.heat-foot .lg2{display:flex;gap:3px;align-items:center}
+.heat-foot .lg2 i{width:11px;height:11px;border-radius:3px;display:inline-block}
+
+/* ---------- всплывающие окна ---------- */
+.pop{position:absolute;z-index:40;display:none;border-radius:14px;padding:6px;background:var(--menu);
+  -webkit-backdrop-filter:blur(30px) saturate(1.9);backdrop-filter:blur(30px) saturate(1.9);
+  box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px rgba(0,0,0,.12),0 18px 50px rgba(20,20,60,.22)}
+.pop.open{display:block;animation:popin .16s ease-out}
+@keyframes popin{from{opacity:0;transform:translateY(6px) scale(.98)}}
+.mi{display:flex;align-items:center;gap:9px;width:100%;height:30px;padding:0 10px;border-radius:8px;font-size:13px;text-align:left;position:relative}
+.mi svg.i{width:15px;height:15px;color:var(--text2)}
+.mi:hover,.mi.hl{background:var(--acc);color:#fff}
+.mi:hover svg.i,.mi.hl svg.i{color:#fff}
+.mi .v{margin-left:auto;color:var(--text3);font-size:12px}
+.mi:hover .v,.mi.hl .v{color:rgba(255,255,255,.8)}
+.mi .chev{width:12px;height:12px;margin-left:6px}
+.mi .tick{margin-left:auto;width:14px;height:14px;color:var(--acc)}
+.mi:hover .tick{color:#fff}
+.pop hr{border:0;border-top:.5px solid var(--sep);margin:5px 8px}
+.mhead{display:flex;align-items:center;gap:10px;padding:8px 10px 10px}
+.mhead b{display:block;font-size:13px}
+.mhead small{font-size:11.5px;color:var(--text3)}
+.sw{width:15px;height:15px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2)}
+.mgroup{font-size:11px;font-weight:600;color:var(--text3);padding:8px 10px 3px}
+.mi .note{font-size:11px;color:var(--text3);margin-left:auto}
+.mi:hover .note{color:rgba(255,255,255,.85)}
+
+#menu{left:16px;bottom:62px;width:250px}
+#sub-theme{left:270px;bottom:62px;width:200px}
+#timer-pop{left:16px;bottom:146px;width:254px;padding:14px}
+#model-menu{width:290px}
+.tp-h{font-size:13px;font-weight:600;margin-bottom:10px}
+.tp-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:10px}
+.tp-grid button{height:30px;border-radius:9px;font-size:12px;font-weight:600;background:var(--fill)}
+.tp-grid button.on{background:var(--acc);color:#fff}
+.tp-own{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text2);margin-bottom:12px}
+.tp-own span{padding:4px 10px;border-radius:8px;background:var(--fill);color:var(--text);font-weight:600}
+#timer-pop .btn{width:100%;justify-content:center}
+
+/* маленькое окно ассистента */
+#qa{left:250px;bottom:14px;width:390px;height:470px;border-radius:22px;padding:0;flex-direction:column}
+#qa.open{display:flex}
+.qa-head{display:flex;align-items:center;gap:8px;padding:12px 12px 10px 16px;border-bottom:.5px solid var(--sep)}
+.qa-head b{font-size:13px}
+.qa-head small{font-size:11.5px;color:var(--text3)}
+.qa-head .r{margin-left:auto;display:flex;gap:2px}
+.qa-body{flex:1;padding:14px 16px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.qa-body .msg-u,.qa-body .msg-a{font-size:13px}
+.qa-in{margin:10px;height:44px;border-radius:22px;display:flex;align-items:center;padding:0 6px 0 16px;color:var(--text3);background:var(--fill)}
+.qa-in .send{margin-left:auto}
+
+/* настройки */
+.dlg-back{position:absolute;inset:0;z-index:45;display:none;background:rgba(20,20,30,.18);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.dlg-back.open{display:grid;place-items:center;animation:fade .2s}
+@keyframes fade{from{opacity:0}}
+.dlg{width:860px;height:600px;border-radius:24px;display:flex;flex-direction:column;overflow:hidden;background:var(--menu);
+  -webkit-backdrop-filter:blur(40px) saturate(1.9);backdrop-filter:blur(40px) saturate(1.9);box-shadow:inset 0 .6px 0 var(--glass-edge),0 0 0 .5px rgba(0,0,0,.15),0 30px 80px rgba(20,20,60,.3);animation:popin .2s ease-out}
+.dlg-head{display:flex;align-items:center;padding:14px 14px 10px 22px}
+.dlg-head h2{font-size:17px;font-weight:600;letter-spacing:-.015em}
+.dlg-head .icon-btn{margin-left:auto;background:var(--fill)}
+.dlg-body{flex:1;display:flex;min-height:0}
+.sd-nav{width:210px;padding:4px 10px;display:flex;flex-direction:column;gap:2px}
+.sd-item{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:9px;font-size:13px;text-align:left;width:100%}
+.sd-item:hover{background:var(--fill)}
+.sd-item.on{background:var(--acc);color:#fff}
+.sd-item.on svg{color:#fff}
+.sd-item svg{color:var(--text2)}
+.sd-item .ico2{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:#fff;background:var(--c);flex:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.4)}
+.sd-item .ico2 svg{width:14px;height:14px;color:#fff}
+.sd-main{flex:1;overflow:auto;padding:4px 22px 22px 10px}
+.set-card{padding:18px;margin-bottom:12px}
+.set-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.set-head h3{font-size:15px;font-weight:600}
+.ok-pill{font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;color:color-mix(in srgb,var(--green) 75%,var(--text));background:color-mix(in srgb,var(--green) 15%,transparent)}
+.set-text{font-size:12.5px;color:var(--text2);line-height:1.55}
+.flabel{font-size:11.5px;font-weight:600;color:var(--text3);margin:12px 0 6px;display:block}
+.key-row{display:flex;gap:8px}
+.inp{flex:1;height:34px;border-radius:10px;padding:0 12px;display:flex;align-items:center;background:var(--fill);color:var(--text3);font-family:var(--mono);font-size:12px;box-shadow:inset 0 0 0 .5px var(--sep)}
+.spend{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--fill);font-size:12.5px;color:var(--text2)}
+.spend b{color:var(--text)}
+
+/* ---------- пронумерованные подписи ---------- */
+.marks-layer{position:absolute;inset:0;pointer-events:none;z-index:60}
+.mark-n{position:absolute;width:19px;height:19px;border-radius:50%;background:#ff2d55;color:#fff;font:700 11px/19px var(--font);text-align:center;
+  box-shadow:0 0 0 2px #fff,0 3px 10px rgba(255,45,85,.5);transform:translate(-60%,-60%);transition:opacity .2s}
+body.nonum .marks-layer{display:none}
+
+/* ---------- легенда справа ---------- */
+.legend{width:360px;flex:none;position:sticky;top:36px;z-index:1;border-radius:24px;padding:22px;max-height:calc(100vh - 72px);overflow:auto;
+  background:rgba(255,255,255,.55);-webkit-backdrop-filter:blur(30px) saturate(1.8);backdrop-filter:blur(30px) saturate(1.8);
+  box-shadow:inset 0 .6px 0 rgba(255,255,255,.95),0 0 0 .5px rgba(0,0,0,.08),0 20px 60px rgba(30,30,80,.18);color:#1d1d1f}
+:root[data-t="dark"] .legend{background:rgba(40,40,48,.6);color:#f5f5f7;box-shadow:inset 0 .6px 0 rgba(255,255,255,.2),0 0 0 .5px rgba(255,255,255,.08),0 20px 60px rgba(0,0,0,.4)}
+.legend h2{font-size:19px;font-weight:600;letter-spacing:-.02em}
+.legend .lead{font-size:12.5px;line-height:1.5;opacity:.72;margin:6px 0 14px}
+.ctl{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:12px}
+.ctl>span{width:62px;opacity:.6}
+.acc-dots{display:flex;gap:8px}
+.acc-dots button{width:20px;height:20px;border-radius:50%;background:var(--c);box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 0 .5px rgba(0,0,0,.15)}
+.acc-dots button.on{box-shadow:0 0 0 2px #fff,0 0 0 3.5px var(--c)}
+.legend .seg{background:rgba(118,118,128,.14)}
+.legend .seg button{color:inherit;opacity:.7}
+.legend .seg button.on{opacity:1;background:rgba(255,255,255,.9);color:#1d1d1f}
+:root[data-t="dark"] .legend .seg button.on{background:rgba(255,255,255,.18);color:#fff}
+.legend h3{font-size:11.5px;font-weight:600;opacity:.5;margin:18px 0 8px}
+.legend ol{list-style:none;display:flex;flex-direction:column;gap:10px}
+.legend li{position:relative;padding-left:31px;font-size:12.5px;line-height:1.48}
+.legend li::before{content:attr(data-n);position:absolute;left:0;top:0;width:21px;height:21px;border-radius:50%;background:#ff2d55;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
+.legend li b{display:block;font-weight:600}
+.legend li span{opacity:.75}
+.legend .try{display:flex;flex-wrap:wrap;gap:6px}
+.legend .try button{font-size:12px;padding:6px 11px;border-radius:999px;background:rgba(118,118,128,.14)}
+.legend .try button:hover{background:rgba(118,118,128,.24)}
+.legend .small{font-size:11.5px;opacity:.6;line-height:1.5;margin-top:14px}
+@media (max-width:1720px){body{flex-direction:column;align-items:center}.legend{position:static;width:1280px;max-height:none}.legend ol{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px}}
+
+/* =====================================================================
+   Вариант «По скиллу» (html.skill): правила скилла macOS-design поверх темы.
+   1 страница плотная · 2 скругления по шкале Apple · 3 кнопки 28 px
+   4 без цветного свечения · 5 подсказки клавиш · 6 затемнение без размытия
+   7 наведение без прыжков, единые анимации
+   ===================================================================== */
+.kh{display:none}
+html.skill{
+  --k-content:#FFFFFF; --k-card:#FFFFFF; --k-well:#F5F5F7;
+  --k-ring:0 0 0 .5px rgba(0,0,0,.10);
+  --k-sh-sm:0 0 0 .5px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.06);
+  --k-sh-md:0 0 0 .5px rgba(0,0,0,.08),0 4px 16px rgba(0,0,0,.10);
+  --k-sh-lg:0 0 0 .5px rgba(0,0,0,.10),0 2px 8px rgba(0,0,0,.08),0 8px 30px rgba(0,0,0,.14),0 24px 60px rgba(0,0,0,.08);
+  --ease-out:cubic-bezier(.25,.46,.45,.94); --ease-spring:cubic-bezier(.34,1.56,.64,1);
+}
+html.skill[data-t="dark"]{
+  --k-content:#1C1C1E; --k-card:#2C2C2E; --k-well:#3A3A3C;
+  --k-ring:0 0 0 .5px rgba(255,255,255,.10);
+  --k-sh-sm:0 0 0 .5px rgba(255,255,255,.08),0 1px 3px rgba(0,0,0,.3);
+  --k-sh-md:0 0 0 .5px rgba(0,0,0,.6),0 4px 16px rgba(0,0,0,.35);
+  --k-sh-lg:0 0 0 .5px rgba(0,0,0,.7),0 2px 8px rgba(0,0,0,.3),0 8px 30px rgba(0,0,0,.45),0 24px 60px rgba(0,0,0,.3);
+}
+
+/* 1. Страница — сплошная, стекло только по краям (панель, вкладки, меню) */
+html.skill .scroller{background:var(--k-content)}
+html.skill .card{background:var(--k-card);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:var(--k-sh-sm)}
+html.skill .day{background:var(--k-well);box-shadow:none}
+html.skill[data-t="dark"] .day{background:#2C2C2E}
+html.skill .day.off{background:color-mix(in srgb,var(--red) 10%,var(--k-well))}
+html.skill .day.b1{background:color-mix(in srgb,var(--green) 13%,var(--k-well))}
+html.skill .day.b2{background:color-mix(in srgb,var(--green) 24%,var(--k-well))}
+html.skill .day.b3{background:color-mix(in srgb,var(--green) 38%,var(--k-well))}
+html.skill .col{background:var(--k-well);box-shadow:none}
+html.skill .task{background:var(--k-card);box-shadow:var(--k-sh-sm)}
+html.skill .task:hover{box-shadow:var(--k-sh-md)}
+
+/* 2. Скругления: окна и панели 12, карточки 8–10, кнопки и поля 6, метки 4 */
+html.skill .side-panel{border-radius:12px}
+html.skill .card{border-radius:10px}
+html.skill .home-tile{border-radius:10px}
+html.skill .day{border-radius:6px}
+html.skill .col{border-radius:10px}
+html.skill .task{border-radius:8px}
+html.skill .tab{border-radius:7px}
+html.skill .nav-icon,html.skill .nav-item,html.skill .capture-nav,html.skill .up-ev{border-radius:6px}
+html.skill .profile-btn{border-radius:8px}
+html.skill .search{border-radius:6px;height:28px}
+html.skill .abar{border-radius:10px;height:40px}
+html.skill .abar+.btn{height:40px!important;border-radius:8px!important}
+html.skill .composer{border-radius:12px}
+html.skill .msg-u{border-radius:16px 16px 4px 16px}
+html.skill .mk{border-radius:4px}
+html.skill .pop{border-radius:10px;padding:5px}
+html.skill .mi{height:26px;border-radius:5px}
+html.skill .dlg{border-radius:12px;background:var(--k-card);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:var(--k-sh-lg)}
+html.skill .app-ico{border-radius:9px}
+
+/* 3. Кнопки по размерам macOS: 28 px, скругление 6; маленькие 22 px */
+html.skill .btn{height:28px;padding:0 12px;border-radius:6px;background:var(--k-card);box-shadow:var(--k-sh-sm)}
+html.skill .btn-sm{height:22px;padding:0 8px;border-radius:5px;font-size:12px}
+html.skill .btn-quiet{background:transparent;box-shadow:none}
+html.skill .icon-btn{width:28px;height:28px;border-radius:6px}
+html.skill .seg{border-radius:7px;padding:2px}
+html.skill .seg button{height:24px;border-radius:5px}
+html.skill .seg button.on{background:var(--k-card);box-shadow:var(--k-sh-sm)}
+html.skill .fchip{height:24px;border-radius:6px}
+html.skill .fchip.on{background:var(--k-card);box-shadow:var(--k-sh-sm)}
+html.skill .tab.on{box-shadow:var(--k-sh-sm)}
+
+/* 4. Акцент — только заливка, без цветного свечения и бликов */
+html.skill .btn-primary{background:var(--acc);box-shadow:0 0 0 .5px color-mix(in srgb,var(--acc) 70%,#000),0 1px 2px rgba(0,0,0,.12),inset 0 .5px 0 rgba(255,255,255,.25)}
+html.skill .send{background:var(--acc);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+html.skill .send.off{background:var(--fill2);box-shadow:none}
+html.skill .qa-btn{width:40px;height:40px;background:var(--acc);box-shadow:0 0 0 .5px color-mix(in srgb,var(--acc) 70%,#000),0 2px 6px rgba(0,0,0,.18)}
+html.skill .qa-btn::after{display:none}
+html.skill .logo{background:var(--acc);box-shadow:0 0 0 .5px rgba(0,0,0,.12)}
+html.skill .avatar{background:var(--acc);box-shadow:none}
+html.skill .msg-u{background:var(--acc);box-shadow:none}
+html.skill .app-ico{background:var(--c);box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 1px 3px rgba(0,0,0,.12)}
+html.skill .day.sel{box-shadow:inset 0 0 0 2px var(--acc)}
+html.skill .nav-badge{box-shadow:none}
+
+/* 5. Подсказки клавиш рядом с действием */
+html.skill .kh{display:inline-flex;align-items:center;margin-left:auto;padding:1px 5px;border-radius:4px;font:500 10.5px/1.4 var(--font);
+  background:rgba(128,128,128,.14);box-shadow:inset 0 0 0 .5px rgba(128,128,128,.25);opacity:.75}
+html.skill .btn .kh{margin-left:4px}
+html.skill .kh.on-acc{background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.35);opacity:.95}
+html.skill .mi:hover .kh{background:rgba(255,255,255,.22);opacity:.95}
+
+/* 6. Под окном настроек — простое затемнение, без размытия */
+html.skill .dlg-back{background:rgba(0,0,0,.28);-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* 7. Наведение меняет цвет, а не размер; одинаковые плавные переходы */
+html.skill .day{transition:background .15s var(--ease-out)}
+html.skill .day:hover{transform:none;filter:brightness(.97)}
+html.skill[data-t="dark"] .day:hover{filter:brightness(1.15)}
+html.skill .home-tile{transition:box-shadow .15s var(--ease-out)}
+html.skill .home-tile:hover{transform:none;box-shadow:var(--k-sh-md)}
+html.skill .btn{transition:background .15s var(--ease-out),box-shadow .15s var(--ease-out)}
+html.skill .btn:active{transform:none;filter:brightness(.93)}
+html.skill .pop.open{animation:popin .2s var(--ease-spring)}
+html.skill .dlg{animation:popin .25s var(--ease-out)}
+
+/* переключатель варианта в легенде */
+.mode-note{font-size:12px;line-height:1.5;padding:10px 12px;border-radius:12px;background:rgba(118,118,128,.12);margin:0 0 14px}
+.legend .tagk{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:999px;margin-left:6px;vertical-align:1px}
+.legend .tagk.y{background:#34c75926;color:#1e7b34}
+.legend .tagk.m{background:#ff950026;color:#a35a00}
+.legend .tagk.n{background:#8e8e9326;color:#55555a}
+.legend ul.plain{list-style:none;display:flex;flex-direction:column;gap:8px;font-size:12.5px;line-height:1.45}
+.legend ul.plain b{font-weight:600}
+.legend ul.plain span{opacity:.75}
+.legend .verdict{font-size:12.5px;line-height:1.55;padding:12px 14px;border-radius:14px;background:rgba(255,255,255,.55);box-shadow:inset 0 0 0 .5px rgba(0,0,0,.08);margin-top:6px}
+:root[data-t="dark"] .legend .verdict{background:rgba(255,255,255,.07)}
+
+</style>
+</head>
+<body>
+
+<!-- фильтр для «линзы» жидкого стекла -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="lens" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.012 0.018" numOctaves="1" seed="7" result="t"/>
+    <feGaussianBlur in="t" stdDeviation="3" result="tb"/>
+    <feDisplacementMap in="SourceGraphic" in2="tb" scale="28" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<div class="win" id="win">
+  <div class="aura" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+
+  <!-- ================= левая панель ================= -->
+  <nav class="side">
+    <div class="side-panel lg" id="side-panel">
+      <div class="side-head"><span class="logo"></span>Snowball.ai</div>
+
+      <div class="side-icons" id="side-icons">
+        <button class="nav-icon" data-page="home" title="Главная"><i data-i="home"></i></button>
+        <button class="nav-icon" data-page="prompts" title="Промты"><i data-i="prompts"></i></button>
+        <button class="nav-icon on" data-page="calendar" title="Календарь"><i data-i="calendar"></i><span class="nav-badge">2</span></button>
+        <button class="nav-icon" data-page="tasks" title="Задачи (бета)"><i data-i="tasks"></i><span class="nav-badge">6</span></button>
+        <button class="nav-icon" data-page="assistant" title="LLM"><i data-i="llm"></i><span class="nav-badge">1</span></button>
+        <button class="nav-icon" data-page="transcribe" title="Транскрибация"><i data-i="wave"></i></button>
+        <button class="nav-icon" data-page="generator" title="Генератор (скоро)"><i data-i="spark"></i></button>
+      </div>
+
+      <button class="capture-nav lg" data-page="screenshots"><i data-i="shot"></i>Снимки<kbd>Alt + Z</kbd></button>
+
+      <p class="side-h">Ближайшие дела</p>
+      <div id="upcoming">
+        <p class="up-day">Сегодня</p>
+        <button class="up-ev k-shoot now" data-page="calendar"><i></i><span class="tt">Съёмка рилса про зиму</span><span class="tm">сейчас</span></button>
+        <button class="up-ev k-call" data-page="calendar"><i></i><span class="tt">Марина: сценарий урока</span><span class="tm">18:30</span></button>
+        <p class="up-day">Завтра</p>
+        <button class="up-ev k-edit" data-page="calendar"><i></i><span class="tt">Монтаж YouTube</span><span class="tm">10:00</span></button>
+        <button class="up-ev k-meet" data-page="calendar"><i></i><span class="tt">Встреча с заказчиком</span><span class="tm">14:00</span></button>
+        <p class="up-day">Пн, 2 ноября</p>
+        <button class="up-ev k-call" data-page="calendar"><i></i><span class="tt">Дима: правки монтажа</span><span class="tm">11:00</span></button>
+      </div>
+
+      <div class="side-bottom" id="side-bottom">
+        <button class="nav-item" id="timer-row"><i data-i="timer"></i>Таймер</button>
+        <button class="nav-item" data-page="stats"><i data-i="stats"></i>Статистика</button>
+        <div class="profile-row">
+          <button class="profile-btn lg" id="menu-btn" data-s="6"><span class="avatar">Г</span>Гость<i data-i="chevu" class="chev"></i></button>
+          <button class="qa-btn" id="qa-btn" data-s="4" title="Ассистент (Ctrl + K)"><i data-i="spark"></i></button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ================= правая часть ================= -->
+  <div class="main-col">
+    <div class="titlebar">
+      <div class="tabs" id="tabs"></div>
+      <button class="tab-plus" title="Новая вкладка (Ctrl + T)"><i data-i="plus"></i></button>
+      <div class="drag"></div>
+      <div class="winctl" id="winctl">
+        <button title="Свернуть"><svg viewBox="0 0 10 10"><path d="M0 5.5h10"/></svg></button>
+        <button title="Развернуть"><svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1"/></svg></button>
+        <button class="close" title="Закрыть"><svg viewBox="0 0 10 10"><path d="M.5.5l9 9M9.5.5l-9 9"/></svg></button>
+      </div>
+    </div>
+
+    <main class="scroller" id="scroller" data-s="1">
+
+      <!-- ===== Главная ===== -->
+      <section class="view" id="v-home">
+        <header class="top"><div class="top-text">
+          <p class="eyebrow">Четверг, 29 октября</p>
+          <h1>Добрый день, Гость!</h1>
+          <p class="meta">Главная пока простая: отсюда можно перейти в любой раздел. Позже здесь появится сводка дня.</p>
+        </div></header>
+        <div class="home-grid" data-s="7">
+          <button class="home-tile card" data-page="prompts"><span class="app-ico" style="--c:var(--orange)"><i data-i="prompts"></i></span><b>Промты</b><span>24 промта в базе</span></button>
+          <button class="home-tile card" data-page="calendar"><span class="app-ico" style="--c:var(--red)"><i data-i="calendar"></i></span><b>Календарь</b><span>Сегодня ещё 2 дела</span></button>
+          <button class="home-tile card" data-page="tasks"><span class="app-ico" style="--c:var(--green)"><i data-i="tasks"></i></span><b>Задачи</b><span>6 задач не готово, в процессе 2</span></button>
+          <button class="home-tile card" data-page="assistant"><span class="app-ico" style="--c:var(--purple)"><i data-i="llm"></i></span><b>LLM</b><span>Новых ответов: 1</span></button>
+          <button class="home-tile card" data-page="transcribe"><span class="app-ico" style="--c:var(--blue)"><i data-i="wave"></i></span><b>Транскрибация</b><span>3 расшифровки в истории</span></button>
+          <button class="home-tile card" data-page="screenshots"><span class="app-ico" style="--c:var(--teal)"><i data-i="shot"></i></span><b>Снимки</b><span>Alt + Z · Захват экрана, пометки и история</span></button>
+          <button class="home-tile card" data-page="generator"><span class="app-ico" style="--c:var(--pink)"><i data-i="spark"></i></span><b>Генератор</b><span>Картинки и видео — скоро</span></button>
+        </div>
+      </section>
+
+      <!-- ===== Промты ===== -->
+      <section class="view" id="v-prompts">
+        <header class="top">
+          <div class="top-text"><p class="eyebrow">Система хранения информации</p><h1>Snowball<span class="brand">.ai</span></h1><p class="meta">24 промта · 3 типа</p></div>
+          <div class="top-actions"><button class="btn btn-primary" data-s="5"><i data-i="plus"></i>Добавить промт<kbd class="kh on-acc">Ctrl N</kbd></button></div>
+        </header>
+        <div class="toolbar">
+          <div class="search lg"><i data-i="search"></i>Поиск по названию, тексту и комментарию</div>
+          <div class="filters">
+            <button class="fchip on">Все <b>24</b></button>
+            <button class="fchip c-static"><span class="d"></span>Статика <b>12</b></button>
+            <button class="fchip c-video"><span class="d"></span>Видео <b>8</b></button>
+            <button class="fchip c-system"><span class="d"></span>Системные <b>4</b></button>
+          </div>
+        </div>
+        <section class="card" data-s="2">
+          <table class="ptable">
+            <thead><tr><th>Название</th><th>Тип</th><th>Промт</th></tr></thead>
+            <tbody>
+              <tr>
+                <td class="c-name"><div class="pname">Неоновый портрет под дождём</div><div class="when">Изменён 28 октября</div>
+                  <div class="row-actions" id="row-actions"><button class="btn btn-sm btn-quiet"><i data-i="pencil"></i>Редактировать</button><button class="btn btn-sm btn-quiet"><i data-i="share"></i>Поделиться</button><button class="btn btn-sm btn-quiet btn-danger">Удалить</button></div></td>
+                <td class="c-type"><span class="chip cat c-static">Статика</span></td>
+                <td><div class="ptext" id="ptext">cinematic portrait of a woman under neon rain, wet asphalt reflections, 85mm lens, shallow depth of field, teal and magenta rim light, soft film grain, ultra detailed skin texture, light fog in the background…</div>
+                  <div class="pnote" id="pnote"><i data-i="note"></i>Для Nano Banana лучше 4:5. Слово «neon» не ставить в начало — пересвечивает лицо.</div>
+                  <div class="pbar" id="pbar"><button class="btn btn-sm btn-quiet"><i data-i="chevd"></i>Развернуть</button><span class="chars">412 символов</span><span class="sp"></span><button class="btn btn-sm btn-quiet"><i data-i="note"></i>Комментарий</button><button class="btn btn-sm btn-quiet"><i data-i="clip"></i>Файл</button><button class="btn btn-sm"><i data-i="copy"></i>Копировать</button></div>
+                  <div class="files"><span class="ftile" style="--g:linear-gradient(140deg,#2b1f4a,#d1477f 60%,#40c0d0)"></span><span class="ftile" style="--g:linear-gradient(160deg,#1c2b44,#7a4fd6 55%,#ff8fb1)"></span></div></td>
+              </tr>
+              <tr>
+                <td class="c-name"><div class="pname">Облёт замка на рассвете</div><div class="when">Создан 25 октября</div>
+                  <div class="row-actions"><button class="btn btn-sm btn-quiet"><i data-i="pencil"></i>Редактировать</button><button class="btn btn-sm btn-quiet"><i data-i="share"></i>Поделиться</button><button class="btn btn-sm btn-quiet btn-danger">Удалить</button></div></td>
+                <td class="c-type"><span class="chip cat c-video">Видео</span></td>
+                <td><div class="ptext">slow drone orbit around an ancient stone castle at sunrise, low fog in the valley, volumetric light rays through the towers, birds in the distance, 24fps, smooth gimbal motion, warm golden palette…</div>
+                  <div class="pbar"><button class="btn btn-sm btn-quiet"><i data-i="chevd"></i>Развернуть</button><span class="chars">286 символов</span><span class="sp"></span><button class="btn btn-sm btn-quiet"><i data-i="note"></i>Комментарий</button><button class="btn btn-sm btn-quiet"><i data-i="clip"></i>Файл</button><button class="btn btn-sm"><i data-i="copy"></i>Копировать</button></div></td>
+              </tr>
+              <tr>
+                <td class="c-name"><div class="pname">Помощник по промтам</div><div class="when">Изменён 20 октября</div>
+                  <div class="row-actions"><button class="btn btn-sm btn-quiet"><i data-i="pencil"></i>Редактировать</button><button class="btn btn-sm btn-quiet"><i data-i="share"></i>Поделиться</button><button class="btn btn-sm btn-quiet btn-danger">Удалить</button></div></td>
+                <td class="c-type"><span class="chip cat c-system">Системные</span></td>
+                <td><div class="ptext">Ты помогаешь составлять промты для картинок и видео. Сначала уточни модель и соотношение сторон, потом предложи три варианта: короткий, подробный и кинематографичный…</div>
+                  <div class="pbar"><button class="btn btn-sm btn-quiet"><i data-i="chevd"></i>Развернуть</button><span class="chars">1 024 символа</span><span class="sp"></span><button class="btn btn-sm btn-quiet"><i data-i="note"></i>Комментарий</button><button class="btn btn-sm btn-quiet"><i data-i="clip"></i>Файл</button><button class="btn btn-sm"><i data-i="copy"></i>Копировать</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+
+      <!-- ===== Календарь ===== -->
+      <section class="view" id="v-calendar">
+        <header class="top">
+          <div class="top-text"><p class="eyebrow">Ваши дела</p><h1>Календарь</h1><p class="meta">В этом месяце 14 дел</p></div>
+          <div class="top-actions"><button class="btn"><i data-i="help"></i>Как пользоваться</button><button class="btn btn-primary" data-s="5"><i data-i="plus"></i>Добавить дело<kbd class="kh on-acc">Ctrl N</kbd></button></div>
+        </header>
+        <div class="bar-row">
+          <form class="abar lg" onsubmit="return false"><span class="sp"><i data-i="spark"></i></span><span class="ph">Ассистент календаря: «созвон с Димой завтра в 15:00» или «что решили с Мариной?»</span><span class="mdl">GPT-6 Luna · Быстро</span><span class="send off"><i data-i="send"></i></span></form>
+          <button class="btn" style="height:46px;border-radius:23px;padding:0 18px"><i data-i="doc"></i>Подгрузить итоги со звонка</button>
+        </div>
+        <div class="cal-toolbar" data-s="3">
+          <button class="btn"><i data-i="calendar"></i>Месяц<i data-i="chevd" style="width:12px;height:12px;color:var(--text3)"></i></button>
+          <button class="btn">Сегодня</button>
+          <button class="btn icon-btn" style="padding:0"><i data-i="chevl"></i></button>
+          <button class="btn icon-btn" style="padding:0"><i data-i="chevr"></i></button>
+          <h2 class="cal-title">Октябрь 2026</h2>
+        </div>
+        <div class="cal">
+          <section class="card cal-month">
+            <div class="cal-grid" id="cal-grid" data-s="7"></div>
+            <div class="cal-legend">
+              <span><i style="background:var(--cell)"></i>Обычный день</span>
+              <span><i style="background:var(--busy1)"></i><i style="background:var(--busy2)"></i><i style="background:var(--busy3)"></i>Есть дела: чем больше, тем ярче</span>
+              <span><i style="background:var(--off)"></i>Выходной или праздник</span>
+            </div>
+          </section>
+          <section class="card cal-day" data-s="2">
+            <div class="cal-day-head"><div style="flex:1"><h2>Четверг, 29 октября</h2><p>3 дела</p></div><button class="btn btn-sm">+ Дело</button></div>
+            <div class="timeline" id="timeline"></div>
+          </section>
+        </div>
+        <p class="foot">Красным отмечены выходные и официальные праздники России. Напоминания приходят уведомлением Windows, пока программа открыта (можно свёрнутой).</p>
+      </section>
+
+      <!-- ===== Задачи ===== -->
+      <section class="view" id="v-tasks">
+        <header class="top">
+          <div class="top-text"><p class="eyebrow">Бета-версия: будет дорабатываться</p><h1>Задачи <span class="pill-beta">Бета</span></h1><p class="meta">6 не готово, в процессе 2</p></div>
+          <div class="top-actions"><div class="seg"><button class="on">Доска</button><button>Список</button><button>Архив</button></div></div>
+        </header>
+        <div class="bar-row"><form class="abar lg" onsubmit="return false"><span class="sp"><i data-i="spark"></i></span><span class="ph">Ассистент задач: «смонтировать рилс завтра срочно и позвонить Диме в пятницу»</span><span class="mdl">GPT-6 Luna · Быстро</span><span class="send off"><i data-i="send"></i></span></form></div>
+        <div class="tfilters">
+          <div class="search"><i data-i="search"></i>Поиск по задачам</div>
+          <span class="sel">Все теги<i data-i="chevd"></i></span>
+          <span class="sel">Любая важность<i data-i="chevd"></i></span>
+          <button class="fchip" style="background:var(--fill)">Скрыть выполненные</button>
+        </div>
+        <div class="board" id="board" data-s="2">
+          <div class="col">
+            <div class="col-head">Предстоит <span class="cnt">3</span><span class="r"><i data-i="lock" title="Основной столбец"></i></span></div>
+            <div class="task"><span class="tcheck"></span><div><div class="tt">Смонтировать рилс</div><div class="marks"><span class="mk prio2">Срочно</span><span class="mk tag" style="--c:var(--teal)">Монтаж</span><span class="mk">Завтра</span></div></div></div>
+            <div class="task"><span class="tcheck"></span><div><div class="tt">Позвонить Диме</div><div class="marks"><span class="mk prio1">Важно</span><span class="mk">Пт, 31 окт</span><span class="mk"><i data-i="note"></i></span></div></div></div>
+            <div class="task"><span class="tcheck"></span><div><div class="tt">Собрать референсы для урока</div><div class="marks"><span class="mk tag" style="--c:var(--purple)">Идеи</span><span class="mk sub">1/4 <i></i></span></div></div></div>
+            <button class="add-row"><i data-i="plus"></i>Новая задача</button>
+          </div>
+          <div class="col">
+            <div class="col-head">В процессе <span class="cnt">2</span><span class="r"><i data-i="lock"></i></span></div>
+            <div class="task"><span class="tcheck"></span><div><div class="tt">Сценарий ролика про зиму</div><div class="marks"><span class="mk tag" style="--c:var(--red)">YouTube</span><span class="mk">Сегодня</span></div></div></div>
+            <div class="task"><span class="tcheck"></span><div><div class="tt">Ответить Марине по смете</div><div class="marks"><span class="mk late">Срок прошёл · 27 окт</span></div></div></div>
+            <button class="add-row"><i data-i="plus"></i>Новая задача</button>
+          </div>
+          <div class="col" style="--cc:var(--teal)">
+            <div class="col-head"><span class="tag-dot"></span>Монтаж <span class="cnt">1</span><span class="r"><button><i data-i="dots"></i></button></span></div>
+            <div class="task"><span class="tcheck"></span><div><div class="tt">Цветокор урока 3</div><div class="marks"><span class="mk">Пн, 2 ноя</span></div></div></div>
+            <button class="add-row"><i data-i="plus"></i>Новая задача</button>
+          </div>
+          <div class="col">
+            <div class="col-head">Готово <span class="cnt">2</span><span class="r"><i data-i="lock"></i><button><i data-i="dots"></i></button></span></div>
+            <div class="task done"><span class="tcheck"><i data-i="check"></i></span><div><div class="tt">Озвучка урока 2</div></div></div>
+            <div class="task done"><span class="tcheck"><i data-i="check"></i></span><div><div class="tt">Обложка для YouTube</div></div></div>
+            <button class="add-row">Убрать в архив (2)</button>
+          </div>
+          <button class="new-col"><i data-i="plus"></i>Столбец</button>
+        </div>
+        <p class="hint">Нажмите на задачу, чтобы открыть её целиком: срок, важность, теги, подзадачи, заметка. Кружок слева отмечает задачу сделанной. Задачи можно перетаскивать между столбцами.</p>
+      </section>
+
+      <!-- ===== LLM ===== -->
+      <section class="view" id="v-assistant">
+        <header class="top">
+          <div class="top-text"><p class="eyebrow">Разговор с ChatGPT или Claude</p><h1>LLM</h1><p class="meta">Отвечает GPT-6.1 Sol · осталось примерно $8,40</p></div>
+          <div class="top-actions"><button class="btn"><i data-i="plus"></i>Новый разговор</button></div>
+        </header>
+        <div class="chat-layout">
+          <aside class="chat-hist card">
+            <h2>История</h2>
+            <p class="ch-day">Сегодня</p>
+            <button class="ch-item on"><span>Идеи для ролика про зиму</span><span class="x"><i data-i="x"></i></span></button>
+            <button class="ch-item"><span>Улучшить промт замка</span><span class="x"><i data-i="x"></i></span></button>
+            <p class="ch-day">Вчера</p>
+            <button class="ch-item"><span>План съёмок на неделю</span><span class="x"><i data-i="x"></i></span></button>
+            <button class="ch-item"><span>Системный промт для Seedance</span><span class="x"><i data-i="x"></i></span></button>
+            <p class="ch-day">На этой неделе</p>
+            <button class="ch-item"><span>Обложка: варианты текста</span><span class="x"><i data-i="x"></i></span></button>
+          </aside>
+          <div class="chat-col">
+            <div class="chat" id="chat">
+              <div class="msg-u">Придумай промт для короткого ролика: первый снег глазами кота</div>
+              <div class="msg-a">
+                <p>Вот промт для видео. Камера низко, на уровне глаз кота — так зритель «становится» им.</p>
+                <div class="code"><div class="code-h">промт<button class="btn btn-sm"><i data-i="copy"></i>Копировать</button></div><pre>low angle POV of a ginger cat at a frosted window, first snowflakes drifting, soft morning light, shallow depth of field, slow push-in, 24fps, cozy warm interior, cold blue exterior</pre></div>
+                <p>Сохранить его в таблицу как «Видео»?</p>
+                <div class="cost">GPT-6.1 Sol · $0,0041</div>
+              </div>
+              <div class="acard card"><div class="ttl"><i><i data-i="prompts"></i></i>Создать промт «Первый снег глазами кота»?</div><p>Тип «Видео», текст из ответа выше.</p><div class="r"><button class="btn btn-sm btn-primary">Создать</button><button class="btn btn-sm">Отмена</button></div></div>
+            </div>
+            <form class="composer lg" onsubmit="return false">
+              <div class="ph">Напишите сообщение…</div>
+              <div class="cbar">
+                <button class="btn icon-btn btn-quiet" type="button" title="Приложить картинку"><i data-i="clip"></i></button>
+                <button class="model-btn" type="button" id="model-btn">GPT-6.1 Sol · Средне<i data-i="chevd"></i></button>
+                <span class="est">≈ $0,004 за ответ</span>
+                <span class="sp"></span>
+                <span class="send lens"><i data-i="send"></i></span>
+              </div>
+            </form>
+            <p class="chint"><kbd class="k">Enter</kbd> — отправить, <kbd class="k">Shift</kbd> + <kbd class="k">Enter</kbd> — новая строка, <kbd class="k">Esc</kbd> — остановить ответ</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Транскрибация ===== -->
+      <section class="view" id="v-transcribe">
+        <header class="top">
+          <div class="top-text"><p class="eyebrow">Текст из аудио и видео</p><h1>Транскрибация</h1><p class="meta">Для озвучки, роликов и записей: текст, тайминги по фразам и субтитры для монтажа.</p></div>
+          <div class="top-actions"><button class="btn"><i data-i="help"></i>Как пользоваться</button></div>
+        </header>
+        <div class="tr-layout">
+          <div>
+            <div class="player"><h3>Нейросети для видео<small>урок 1 — промты</small></h3>
+              <div class="subt">Сначала опишите идею простыми словами,<br>например: кот гуляет по ночному городу.</div>
+              <div class="pctl"><svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z" fill="#fff"/></svg><span class="tnum">0:11 / 0:48</span><span class="bar"></span><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/></svg><svg viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg></div>
+            </div>
+            <div class="strip"><i style="width:11%"></i><i class="on" style="width:14%"></i><i style="width:12%"></i><i style="width:16%"></i><i style="width:10%"></i><i style="width:13%"></i><i style="width:15%"></i></div>
+            <div class="tr-row"><div class="seg"><button class="on">Текст</button><button>Тайминги</button><button>Кратко</button></div><span class="meta2">0:46 · 7 фраз · gpt-transcribe · ≈ $0,0027</span></div>
+            <div class="card trtext">Привет! Сегодня разберём, как нейросеть помогает писать промты для видео. Сначала опишите идею простыми словами, например: кот гуляет по ночному городу. Потом добавьте пару картинок-референсов, чтобы нейросеть поняла стиль. Укажите, для какой модели нужен промт, и получите готовый текст.</div>
+            <div class="tr-btns"><button class="btn btn-primary"><i data-i="copy"></i>Копировать текст</button><button class="btn">Субтитры .srt</button><button class="btn">.txt</button><button class="btn"><i data-i="llm"></i>Спросить в LLM</button><button class="btn btn-quiet"><i data-i="folder"></i>Показать исходный файл</button></div>
+          </div>
+          <div>
+            <button class="btn btn-primary tr-new"><i data-i="plus"></i>Новая транскрибация</button>
+            <aside class="card tr-hist">
+              <h2>История</h2>
+              <div class="search"><i data-i="search"></i>Поиск по тексту и названию</div>
+              <p class="ch-day">Сегодня</p>
+              <button class="tr-it on"><span class="fi" style="--c:var(--blue)"><i data-i="video"></i></span><span><b>урок — озвучка.mp4</b><small>0:46 · Привет! Сегодня разберём…</small></span></button>
+              <p class="ch-day">Вчера</p>
+              <button class="tr-it"><span class="fi" style="--c:var(--teal)"><i data-i="music"></i></span><span><b>урок 2 — движение камеры.m4a</b><small>12:35 · Сегодня разбираем, как…</small></span></button>
+              <button class="tr-it"><span class="fi" style="--c:var(--blue)"><i data-i="video"></i></span><span><b>рилс — оживляем фото.mov</b><small>0:58 · Старые фото оживают…</small></span></button>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Снимки ===== -->
+      <section class="view" id="v-screenshots">
+        <div class="shots">
+          <div>
+            <div class="shot-actions">
+              <button class="btn btn-primary"><i data-i="plus"></i>Снять область</button>
+              <button class="btn"><i data-i="image"></i>Открыть картинку</button>
+              <button class="btn">Клавиши<kbd>Alt + Z ▾</kbd></button>
+            </div>
+            <p class="my-h">Мои снимки <span>2</span></p>
+            <div class="scard card on"><div class="sthumb"></div><p>Снимок 29.10.2026, 15:02</p><div class="r"><button class="btn btn-sm btn-quiet">Удалить</button><button class="btn btn-sm icon-btn" style="width:26px;height:26px;padding:0"><i data-i="copy"></i></button></div></div>
+            <div class="scard card"><div class="sthumb" style="filter:hue-rotate(160deg)"></div><p>Снимок 28.10.2026, 20:42</p><div class="r"><button class="btn btn-sm btn-quiet">Удалить</button><button class="btn btn-sm icon-btn" style="width:26px;height:26px;padding:0"><i data-i="copy"></i></button></div></div>
+          </div>
+          <div class="editor card">
+            <div class="shot-bar">
+              <div class="tools"><button>Перо</button><button class="on">Маркер</button><button>Рамка</button><button>Подсветить</button><button>Текст</button><button>Обрезать</button></div>
+              <div class="tools"><button title="Отменить"><i data-i="undo"></i></button><button title="Вернуть"><i data-i="redo"></i></button></div>
+              <span class="swatch"></span>
+              <span class="slider">Толщина <i style="--v:55%"></i> 12</span>
+              <span class="slider">Нажим <i style="--v:65%"></i> 35%</span>
+              <span class="status">Все пометки сохранены</span>
+              <button class="btn icon-btn" style="padding:0;width:30px;height:30px">?</button>
+              <button class="btn btn-primary">Копировать снимок</button>
+            </div>
+            <div class="stage"><div class="canvas"><div><b>План проекта — пример 2</b><p>Подготовить материалы</p><p>Обсудить идею</p></div><span class="mark"></span><span class="box"></span></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== Генератор ===== -->
+      <section class="view" id="v-generator">
+        <header class="top"><div class="top-text"><p class="eyebrow">Скоро</p><h1>Генератор</h1></div></header>
+        <p class="gen-lead">Здесь появится генерация по промтам из вашей базы: выбрали промт, нажали — и получили результат.</p>
+        <div class="gen-grid">
+          <button class="gen-card card" style="--c:var(--orange)"><span class="app-ico" style="--c:var(--orange)"><i data-i="image"></i></span><b>Изображение</b><span>Картинка по промту из вашей базы</span><span class="gen-soon">Скоро</span></button>
+          <button class="gen-card card" style="--c:var(--blue)"><span class="app-ico" style="--c:var(--blue)"><i data-i="video"></i></span><b>Видео</b><span>Ролик по видео-промту</span><span class="gen-soon">Скоро</span></button>
+        </div>
+      </section>
+
+      <!-- ===== Статистика ===== -->
+      <section class="view" id="v-stats">
+        <header class="top"><div class="top-text"><p class="eyebrow">Ваша активность</p><h1>Статистика</h1><p class="meta">Новый промт, правка, файл, копирование, дело в календаре, задача, сообщение ассистенту и расшифровка файла — по одному действию.</p></div></header>
+        <section class="card stat-card">
+          <div class="sprof"><span class="avatar">Г</span><div><b>Гость</b><span class="muted">С нами с 12 сентября</span></div><button class="btn">Изменить профиль</button></div>
+          <div class="metrics">
+            <div class="metric"><b>1 248</b><span>действий всего</span></div>
+            <div class="metric"><b>9</b><span>дней подряд</span></div>
+            <div class="metric"><b>64</b><span>лучший день · 14 окт</span></div>
+            <div class="metric"><b>312</b><span>в этом месяце</span></div>
+          </div>
+        </section>
+        <section class="card stat-card">
+          <h2 class="card-title">Что вы чаще всего делаете</h2>
+          <div class="use"><span>Промты</span><i><b style="width:38%;--c:var(--orange)"></b></i><em>38%</em></div>
+          <div class="use"><span>LLM</span><i><b style="width:24%;--c:var(--purple)"></b></i><em>24%</em></div>
+          <div class="use"><span>Задачи</span><i><b style="width:16%;--c:var(--green)"></b></i><em>16%</em></div>
+          <div class="use"><span>Календарь</span><i><b style="width:12%;--c:var(--red)"></b></i><em>12%</em></div>
+          <div class="use"><span>Транскрибация</span><i><b style="width:7%;--c:var(--blue)"></b></i><em>7%</em></div>
+          <div class="use"><span>Снимки</span><i><b style="width:3%;--c:var(--teal)"></b></i><em>3%</em></div>
+        </section>
+        <section class="card stat-card">
+          <h2 class="card-title">Активность за год</h2>
+          <div class="heat" id="heat"></div>
+          <div class="heat-foot"><span>Наведите на день, чтобы увидеть подробности</span><span class="lg2">Меньше <i style="background:var(--fill)"></i><i style="background:color-mix(in srgb,var(--acc) 28%,var(--fill))"></i><i style="background:color-mix(in srgb,var(--acc) 52%,var(--fill))"></i><i style="background:color-mix(in srgb,var(--acc) 76%,var(--fill))"></i><i style="background:var(--acc)"></i> Больше</span></div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <!-- ================= всплывающие окна ================= -->
+  <div class="pop" id="menu">
+    <div class="mhead"><span class="avatar">Г</span><span><b>Гость</b><small>24 промта</small></span></div>
+    <hr>
+    <button class="mi"><i data-i="user"></i>Изменить профиль</button>
+    <button class="mi" id="open-settings"><i data-i="gear"></i>Настройки<kbd class="kh">Ctrl ,</kbd></button>
+    <hr>
+    <button class="mi" id="mi-theme"><i data-i="palette"></i>Тема<span class="v" id="theme-val">Светлая</span><i data-i="chevr" class="chev"></i></button>
+    <button class="mi"><i data-i="prompts"></i>Промты<span class="v"></span><i data-i="chevr" class="chev"></i></button>
+  </div>
+  <div class="pop" id="sub-theme">
+    <button class="mi"><i data-i="monitor"></i>Как в Windows</button>
+    <button class="mi" data-theme="light"><span class="sw" style="background:#f6f3ef"></span>Светлая<i data-i="check" class="tick"></i></button>
+    <button class="mi" data-theme="dark"><span class="sw" style="background:#2b2a30"></span>Тёмная</button>
+    <button class="mi"><span class="sw" style="background:#fff"></span>Белая</button>
+    <button class="mi"><span class="sw" style="background:#000"></span>Чёрная</button>
+    <button class="mi"><span class="sw" style="background:conic-gradient(from 200deg,#ff3b30,#ff9500,#ffcc00,#34c759,#007aff,#af52de,#ff2d55,#ff3b30)"></span>macOS<span class="v">бета</span><i data-i="chevr" class="chev"></i></button>
+  </div>
+
+  <div class="pop" id="timer-pop">
+    <p class="tp-h">Таймер для фокуса</p>
+    <div class="tp-grid"><button>15</button><button class="on">25</button><button>45</button><button>60</button><button>90</button></div>
+    <div class="tp-own">Своё время: <span>25</span> минут</div>
+    <button class="btn btn-primary">Старт</button>
+  </div>
+
+  <div class="pop" id="model-menu">
+    <p class="mgroup">ChatGPT</p>
+    <button class="mi">GPT-6 Astra<span class="note">самая сильная</span></button>
+    <button class="mi">GPT-6.1 Sol<i data-i="check" class="tick"></i></button>
+    <button class="mi">GPT-6 Luna<span class="note">самая дешёвая</span></button>
+    <p class="mgroup">Claude</p>
+    <button class="mi">Claude Opus 5.5</button>
+    <button class="mi">Claude Haiku 5.5</button>
+    <hr>
+    <button class="mi"><i data-i="spark"></i>Размышления<span class="v">Средне</span><i data-i="chevr" class="chev"></i></button>
+  </div>
+
+  <div class="pop lg" id="qa">
+    <div class="qa-head"><span class="sp" style="width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--acc-soft);color:var(--acc-ink)"><i data-i="spark"></i></span><span><b>Ассистент</b><br><small>GPT-6 Luna · Быстро</small></span>
+      <span class="r"><button class="btn btn-sm btn-quiet">Заново</button><button class="btn btn-sm btn-quiet">Открыть в LLM</button></span></div>
+    <div class="qa-body">
+      <div class="msg-u">Что у меня завтра?</div>
+      <div class="msg-a">Завтра два дела: в 10:00 — Монтаж YouTube, в 14:00 — встреча с заказчиком. Напомню за час до каждого.</div>
+      <div class="msg-u">Запусти таймер на 40 минут</div>
+      <div class="msg-a">Готово, таймер идёт: 40 минут.</div>
+    </div>
+    <div class="qa-in">Спросите про календарь, задачи, вкладки…<span class="send off"><i data-i="send"></i></span></div>
+  </div>
+
+  <div class="dlg-back" id="settings">
+    <div class="dlg">
+      <div class="dlg-head"><h2>Настройки</h2><button class="icon-btn" id="close-settings" title="Закрыть (Esc)"><i data-i="x"></i></button></div>
+      <div class="dlg-body">
+        <nav class="sd-nav">
+          <button class="sd-item on"><span class="ico2" style="--c:var(--orange)"><i data-i="key"></i></span>ChatGPT и Claude</button>
+          <button class="sd-item"><span class="ico2" style="--c:var(--purple)"><i data-i="llm"></i></span>Ассистент</button>
+          <button class="sd-item"><span class="ico2" style="--c:var(--blue)"><i data-i="folder"></i></span>Папка с данными</button>
+          <button class="sd-item"><span class="ico2" style="--c:var(--green)"><i data-i="backup"></i></span>Резервная копия</button>
+          <button class="sd-item"><span class="ico2" style="--c:var(--red)"><i data-i="refresh"></i></span>Обновление</button>
+          <button class="sd-item"><span class="ico2" style="--c:#8e8e93"><i data-i="keyboard"></i></span>Горячие клавиши</button>
+        </nav>
+        <div class="sd-main">
+          <section class="card set-card">
+            <div class="set-head"><h3>ChatGPT</h3><span class="ok-pill">Ключ работает</span></div>
+            <p class="set-text">Чтобы в «Ассистенте» отвечал ChatGPT, нужен свой API-ключ OpenAI. Его создают на сайте <b>platform.openai.com</b> в разделе API keys.</p>
+            <label class="flabel">API-ключ</label>
+            <div class="key-row"><span class="inp">sk-••••••••••••••••••••3f9a</span><button class="btn btn-primary">Проверить ключ</button><button class="btn">Удалить ключ</button></div>
+            <div class="spend">Потрачено через Snowball в этом месяце: <b>$1,60</b> · осталось примерно <b>$8,40</b></div>
+          </section>
+          <section class="card set-card">
+            <div class="set-head"><h3>Claude</h3></div>
+            <p class="set-text">Чтобы отвечал Claude, нужен свой API-ключ Anthropic. Его создают на сайте <b>console.anthropic.com</b> в разделе API Keys.</p>
+            <label class="flabel">API-ключ</label>
+            <div class="key-row"><span class="inp">sk-ant-…</span><button class="btn btn-primary">Проверить ключ</button></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="marks-layer" id="marks"></div>
+</div>
+
+<!-- ================= пояснения ================= -->
+<aside class="legend">
+  <h2>Тема macOS и скилл</h2>
+  <p class="lead">Сверил тему из версии 1.18.2 с правилами скилла «macOS design». Переключайте «Сейчас» и «По скиллу» и смотрите на цифры: они стоят там, где что-то меняется. Кнопки и разделы остаются на своих местах.</p>
+
+  <div class="ctl"><span>Вариант</span><div class="seg" id="mode-seg"><button class="on" data-m="now">Сейчас (1.18.2)</button><button data-m="skill">По скиллу</button></div></div>
+  <div class="ctl"><span>Тема</span><div class="seg" id="theme-seg"><button class="on" data-t="light">Светлая</button><button data-t="dark">Тёмная</button></div></div>
+  <div class="ctl"><span>Акцент</span><div class="acc-dots" id="acc-dots">
+    <button class="on" data-acc="peach" style="--c:#f2793d" title="Персиковый"></button>
+    <button data-acc="blue" style="--c:#0a84ff" title="Синий, как в macOS"></button>
+    <button data-acc="purple" style="--c:#9b5cf6" title="Фиолетовый"></button>
+    <button data-acc="graphite" style="--c:#8e8e93" title="Графит"></button>
+  </div></div>
+  <div class="ctl"><span>Цифры</span><div class="seg" id="num-seg"><button class="on" data-v="1">Показать</button><button data-v="0">Скрыть</button></div></div>
+
+  <h3>Открыть поверх</h3>
+  <div class="try">
+    <button data-open="menu">Меню профиля</button>
+    <button data-open="settings">Настройки</button>
+    <button data-open="qa">Маленький ассистент</button>
+    <button data-open="model-menu">Меню модели</button>
+  </div>
+
+  <h3>Что поменяется, если взять скилл</h3>
+  <ol id="leg-skill"></ol>
+
+  <h3>Уже сделано так, как советует скилл</h3>
+  <ul class="plain" id="leg-done"></ul>
+
+  <h3>Что из скилла не берём</h3>
+  <ul class="plain" id="leg-no"></ul>
+
+  <h3>Не про внешний вид — можно позже</h3>
+  <ul class="plain" id="leg-later"></ul>
+
+  <h3>Итог</h3>
+  <div class="verdict" id="verdict"></div>
+
+  <p class="small">Макет собран из прошлого макета темы, поэтому в мелочах может отличаться от программы. Обои за окном — только для макета: в программе просвечивает рабочий стол Windows.</p>
+</aside>
+
+<script>
+/* ---------- иконки ---------- */
+const P={
+  home:'<path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/>',
+  prompts:'<rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/>',
+  calendar:'<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  tasks:'<rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/>',
+  llm:'<path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/>',
+  wave:'<path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/>',
+  spark:'<path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/>',
+  shot:'<path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/>',
+  stats:'<rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/>',
+  timer:'<circle cx="12" cy="13.5" r="7"/><path d="M12 10v3.5l2 1.5M9.5 3h5"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',
+  help:'<circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.1-2.4 3.7M12 16.9h.01"/>',
+  doc:'<path d="M7 3.5h7.5L19 8v12.5H7zM14 3.5V8h5M9.5 12.5h6M9.5 16h6"/>',
+  chevd:'<path d="m6 9 6 6 6-6"/>',chevl:'<path d="m15 5-7 7 7 7"/>',chevr:'<path d="m9 6 6 6-6 6"/>',chevu:'<path d="m7 14 5-5 5 5"/>',
+  send:'<path d="M12 19V5M6 11l6-6 6 6"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+  copy:'<rect x="8.5" y="8.5" width="11" height="11" rx="2.5"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>',
+  pencil:'<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  share:'<path d="M12 15V4M7.5 8.5 12 4l4.5 4.5"/><path d="M5 13v5.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V13"/>',
+  note:'<path d="M5 4.5h14v11l-4.5 4H5z"/><path d="M14.5 19.5v-4h4.5M8.5 9h7M8.5 12.5h4"/>',
+  clip:'<path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.2-8.2a3.3 3.3 0 0 1 4.7 4.7l-8.2 8.2a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/>',
+  x:'<path d="M6 6l12 12M18 6 6 18"/>',
+  lock:'<rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+  dots:'<circle cx="6" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="18" cy="12" r="1.3" fill="currentColor"/>',
+  check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  folder:'<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/>',
+  image:'<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m20.5 16-4.5-4.5L7 19.5"/>',
+  video:'<rect x="3" y="6" width="13" height="12" rx="2.5"/><path d="m16 10.5 5-3v9l-5-3z"/>',
+  music:'<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
+  undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  redo:'<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+  user:'<circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.5l2.6 1.5M17.2 16l2.6 1.5M4.2 17.5 6.8 16M17.2 8l2.6-1.5"/>',
+  palette:'<path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.8-.9 1.8-1.9 0-.5-.2-.9-.5-1.3-.3-.3-.5-.8-.5-1.2 0-1 .8-1.8 1.8-1.8H16a5 5 0 0 0 5-5c0-3.8-4-6.8-9-6.8Z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/>',
+  monitor:'<rect x="3" y="4.5" width="18" height="12" rx="2.5"/><path d="M9 20h6M12 16.5V20"/>',
+  key:'<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 8.2-8.2M16 7l2.5 2.5M14 9l2 2"/>',
+  backup:'<path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  refresh:'<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v4.5h-4.5"/>',
+  keyboard:'<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/>'
+};
+document.querySelectorAll('i[data-i]').forEach(el=>{
+  const s=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','i '+(el.className||''));
+  s.innerHTML=P[el.dataset.i]||'';el.replaceWith(s);
+});
+const svg=n=>'<svg class="i" viewBox="0 0 24 24">'+P[n]+'</svg>';
+
+/* ---------- разделы и вкладки ---------- */
+const SECT={home:['Главная','home'],prompts:['Промты','prompts'],calendar:['Календарь','calendar'],tasks:['Задачи','tasks'],
+  assistant:['LLM · Идеи для ролика про зиму','llm'],transcribe:['Транскрибация · урок — озвучка','wave'],screenshots:['Снимки','shot'],generator:['Генератор','spark'],stats:['Статистика','stats']};
+let tabs=['prompts','calendar','assistant'],cur='calendar';
+function renderTabs(){
+  const box=document.getElementById('tabs');box.innerHTML='';
+  tabs.forEach(p=>{
+    const t=document.createElement('div');t.className='tab'+(p===cur?' on lg lens':'');
+    t.innerHTML=svg(SECT[p][1])+'<span class="nm">'+SECT[p][0]+'</span>'+(p==='assistant'&&p!==cur?'<span class="dot"></span>':'')+'<span class="x" title="Закрыть вкладку">'+svg('x')+'</span>';
+    t.onclick=e=>{if(e.target.closest('.x')){closeTab(p);return}go(p)};
+    box.appendChild(t);
+  });
+}
+function closeTab(p){
+  const i=tabs.indexOf(p);tabs.splice(i,1);
+  if(!tabs.length)tabs=['home'];
+  if(p===cur)cur=tabs[Math.max(0,i-1)];
+  go(cur);
+}
+function go(p){
+  if(!tabs.includes(p))tabs.push(p);
+  cur=p;closePops();
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+p));
+  document.querySelectorAll('.nav-icon,.capture-nav,.nav-item[data-page]').forEach(b=>b.classList.toggle('on',b.dataset.page===p));
+  document.getElementById('scroller').scrollTop=0;
+  renderTabs();renderLegend();requestAnimationFrame(placeMarks);
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-page]');
+  if(b&&document.getElementById('win').contains(b))go(b.dataset.page);
+});
+
+/* ---------- календарь ---------- */
+(function(){
+  const g=document.getElementById('cal-grid');
+  const H=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  g.innerHTML=H.map((h,i)=>'<div class="h'+(i>4?' we':'')+'">'+h+'</div>').join('');
+  const busy={6:1,13:2,15:1,20:1,22:2,27:2,28:1,29:3,30:1,31:1};
+  const evs={13:['k-meet','12:00 Заказчик'],22:['k-shoot','11:00 Съёмка'],27:['k-call','11:00 Дима'],29:['k-shoot','15:00 Съёмка'],30:['k-edit','10:00 Монтаж']};
+  const cells=[];
+  [28,29,30].forEach(d=>cells.push({d,out:1}));
+  for(let d=1;d<=31;d++)cells.push({d});
+  cells.push({d:1,out:1,hol:''});
+  cells.forEach((c,i)=>{
+    const col=i%7,off=col>4,b=!c.out&&busy[c.d];
+    const el=document.createElement('div');
+    el.className='day'+(c.out?' out':'')+(off?' off':'')+(b&&!off?' b'+b:'')+(b&&off?' busy':'')+(!c.out&&c.d===29?' today sel':'');
+    el.innerHTML='<span class="n">'+c.d+'</span>'+(!c.out&&evs[c.d]?'<div class="ev '+evs[c.d][0]+'"><i></i>'+evs[c.d][1]+'</div>':'');
+    g.appendChild(el);
+  });
+  const tl=document.getElementById('timeline');
+  let h='';for(let x=9;x<=17;x++)h+='<div class="hr">'+(x<10?'0':'')+x+':00</div>';
+  tl.innerHTML=h+
+    '<div class="tev k-call" style="top:'+(2*46+4)+'px;height:42px"><b>11:00–12:00</b> Дима: мини-курс<small>Напомнить за час</small><span class="kind">Звонок</span></div>'+
+    '<div class="tev k-shoot now" style="top:'+(6*46+4)+'px;height:84px"><b>15:00–17:00</b> Съёмка рилса<small>Идёт сейчас · студия на Ленина</small><span class="kind">Съёмка</span></div>'+
+    '<div class="nowline" style="top:'+(6*46+4+15)+'px"></div>';
+})();
+
+/* ---------- карта активности ---------- */
+(function(){
+  const h=document.getElementById('heat');let s=7,out='';
+  const r=()=>(s=(s*9301+49297)%233280)/233280;
+  for(let i=0;i<53*7;i++){const v=r(),boost=i>300?.25:0;const l=v+boost>.93?4:v+boost>.8?3:v+boost>.62?2:v+boost>.42?1:0;out+='<i class="l'+l+'"></i>'}
+  h.innerHTML=out;
+})();
+
+/* ---------- всплывающие окна ---------- */
+const pops=['menu','sub-theme','timer-pop','model-menu','qa'];
+function closePops(except){pops.forEach(id=>{if(id!==except)document.getElementById(id).classList.remove('open')});document.getElementById('settings').classList.remove('open');document.getElementById('mi-theme').classList.remove('hl')}
+function toggle(id){const el=document.getElementById(id),was=el.classList.contains('open');closePops();if(!was)el.classList.add('open');if(id==='model-menu')placeModelMenu()}
+function placeModelMenu(){
+  const m=document.getElementById('model-menu'),b=document.getElementById('model-btn'),w=document.getElementById('win').getBoundingClientRect(),r=b.getBoundingClientRect();
+  m.style.left=(r.left-w.left)+'px';m.style.bottom=(w.bottom-r.top+8)+'px';
+}
+document.getElementById('menu-btn').onclick=e=>{e.stopPropagation();toggle('menu')};
+document.getElementById('timer-row').onclick=e=>{e.stopPropagation();toggle('timer-pop')};
+document.getElementById('qa-btn').onclick=e=>{e.stopPropagation();toggle('qa')};
+document.getElementById('model-btn').onclick=e=>{e.stopPropagation();toggle('model-menu')};
+const miTheme=document.getElementById('mi-theme');
+miTheme.onmouseenter=miTheme.onclick=e=>{e.stopPropagation();document.getElementById('sub-theme').classList.add('open');miTheme.classList.add('hl')};
+document.querySelectorAll('#menu .mi:not(#mi-theme)').forEach(m=>m.onmouseenter=()=>{document.getElementById('sub-theme').classList.remove('open');miTheme.classList.remove('hl')});
+document.getElementById('open-settings').onclick=e=>{e.stopPropagation();closePops();document.getElementById('settings').classList.add('open')};
+document.getElementById('close-settings').onclick=()=>closePops();
+document.getElementById('settings').onclick=e=>{if(e.target.id==='settings')closePops()};
+document.querySelectorAll('.pop').forEach(p=>p.addEventListener('click',e=>e.stopPropagation()));
+document.addEventListener('click',e=>{if(!e.target.closest('.legend'))pops.forEach(id=>document.getElementById(id).classList.remove('open'))});
+// цифры прячутся, пока открыто окно поверх, и возвращаются, когда его закрыли
+new MutationObserver(()=>requestAnimationFrame(placeMarks)).observe(document.getElementById('win'),{subtree:true,attributes:true,attributeFilter:['class']});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePops()});
+document.querySelectorAll('[data-open]').forEach(b=>b.onclick=e=>{
+  e.stopPropagation();const id=b.dataset.open;
+  if(id==='settings'){closePops();document.getElementById('settings').classList.add('open');return}
+  if(id==='model-menu'&&cur!=='assistant')go('assistant');
+  toggle(id);
+});
+document.querySelectorAll('#sub-theme [data-theme]').forEach(b=>b.onclick=()=>setTheme(b.dataset.theme));
+
+/* ---------- тема, акцент, цифры ---------- */
+function setTheme(t){
+  document.documentElement.dataset.t=t;
+  document.querySelectorAll('#theme-seg button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
+  document.getElementById('theme-val').textContent=t==='dark'?'Тёмная':'Светлая';
+  document.querySelectorAll('#sub-theme .tick').forEach(x=>x.remove());
+  const m=document.querySelector('#sub-theme [data-theme="'+t+'"]');if(m)m.insertAdjacentHTML('beforeend','<svg class="i tick" viewBox="0 0 24 24">'+P.check+'</svg>');
+}
+document.querySelectorAll('#theme-seg button').forEach(b=>b.onclick=()=>setTheme(b.dataset.t));
+document.querySelectorAll('#acc-dots button').forEach(b=>b.onclick=()=>{
+  document.documentElement.dataset.acc=b.dataset.acc;
+  document.querySelectorAll('#acc-dots button').forEach(x=>x.classList.toggle('on',x===b));
+});
+document.querySelectorAll('#num-seg button').forEach(b=>b.onclick=()=>{
+  document.body.classList.toggle('nonum',b.dataset.v==='0');
+  document.querySelectorAll('#num-seg button').forEach(x=>x.classList.toggle('on',x===b));
+});
+
+/* ---------- пояснения: сверка со скиллом ---------- */
+const SKILL=[
+  ['Страница — сплошная, без просвета','y','Сейчас сквозь страницу и карточки чуть видно рабочий стол. Скилл: стекло — только у боковой панели, вкладок, меню и всплывающих окон, а там, где текст и данные, фон сплошной: так лучше читается. Карточки — белые (в тёмной теме — серые ступени #1C1C1E → #2C2C2E → #3A3A3C).'],
+  ['Скругления по шкале Apple','m','Сейчас почти всё очень круглое (16–24 px). Скилл: окна и панели 12, карточки 8–10, кнопки и поля 6, метки 4. Выглядит строже и «рабочее». Спорный пункт: новая macOS Tahoe сама стала круглее, чем пишет скилл, — сравните, что вам ближе.'],
+  ['Кнопки размера macOS','m','Сейчас кнопки — высокие капсулы. Скилл: обычная кнопка 28 px со скруглением 6, маленькая — 22 px, переключатели — прямоугольные сегменты. На экране помещается больше, но кнопки мельче — для мыши нормально.'],
+  ['Акцент без свечения','y','Сейчас под главной кнопкой, звёздочкой ассистента, вашими сообщениями в LLM и логотипом — цветное свечение и блики. Скилл: тени в macOS тонкие и серые, а цвет акцента — только заливка выбранного и главной кнопки. Выглядит чище, глаз не «цепляется».'],
+  ['Подсказки клавиш рядом с кнопками','y','Скилл: у каждого частого действия — подсказка сочетания в серой «клавише»: «Добавить дело Ctrl N», «Настройки Ctrl ,» в меню профиля. Ctrl + N уже работает, подсказки нет. Ctrl + , для настроек пока нет — его надо будет добавить.'],
+  ['Под окнами — простое затемнение','y','Сейчас под «Настройками» программа и затемняется, и размывается. Скилл: под окном поверх — только полупрозрачная тень, без размытия. Нажмите «Настройки» справа и сравните.'],
+  ['Наведение без прыжков','y','Сейчас клетки календаря и плитки «Главной» при наведении увеличиваются или подпрыгивают. Скилл: наведение меняет цвет или тень, а не размер; у всех панелей и меню одна и та же плавность (быстро в начале, мягко в конце, меню чуть «пружинит»).']
+];
+const DONE=[
+  ['Тонкая обводка 0,5 px вместо рамок','это главный «маковский» приём, он уже везде.'],
+  ['Разные палитры для светлой и тёмной','тёмная не перевёрнута из светлой, у неё свои ступени серого.'],
+  ['Стекло с насыщенностью','размытие плюс насыщенность 180%, чтобы цвета под стеклом не серели.'],
+  ['Меню подсвечивает пункт акцентом','как в настоящих меню macOS.'],
+  ['Подписи без заглавных букв, плотные заголовки','как в системных программах Apple.'],
+  ['Системные цвета Apple','у типов промтов, видов дел и важности задач.']
+];
+const NO=[
+  ['Круглые кнопки окна (красная, жёлтая, зелёная)','вы просили оставить виндоусские — свернуть, развернуть, закрыть рисует сама Windows.'],
+  ['Значок ⌘ (Command)','на Windows его нет, поэтому подсказки пишем через Ctrl.'],
+  ['Шрифт SF Pro','его нет на Windows и его нельзя класть в установщик. Остаётся Golos Text — он похож.'],
+  ['Мелкий текст 13 px везде','в макете уже 13 px, а в программе текст 15 px. Можно уменьшить до 14 px, но 13 на большом мониторе мелковато — решим отдельно.'],
+  ['Шапка 50 px','у нас 40 px, потому что по ней Windows ставит свои кнопки окна. Тянуть окно за неё и так удобно.']
+];
+const LATER=[
+  ['Поиск по всей программе (Ctrl + K)','скилл советует «командную строку»: одно поле ищет промты, дела, задачи и разговоры. Ctrl + K сейчас открывает маленького ассистента — можно научить его и искать.'],
+  ['Перетаскивание из программы','например, снимок мышкой прямо в Telegram или в папку.'],
+  ['Пустые разделы без лишнего','пока данных нет — прятать фильтры и поиск, показывать одну понятную кнопку.'],
+  ['Шпаргалка клавиш по Ctrl + /','окно со всеми сочетаниями; сейчас они только в «Настройках».']
+];
+const TAG={y:['берём','y'],m:['спорно','m']};
+function li(n,[b,t,d]){return '<li data-n="'+n+'"><b>'+b+'<span class="tagk '+TAG[t][1]+'">'+TAG[t][0]+'</span></b><span>'+d+'</span></li>'}
+function plain([b,t]){return '<li><b>'+b+'</b> — <span>'+t+'</span></li>'}
+document.getElementById('leg-skill').innerHTML=SKILL.map((x,i)=>li(i+1,x)).join('');
+document.getElementById('leg-done').innerHTML=DONE.map(plain).join('');
+document.getElementById('leg-no').innerHTML=NO.map(plain).join('');
+document.getElementById('leg-later').innerHTML=LATER.map(plain).join('');
+document.getElementById('verdict').innerHTML='<b>Да, но не всё.</b> Пункты 1, 4, 5, 6 и 7 стоит взять: тема станет спокойнее и читаемее, и это ближе к настоящим программам Apple. Пункты 2 и 3 (скругления и размер кнопок) — дело вкуса: скилл описывает macOS прошлых лет, а «жидкое стекло» Tahoe как раз круглее. Посмотрите оба варианта и скажите, что оставить.';
+function renderLegend(){}
+document.querySelectorAll('#mode-seg button').forEach(b=>b.onclick=()=>{
+  document.documentElement.classList.toggle('skill',b.dataset.m==='skill');
+  document.querySelectorAll('#mode-seg button').forEach(x=>x.classList.toggle('on',x===b));
+  requestAnimationFrame(placeMarks);
+});
+
+/* ---------- цифры на макете ---------- */
+function placeMarks(){
+  const layer=document.getElementById('marks'),w=document.getElementById('win').getBoundingClientRect(),sc=document.getElementById('scroller').getBoundingClientRect();
+  layer.innerHTML='';
+  if(document.querySelector('#win .pop.open,#win .dlg-back.open'))return;
+  document.querySelectorAll('#win [data-s]').forEach(el=>{
+    if(!el.offsetParent)return;
+    const r=el.getBoundingClientRect(),inMain=el.closest('#scroller');
+    if(inMain&&(r.top<sc.top-4||r.top>sc.bottom-10))return;
+    const m=document.createElement('span');m.className='mark-n';m.textContent=el.dataset.s;
+    m.style.left=Math.max(12,r.left-w.left)+'px';m.style.top=Math.max(12,r.top-w.top)+'px';
+    layer.appendChild(m);
+  });
+}
+document.getElementById('scroller').addEventListener('scroll',placeMarks);
+window.addEventListener('resize',placeMarks);
+
+go('calendar');
+</script>
+</body>
+</html>
