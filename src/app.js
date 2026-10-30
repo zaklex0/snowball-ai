@@ -13,7 +13,7 @@
   var VIDEO_EXT = ["mp4", "webm", "mov", "m4v", "ogv", "mkv"];
   var AUDIO_EXT = ["mp3", "wav", "ogg", "m4a", "flac", "aac", "opus"];
   // Kinds of actions counted on the statistics page (storage.js counts them).
-  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks", "transcribe", "screenshots"];
+  var ACTIONS = ["created", "edited", "files", "copied", "calendar", "assistant", "tasks", "transcribe", "screenshots", "skills"];
   // How the statistics page groups them in "Что вы чаще всего делаете".
   var USE_GROUPS = [
     { name: "Промты: новые и правки", keys: ["created", "edited"], icon: "pencil" },
@@ -22,6 +22,7 @@
     { name: "Ассистент", keys: ["assistant"], icon: "spark" },
     { name: "Транскрибация", keys: ["transcribe"], icon: "wave" },
     { name: "Снимки экрана", keys: ["screenshots"], icon: "window" },
+    { name: "Скиллы", keys: ["skills"], icon: "doc" },
     { name: "Копирование промтов", keys: ["copied"], icon: "copy" },
     { name: "Файлы к промтам", keys: ["files"], icon: "clip" }
   ];
@@ -40,6 +41,8 @@
     tasks: [],            // tasks board: { id, title, status (a column id), note, due, time, priority, tags, subtasks, doneFrom, order }
     taskColumns: [],      // all task columns in order: { id, name, base? , color? }
     taskArchiveMode: "day", // done tasks go to the archive by themselves: "day", "week" or "manual"
+    skills: [],           // «Скиллы» on the «Промты» page: { id, title, type, desc, descBy, descCost, descAt, file, main, inside, files, text, createdAt }
+    lib: "prompts",       // which list the «Промты» page shows: "prompts" or "skills"
     query: "",
     type: "all",
     expanded: new Set(),
@@ -304,6 +307,7 @@
     if (r.tasks) state.tasks = r.tasks;
     if (r.taskColumns) state.taskColumns = r.taskColumns;
     if (r.taskArchiveMode) state.taskArchiveMode = r.taskArchiveMode;
+    if (r.skills) state.skills = r.skills;
   }
   // Every call returns { ok, prompts?, error? }. Fresh prompts replace the list.
   function call(promise) {
@@ -892,6 +896,7 @@
     }
 
     placeEditor();
+    renderSkills();
     restoreFocus(focus);
     if (viewerState) renderViewerIfChanged();
     renderChrome();
@@ -2890,9 +2895,22 @@
     kids.push(foot || cardButtons(msg, a, { add: "Добавить", update: "Изменить", delete: "Удалить" }[kind], kind === "delete"));
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
+  // «Сохранить скилл …?»: the file from the message goes to «Промты» → «Скиллы» with the title, type and description the model wrote.
+  function skillCard(msg, a) {
+    var t = skillType(a.category);
+    var kids = [
+      h("div", { class: "act-head" }, icon("doc"), h("span", { text: "Сохранить скилл «" + a.title + "»?" })),
+      h("div", { class: "act-meta" }, h("span", { class: "chip " + (t ? t.cls : "cat-other"), text: t ? t.label : "Тип выберете потом" })),
+      a.text ? h("div", { class: "act-text sk-act-text", text: a.text }) : null
+    ];
+    var foot = cardFooter(msg, a, "Скилл сохранён во вкладку «Скиллы»", "Отменено, ничего не сохранено", function () { openSkills(); });
+    kids.push(foot || cardButtons(msg, a, "Сохранить"));
+    return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
+  }
   function actionCard(msg, a) {
     if (/^calendar-/.test(a.kind)) return calendarCard(msg, a);
     if (/^task-/.test(a.kind)) return taskCard(msg, a);
+    if (a.kind === "skill-add") return skillCard(msg, a);
     var cat = categoryOf(a.category);
     var kids = [
       h("div", { class: "act-head" }, icon("spark"), h("span", { text: "Создать промт «" + a.title + "»?" })),
@@ -2914,7 +2932,8 @@
   }
   var DONE_TOASTS = {
     "calendar-add": "Дело «%» добавлено в календарь", "calendar-update": "Дело «%» изменено", "calendar-delete": "Дело «%» удалено",
-    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "create-prompt": "Промт «%» добавлен"
+    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "create-prompt": "Промт «%» добавлен",
+    "skill-add": "Скилл «%» сохранён во вкладку «Скиллы»"
   };
   function decide(msg, a, accept) {
     if (a.status) return;
@@ -2948,11 +2967,18 @@
     if (role === "user") {
       msg.images = images && images.length ? images.slice() : null;
       var chatId = se.id;
-      var pics = msg.images ? h("div", { class: "bubble-imgs" + (msg.images.length > 1 ? " many" : "") }, msg.images.map(function (im) {
+      var imgs = msg.images ? msg.images.filter(function (im) { return !isChatDoc(im.stored); }) : [];
+      var docs = msg.images ? msg.images.filter(function (im) { return isChatDoc(im.stored); }) : [];
+      var pics = imgs.length ? h("div", { class: "bubble-imgs" + (imgs.length > 1 ? " many" : "") }, imgs.map(function (im) {
         return h("button", { type: "button", class: "bubble-img", title: im.name + " — открыть", onclick: function () { call(api.chatImageOpen(chatId, im.stored)); } },
           h("img", { src: chatImageUrl(chatId, im.stored), alt: im.name }));
       })) : null;
-      msg.el = h("div", { class: "msg msg-user" }, h("div", { class: "bubble" }, pics, msg.text ? h("span", { text: msg.text }) : null));
+      // Skill files (.md, .zip): a chip with the name; a click opens the file in Windows.
+      var files = docs.length ? h("div", { class: "bubble-docs" }, docs.map(function (im) {
+        return h("button", { type: "button", class: "bubble-doc", title: im.name + " — открыть", onclick: function () { call(api.chatImageOpen(chatId, im.stored)); } },
+          h("b", { text: docExt(im.stored) }), h("span", { text: im.name }));
+      })) : null;
+      msg.el = h("div", { class: "msg msg-user" }, h("div", { class: "bubble" }, pics, files, msg.text ? h("span", { text: msg.text }) : null));
     } else {
       msg.body = h("div", { class: "msg-body rt" });
       msg.extra = h("div", { class: "msg-extra" });
@@ -3003,6 +3029,7 @@
       : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + colName(t.status) + "»"
       : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + colName(t.status) + "»"
       : a.kind === "task-delete" ? "Удалить задачу «" + t.title + "»"
+      : a.kind === "skill-add" ? "Сохранить скилл «" + a.title + "» во вкладку «Скиллы»"
       : "Создать промт «" + a.title + "»";
     var how = a.status === "done" ? "сделано" : a.status === "canceled" ? "пользователь отменил" : a.status === "undone" ? "сделано, но пользователь отменил"
       : a.status === "failed" ? "не получилось" : "пользователь не ответил";
@@ -3013,7 +3040,11 @@
       var content = m.text;
       if (m.actions && m.actions.length) content = (content ? content + "\n\n" : "") + m.actions.map(cardOutcome).join("\n");
       var out = { role: m.role, content: content };
-      if (m.images) out.images = m.images.map(function (im) { return im.stored; });
+      if (m.images) {
+        var pics = m.images.filter(function (im) { return !isChatDoc(im.stored); }), docs = m.images.filter(function (im) { return isChatDoc(im.stored); });
+        if (pics.length) out.images = pics.map(function (im) { return im.stored; });
+        if (docs.length) out.docs = docs.map(function (im) { return { stored: im.stored, name: im.name }; });
+      }
       return out;
     });
   }
@@ -3049,7 +3080,7 @@
     if ((!text.trim() && !pics.length) || se.current) return;
     if ((se.attach || []).some(function (a) { return !a.stored; })) { toast("Картинка ещё загружается, секунду."); return; }
     if (!se.id) se.id = newChatId();
-    if (!se.title) se.title = (text.trim() || "Картинка: " + pics.map(function (a) { return a.name; }).join(", ")).replace(/\s+/g, " ").slice(0, 70);
+    if (!se.title) se.title = (text.trim() || "Вложение: " + pics.map(function (a) { return a.name; }).join(", ")).replace(/\s+/g, " ").slice(0, 70);
     se.attach = [];
     if (se === chat) renderAttach();
     addMessage("user", text, se, pics.map(function (a) { return { id: a.id, name: a.name, stored: a.stored }; }));
@@ -3288,9 +3319,12 @@
   function addChatImages(files) {
     var se = chat;
     if (state.page !== "assistant") return;
+    var docs = Array.prototype.filter.call(files || [], function (f) { return /\.(md|markdown|zip)$/i.test(f.name); });
     var list = Array.prototype.filter.call(files || [], function (f) { return /^image\//.test(f.type) || /\.(png|jpe?g|webp|gif|bmp|avif)$/i.test(f.name); });
-    if (!list.length) { toast("Приложить можно только картинки."); return; }
+    if (!list.length && !docs.length) { toast("Приложить можно картинки и скиллы — файлы .md или .zip."); return; }
     se.attach = se.attach || [];
+    if (docs.length) addChatDocs(se, docs);
+    if (!list.length) return;
     var room = ATTACH_MAX - se.attach.length;
     if (room <= 0) { toast("В одно сообщение — не больше " + ATTACH_MAX + " картинок."); return; }
     if (list.length > room) toast("В одно сообщение — не больше " + ATTACH_MAX + " картинок, лишние не добавлены.");
@@ -3317,12 +3351,41 @@
     updateCostHint();
     els.chatInput.focus();
   }
+  // Skill files (.md, .zip) go as they are (at most 20 MB); the model gets their text and can keep them in «Скиллы».
+  function isChatDoc(stored) { return /\.(md|zip)$/i.test(String(stored || "")); }
+  function docExt(name) { return /\.zip$/i.test(String(name || "")) ? "zip" : "md"; }
+  function addChatDocs(se, files) {
+    var room = ATTACH_MAX - se.attach.length;
+    if (room <= 0) { toast("В одно сообщение — не больше " + ATTACH_MAX + " файлов."); return; }
+    if (!se.id) se.id = newChatId();
+    Array.prototype.slice.call(files, 0, room).forEach(function (f) {
+      var a = { name: f.name, stored: null, doc: true };
+      se.attach.push(a);
+      f.arrayBuffer().then(function (buf) {
+        return api.chatFileSave(se.id, f.name, new Uint8Array(buf));
+      }).then(function (r) {
+        if (!r || !r.ok) throw new Error((r && r.error) || "save");
+        if (se.attach.indexOf(a) === -1) { api.chatImageRemove(se.id, r.image.stored); return; }   // removed while saving
+        a.id = r.image.id; a.stored = r.image.stored; a.name = r.image.name;
+        if (se === chat) renderAttach();
+      }).catch(function (e) {
+        var i = se.attach.indexOf(a);
+        if (i !== -1) se.attach.splice(i, 1);
+        if (se === chat) renderAttach();
+        toast(e && e.message && e.message !== "save" ? e.message : "Не получилось прочитать файл «" + a.name + "».");
+      });
+    });
+    renderAttach();
+    updateCostHint();
+    els.chatInput.focus();
+  }
   function renderAttach() {
     var list = chat.attach || [];
     els.chatAtt.hidden = !list.length;
     els.chatAtt.replaceChildren.apply(els.chatAtt, list.map(function (a) {
-      return h("div", { class: "att-thumb" + (a.stored ? "" : " loading"), title: a.name },
-        h("img", { src: a.preview || chatImageUrl(chat.id, a.stored), alt: a.name }),
+      return h("div", { class: "att-thumb" + (a.doc ? " att-doc" : "") + (a.stored ? "" : " loading"), title: a.name },
+        a.doc ? h("span", { class: "att-doc-in" }, h("b", { text: docExt(a.name) }), h("span", { text: a.name }))
+          : h("img", { src: a.preview || chatImageUrl(chat.id, a.stored), alt: a.name }),
         h("button", { type: "button", class: "att-x", title: "Убрать", "aria-label": "Убрать картинку «" + a.name + "»", html: ICONS.x, onclick: function () {
           var i = chat.attach.indexOf(a);
           if (i !== -1) chat.attach.splice(i, 1);
@@ -3990,6 +4053,331 @@
     return inp;
   }
 
+  /* ---------- «Скиллы» on the «Промты» page (mockups/skills.html) ----------
+     A skill is an instruction for assistants: one .md file or a .zip archive, kept as it was (main.js skill-*, storage.js addSkill).
+     The switch «Промты / Скиллы» under the title picks the list (remembered as libView). A skill comes from «Добавить скилл»
+     (Ctrl + N here), by dropping .md/.zip on the page, or from LLM (the skill_add card). Its description (5–6 sentences)
+     and type are written by GPT-6.1 Sol (without a ChatGPT key, Claude Haiku); both can be changed by hand. */
+  var SKILL_TYPES = [
+    { key: "static", label: "Статика", cls: "cat-static" },
+    { key: "video", label: "Видео", cls: "cat-video" },
+    { key: "code", label: "Code", cls: "cat-code" }
+  ];
+  // draft: the new skill's form ({ path, name, size, kind, files, title, type, desc }); edit: { id, title, type, desc } of the row being changed;
+  // open: rows with «Что внутри» unfolded; busy: skills whose description is being written; errors: id -> { error, nokey }.
+  var sk = { query: "", type: "all", draft: null, edit: null, confirmId: null, open: new Set(), busy: new Set(), errors: {}, more: new Set() };
+  try { if (localStorage.getItem("libView") === "skills") state.lib = "skills"; } catch (e) { /* the prompts by default */ }
+  var skEls = {
+    row: $("lib-row"), seg: $("lib-seg"), nPrompts: $("lib-n-prompts"), nSkills: $("lib-n-skills"), add: $("skill-add-btn"),
+    view: $("skills-view"), formSlot: $("skill-form-slot"), toolbar: $("sk-toolbar"), search: $("sk-search"), filters: $("sk-filters"),
+    table: $("sk-table"), rows: $("sk-rows"), state: $("sk-state")
+  };
+  function skillType(key) { for (var i = 0; i < SKILL_TYPES.length; i++) if (SKILL_TYPES[i].key === key) return SKILL_TYPES[i]; return null; }
+  function findSkill(id) { return state.skills.find(function (s) { return s.id === id; }) || null; }
+  function modelLabel(id) { var m = MODELS.find(function (x) { return x.id === id; }); return m ? m.name : id; }
+  function setLib(lib) {
+    state.lib = lib === "skills" ? "skills" : "prompts";
+    try { localStorage.setItem("libView", state.lib); } catch (e) { /* only a convenience */ }
+    render();
+  }
+  function openSkills() { setPage("prompts"); setLib("skills"); }
+  skEls.seg.addEventListener("click", function (e) { var b = e.target.closest("button[data-lib]"); if (b) setLib(b.dataset.lib); });
+
+  function skillMatches(s) {
+    if (sk.type !== "all" && s.type !== sk.type) return false;
+    var q = norm(sk.query);
+    if (!q) return true;
+    return norm(s.title).indexOf(q) !== -1 || norm(s.desc).indexOf(q) !== -1 || norm(s.text).indexOf(q) !== -1 ||
+      norm(s.file.name).indexOf(q) !== -1 || s.inside.some(function (f) { return norm(f.path).indexOf(q) !== -1; });
+  }
+  function skillFileLine(s) {
+    var what = s.file.kind === "zip" ? "Архив · " + s.files + " " + plural(s.files, "файл", "файла", "файлов") + " · " + fmtSize(s.file.size) : s.file.name + " · " + fmtSize(s.file.size);
+    return h("div", { class: "sk-file", title: s.file.name }, h("b", { class: s.file.kind, text: s.file.kind }), h("span", { text: what }));
+  }
+
+  function renderSkills() {
+    if (!skEls) return;   // render() before this part of the file has run
+    var on = state.lib === "skills";
+    var loading = !state.loaded;
+    els.views.prompts.classList.toggle("lib-skills", on);
+    skEls.row.hidden = loading;
+    skEls.seg.querySelectorAll("button[data-lib]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.lib === state.lib)); });
+    skEls.nPrompts.textContent = state.items.length ? String(state.items.length) : "";
+    skEls.nSkills.textContent = state.skills.length ? String(state.skills.length) : "";
+    if (!on || loading) return;
+    var total = state.skills.length;
+    var counts = SKILL_TYPES.map(function (t) { return { t: t, n: state.skills.filter(function (s) { return s.type === t.key; }).length }; });
+    els.meta.textContent = !total ? "Пока ни одного скилла" : fmtNum(total) + " " + plural(total, "скилл", "скилла", "скиллов") + counts.filter(function (c) { return c.n; }).map(function (c) { return " · " + c.t.label + " " + c.n; }).join("");
+    if (sk.type !== "all" && !counts.some(function (c) { return c.t.key === sk.type && c.n; })) sk.type = "all";
+    skEls.toolbar.hidden = !total;
+    var chips = [h("button", { type: "button", class: "fchip", "aria-pressed": String(sk.type === "all"), onclick: function () { sk.type = "all"; render(); } },
+      "Все", h("span", { class: "n", text: String(total) }))];
+    counts.forEach(function (c) {
+      if (!c.n) return;
+      chips.push(h("button", { type: "button", class: "fchip " + c.t.cls, "aria-pressed": String(sk.type === c.t.key),
+        onclick: function () { sk.type = sk.type === c.t.key ? "all" : c.t.key; render(); } },
+        h("span", { class: "dot", "aria-hidden": "true" }), c.t.label, h("span", { class: "n", text: String(c.n) })));
+    });
+    skEls.filters.replaceChildren.apply(skEls.filters, chips);
+    if (!total) {
+      skEls.table.hidden = true;
+      skEls.state.hidden = false;
+      skEls.state.replaceChildren(
+        h("div", { class: "dots", "aria-hidden": "true" }, SKILL_TYPES.map(function (t) { return h("i", { class: t.cls }); })),
+        h("h2", { text: "Здесь будут ваши скиллы" }),
+        h("p", { text: "Скилл — это инструкция для ассистента: файл .md или архив .zip. Добавьте его кнопкой или перетащите файл сюда — ассистент сам напишет, что это за скилл, и выберет тип. Так все скиллы хранятся в одном месте и не потеряются при переезде на другую модель или аккаунт." }),
+        sk.draft ? null : h("button", { type: "button", class: "btn btn-primary", onclick: pickSkill }, "Добавить первый скилл"));
+      return;
+    }
+    var list = state.skills.filter(skillMatches);
+    if (!list.length) {
+      skEls.table.hidden = true;
+      skEls.state.hidden = false;
+      skEls.state.replaceChildren(h("h2", { text: "Ничего не нашлось" }), h("p", { text: "Попробуйте другое слово или сбросьте фильтр по типу." }),
+        h("button", { type: "button", class: "btn btn-ghost", onclick: function () { sk.type = "all"; sk.query = ""; skEls.search.value = ""; render(); skEls.search.focus(); } }, "Сбросить поиск"));
+      return;
+    }
+    skEls.state.hidden = true;
+    skEls.table.hidden = false;
+    // While a row is being edited, its fields keep what is typed: the row is rebuilt from sk.edit.
+    skEls.rows.replaceChildren.apply(skEls.rows, list.map(skillRow));
+  }
+
+  function skillRow(s) {
+    var t = skillType(s.type);
+    var actions;
+    if (sk.confirmId === s.id) {
+      actions = h("div", { class: "row-actions confirm" }, h("span", { text: "Удалить скилл?" }),
+        h("button", { type: "button", class: "link-btn danger", onclick: function () { removeSkill(s.id); } }, "Удалить"),
+        h("button", { type: "button", class: "link-btn", onclick: function () { sk.confirmId = null; render(); } }, "Отмена"));
+    } else {
+      actions = h("div", { class: "row-actions" },
+        h("button", { type: "button", class: "btn-mini dl", title: "Сохранить исходный файл скилла — " + s.file.name, onclick: function () { downloadSkill(s); } }, icon("download"), h("span", { text: "Скачать" })),
+        h("button", { type: "button", class: "btn-mini", "aria-expanded": String(sk.open.has(s.id)), title: "Список файлов и начало текста скилла",
+          onclick: function () { if (sk.open.has(s.id)) sk.open.delete(s.id); else sk.open.add(s.id); render(); } },
+          icon("chevron"), h("span", { text: sk.open.has(s.id) ? "Свернуть" : "Что внутри" })),
+        h("button", { type: "button", class: "link-btn", onclick: function () { sk.confirmId = s.id; render(); } }, "Удалить"));
+    }
+    return h("tr", { "data-id": s.id, class: sk.open.has(s.id) ? "sk-open" : null },
+      h("td", { class: "c-name" }, h("div", { class: "name", text: s.title || "Без названия" }),
+        h("div", { class: "when", title: new Date(s.createdAt).toLocaleString("ru-RU") }, "Добавлен " + fmtWhen(s.createdAt)),
+        skillFileLine(s), actions),
+      h("td", { class: "c-type" }, t ? h("button", { type: "button", class: "chip " + t.cls, title: "Показать только «" + t.label + "»", onclick: function () { sk.type = t.key; render(); } }, t.label)
+        : h("span", { class: "muted", text: sk.busy.has(s.id) ? "выбирает ассистент" : "—" })),
+      h("td", { class: "c-prompt" }, sk.edit && sk.edit.id === s.id ? skillEditor(s) : skillDesc(s), sk.open.has(s.id) ? skillInside(s) : null));
+  }
+
+  function skillDesc(s) {
+    if (sk.busy.has(s.id)) {
+      var m = state.info && state.info.assistant && state.info.assistant.keys;
+      var who = m && !m.openai && m.anthropic ? "Claude Haiku 5.5" : "GPT-6.1 Sol";
+      return h("div", { class: "sk-writing" }, h("span", { text: who + " читает скилл, пишет описание и выбирает тип… обычно 10–30 секунд" }), h("div", { class: "bar" }, h("i")));
+    }
+    var err = sk.errors[s.id];
+    if (err || !s.desc) {
+      var kids = [h("span", { text: err ? err.error : "Описания пока нет." })];
+      var acts = [];
+      if (err && err.nokey) acts.push(h("button", { type: "button", class: "btn-mini dl", onclick: function () { openSettings("keys"); } }, h("span", { text: "Подключить ChatGPT или Claude" })));
+      else acts.push(h("button", { type: "button", class: "btn-mini dl", onclick: function () { describeSkill(s.id); } }, icon("spark"), h("span", { text: err ? "Попробовать ещё раз" : "Написать с ассистентом" })));
+      acts.push(h("button", { type: "button", class: "btn-mini", onclick: function () { startSkillEdit(s); } }, icon("pencil"), h("span", { text: "Написать самому" })));
+      kids.push(h("div", { class: "acts" }, acts));
+      return h("div", { class: "sk-nokey" }, kids);
+    }
+    var full = sk.more.has(s.id);
+    var p = h("p", { class: "sk-desc" + (full ? "" : " is-collapsed"), title: full ? "" : "Нажмите, чтобы прочитать целиком", text: s.desc });
+    p.addEventListener("click", function () {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && String(sel).length) return;
+      if (sk.more.has(s.id)) sk.more.delete(s.id); else sk.more.add(s.id);
+      p.classList.toggle("is-collapsed", !sk.more.has(s.id));
+    });
+    var by = s.descBy && s.descBy !== "manual" ? modelLabel(s.descBy) + (s.descCost > 0 ? " · " + fmtCost(s.descCost) : "") + (s.descAt ? " · " + fmtWhen(s.descAt) : "") : "Описание написано вручную";
+    return h("div", { class: "sk-descbox" }, p,
+      h("div", { class: "sk-meta" },
+        h("span", { class: "sk-who" }, icon(s.descBy && s.descBy !== "manual" ? "spark" : "pencil"), h("span", { text: by })),
+        h("span", { class: "sk-acts" },
+        h("button", { type: "button", class: "btn-mini", title: "Поправить название, тип и описание", onclick: function () { startSkillEdit(s); } }, icon("pencil"), h("span", { text: "Изменить" })),
+        h("button", { type: "button", class: "btn-mini", title: "Попросить ассистента написать описание заново (тип останется)", onclick: function () { describeSkill(s.id, true); } }, icon("spark"), h("span", { text: "Пересоздать" })))));
+  }
+
+  // «Что внутри»: the files of an archive and the beginning of the main Markdown file, without downloading.
+  function skillInside(s) {
+    var kids = [];
+    if (s.file.kind === "zip") {
+      kids.push(h("span", { class: "cap", text: "Файлы в архиве" + (s.files > s.inside.length ? " (первые " + s.inside.length + " из " + s.files + ")" : "") }),
+        h("ul", null, s.inside.slice(0, 60).map(function (f) {
+          return h("li", { class: f.path === s.main ? "main" : null }, h("span", { text: f.path }), h("span", { text: fmtSize(f.size) }));
+        })));
+      if (s.inside.length > 60) kids.push(h("span", { class: "muted", text: "… и ещё " + (s.inside.length - 60) }));
+    }
+    if (s.text) kids.push(h("span", { class: "cap", text: "Начало " + (s.main ? s.main.split("/").pop() : s.file.name) }), h("pre", { text: s.text.slice(0, 1200) }));
+    else kids.push(h("span", { class: "muted", text: "Текстового файла .md в архиве нет." }));
+    return h("div", { class: "sk-inside" }, kids);
+  }
+
+  // A small type picker: "" — let the assistant choose (only for a new skill).
+  function skillTypePicker(value, withAuto, onpick) {
+    var name = "skt" + Math.random().toString(36).slice(2, 7);
+    var opts = (withAuto ? [{ key: "", label: "Определит ассистент", cls: "cat-other" }] : []).concat(SKILL_TYPES);
+    return h("div", { class: "cat-picker", role: "radiogroup", "aria-label": "Тип скилла" }, opts.map(function (t) {
+      var inp = h("input", { type: "radio", name: name, value: t.key });
+      inp.checked = value === t.key;
+      inp.addEventListener("change", function () { if (inp.checked) onpick(t.key); });
+      return h("label", { class: "cat-option " + t.cls + (t.key ? "" : " sk-auto-opt") }, inp, h("span", { text: t.label }));
+    }));
+  }
+  function startSkillEdit(s) {
+    sk.edit = { id: s.id, title: s.title, type: s.type, desc: s.desc };
+    render();
+    var f = skEls.rows.querySelector(".sk-edit textarea");
+    if (f) f.focus();
+  }
+  function skillEditor(s) {
+    var e = sk.edit;
+    var title = h("input", { class: "input", type: "text", maxlength: "300", value: e.title, "aria-label": "Название скилла" });
+    title.addEventListener("input", function () { e.title = title.value; });
+    var desc = h("textarea", { class: "textarea prose", rows: "5", placeholder: "Что это за скилл, для чего он и как работает" });
+    desc.value = e.desc;
+    desc.addEventListener("input", function () { e.desc = desc.value; });
+    var save = function () {
+      call(api.skillSave({ id: s.id, title: e.title.trim() || s.title, type: e.type, desc: e.desc })).then(function (r) {
+        if (!r) return;
+        sk.edit = null;
+        delete sk.errors[s.id];
+        render();
+        toast("Скилл сохранён");
+      });
+    };
+    var box = h("div", { class: "sk-edit" },
+      h("label", { class: "field-label", text: "Название" }), title,
+      h("span", { class: "field-label", text: "Тип" }), skillTypePicker(e.type, false, function (k) { e.type = k; }),
+      h("span", { class: "field-label", text: "Описание" }), desc,
+      h("div", { class: "editor-actions" },
+        h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: save }, "Сохранить"),
+        h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { sk.edit = null; render(); } }, "Отмена"),
+        h("span", { class: "hint", text: "Ctrl + Enter — сохранить, Esc — отмена" })));
+    box.addEventListener("keydown", function (ev) {
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); save(); }
+      else if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); sk.edit = null; render(); }
+    });
+    return box;
+  }
+
+  /* adding: «Добавить скилл» or a dropped file opens the form with the title taken from the file */
+  function pickSkill() {
+    call(api.skillPick()).then(function (r) { if (r && !r.canceled) openSkillForm(r); });
+  }
+  function openSkillForm(info) {
+    sk.draft = { path: info.path, name: info.name, size: info.size, kind: info.kind, files: info.files, main: info.main, title: info.title, auto: info.title, type: "", desc: "" };
+    renderSkillForm();
+    render();
+    var f = skEls.formSlot.querySelector("input");
+    if (f) { f.focus(); f.select(); }
+  }
+  function closeSkillForm() { sk.draft = null; renderSkillForm(); render(); }
+  function renderSkillForm() {
+    var d = sk.draft;
+    if (!d) { skEls.formSlot.replaceChildren(); return; }
+    var m = state.info && state.info.assistant && state.info.assistant.keys;
+    var noKey = m && !m.openai && !m.anthropic;
+    var who = m && !m.openai && m.anthropic ? "Claude Haiku 5.5" : "GPT-6.1 Sol";
+    var title = h("input", { class: "input", id: "skf-title", type: "text", maxlength: "300", value: d.title, autocomplete: "off" });
+    title.addEventListener("input", function () { d.title = title.value; });
+    var desc = h("textarea", { class: "textarea prose", id: "skf-desc", rows: "4",
+      placeholder: noKey ? "Опишите сами: что это за скилл, для чего он и как работает. Чтобы описание писалось само, подключите ChatGPT или Claude в «Настройках»."
+        : "Оставьте пустым — " + who + " прочитает скилл и напишет 5–6 предложений: что это, для чего он и как работает." });
+    desc.addEventListener("input", function () { d.desc = desc.value; });
+    var fromWhat = d.title === d.auto ? (d.main || d.kind === "md" ? "Подставлено из файла — можно поменять" : "Подставлено из названия архива — можно поменять") : "";
+    var msg = h("span", { class: "form-msg", role: "status" });
+    var save = h("button", { type: "submit", class: "btn btn-primary" }, "Сохранить");
+    var form = h("form", { class: "editor inline sk-form", novalidate: "novalidate" },
+      h("h2", { text: "Новый скилл" }),
+      h("div", { class: "fields" },
+        h("div", { class: "field" }, h("label", { class: "field-label", for: "skf-title", text: "Название" }), title, fromWhat ? h("span", { class: "from-file", text: fromWhat }) : null),
+        h("div", { class: "field" }, h("span", { class: "field-label", text: "Тип" }), skillTypePicker(d.type, !noKey, function (k) { d.type = k; })),
+        h("div", { class: "field full" }, h("span", { class: "field-label", text: "Файл скилла" }),
+          h("div", { class: "sk-picked" }, h("span", { class: "tile doc" }, h("span", { class: "ext", text: d.kind })),
+            h("div", null, h("div", { class: "t", text: d.name }),
+              h("div", { class: "s", text: (d.kind === "zip" ? "Архив · " + d.files + " " + plural(d.files, "файл", "файла", "файлов") + " · " : "") + fmtSize(d.size) + (d.main ? " · главный файл " + d.main : "") })),
+            h("span", { class: "spacer" }),
+            h("button", { type: "button", class: "btn-mini", onclick: pickSkill }, "Выбрать другой…"))),
+        h("div", { class: "field full" }, h("label", { class: "field-label", for: "skf-desc", text: "Описание" }),
+          noKey ? null : h("div", { class: "sk-auto" }, h("span", { class: "pill" }, icon("spark"), who + " · Средне"),
+            h("span", { text: "напишет описание после сохранения" + (d.type ? "" : " и выберет тип") + " — или впишите сами" })),
+          desc)),
+      h("div", { class: "editor-actions" }, save,
+        h("button", { type: "button", class: "btn btn-ghost", onclick: closeSkillForm }, "Отмена"),
+        h("span", { class: "hint", text: "Ctrl + Enter — сохранить, Esc — отмена" }), msg));
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (save.disabled) return;
+      if (!d.title.trim()) { msg.textContent = "Напишите название"; title.focus(); return; }
+      save.disabled = true;
+      call(api.skillAdd({ path: d.path, title: d.title.trim(), type: d.type, desc: d.desc.trim() })).then(function (r) {
+        save.disabled = false;
+        if (!r) return;
+        var chose = !!d.type;
+        var wrote = !!d.desc.trim();
+        sk.draft = null;
+        renderSkillForm();
+        sk.type = "all";
+        render();
+        toast("Скилл «" + d.title.trim() + "» сохранён");
+        if (!wrote && !noKey) describeSkill(r.skillId, chose);
+      });
+    });
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); form.requestSubmit(); }
+      else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeSkillForm(); }
+    });
+    skEls.formSlot.replaceChildren(form);
+  }
+  // Several files dropped at once: each is added straight away; the assistant writes the descriptions and picks the types.
+  function addSkillFiles(paths) {
+    var m = state.info && state.info.assistant && state.info.assistant.keys;
+    var noKey = m && !m.openai && !m.anthropic;
+    paths.reduce(function (p, file) {
+      return p.then(function () { return api.skillInspect(file); }).then(function (info) {
+        if (!info || !info.ok) { toast((info && info.error) || "Файл не открылся", true); return; }
+        return call(api.skillAdd({ path: info.path, title: info.title, type: "", desc: "" })).then(function (r) {
+          if (!r) return;
+          render();
+          if (!noKey) describeSkill(r.skillId, false);
+        });
+      });
+    }, Promise.resolve()).then(function () { toast("Скиллы добавлены"); });
+  }
+
+  // keepType: «Пересоздать» or a type the user chose keeps the type; otherwise the assistant puts its own.
+  function describeSkill(id, keepType) {
+    if (sk.busy.has(id)) return;
+    sk.busy.add(id);
+    delete sk.errors[id];
+    render();
+    api.skillDescribe(id, !!keepType).then(function (r) {
+      sk.busy.delete(id);
+      if (r && r.ok) applyData(r);
+      else sk.errors[id] = { error: (r && r.error) || "Описание не получилось. Попробуйте ещё раз.", nokey: !!(r && r.nokey) };
+      render();
+    }, function () {
+      sk.busy.delete(id);
+      sk.errors[id] = { error: "Описание не получилось. Попробуйте ещё раз." };
+      render();
+    });
+  }
+  function downloadSkill(s) {
+    call(api.skillDownload(s.id)).then(function (r) {
+      if (!r || r.canceled) return;
+      undoToast("Скилл сохранён: " + r.path, function () { api.skillReveal(s.id); }, "Показать в папке");
+    });
+  }
+  function removeSkill(id) {
+    sk.confirmId = null;
+    call(api.skillDelete(id)).then(function (r) { if (r) { render(); toast("Скилл удалён, его файл — в корзине Windows"); } });
+  }
+  skEls.add.addEventListener("click", pickSkill);
+  skEls.search.addEventListener("input", function () { sk.query = skEls.search.value; render(); });
+
   /* ---------- search and filters ---------- */
   function taskVisible(t, inArchive) {
     if (tf.hideDone && t.status === "done" && !inArchive) return false;
@@ -4430,8 +4818,10 @@
 
   // Deleting happens at once; for 7 seconds «Отменить» at the bottom brings the task back exactly as it was.
   var undoTimer = null;
-  function undoToast(text, undo) {
+  // label: the button's text when it is not «Отменить» (for example «Показать в папке»).
+  function undoToast(text, undo, label) {
     els.utoastText.textContent = text;
+    els.utoastUndo.textContent = label || "Отменить";
     els.utoastUndo.onclick = function () { els.utoast.hidden = true; clearTimeout(undoTimer); undo(); };
     els.utoast.hidden = false;
     clearTimeout(undoTimer);
@@ -4577,6 +4967,7 @@
     dragDepth = 0;
     setDropRow(null);
     els.editor.classList.remove("drop-over");
+    skEls.view.classList.remove("drop-over");
     Array.prototype.forEach.call(document.querySelectorAll(".tr-drop.over"), function (z) { z.classList.remove("over"); });
   }
   document.addEventListener("dragenter", function (e) { if (hasFiles(e)) dragDepth++; });
@@ -4585,6 +4976,8 @@
     if (!hasFiles(e)) return;
     e.preventDefault();
     if (state.page === "screenshots") { e.dataTransfer.dropEffect = "copy"; return; }
+    // «Скиллы»: a .md or .zip can be let go anywhere on the page.
+    if (state.page === "prompts" && state.lib === "skills") { e.dataTransfer.dropEffect = "copy"; skEls.view.classList.add("drop-over"); return; }
     // «Транскрибация»: a file can be let go anywhere on the page, the drop zone lights up.
     if (state.page === "transcribe") {
       e.dataTransfer.dropEffect = "copy";
@@ -4603,6 +4996,15 @@
     var archive = Array.prototype.find.call(e.dataTransfer.files || [], function (f) { return /\.(snowprompt|snowball)$/i.test(f.name); });
     if (archive) { clearDrag(); var ap = api.pathForFile(archive); if (ap) openArchive(ap); return; }
     if (state.page === "assistant") { clearDrag(); addChatImages(e.dataTransfer.files); return; }
+    if (state.page === "prompts" && state.lib === "skills") {
+      clearDrag();
+      var paths = Array.prototype.filter.call(e.dataTransfer.files || [], function (f) { return /\.(md|markdown|zip)$/i.test(f.name); })
+        .map(function (f) { return api.pathForFile(f); }).filter(Boolean);
+      if (!paths.length) { toast("Скилл — это файл .md или архив .zip."); return; }
+      if (paths.length === 1) api.skillInspect(paths[0]).then(function (r) { if (r && r.ok) openSkillForm(r); else toast((r && r.error) || "Файл не открылся", true); });
+      else addSkillFiles(paths);
+      return;
+    }
     if (state.page === "screenshots" && window.screenshotEditor) { clearDrag(); window.screenshotEditor.importFiles(e.dataTransfer.files); return; }
     if (state.page === "transcribe") {
       clearDrag();
@@ -5432,11 +5834,11 @@
         h("span", { class: "gd-count", text: "Шаг " + (gd.step + 1) + " из " + g.steps.length }),
         h("button", { type: "button", class: "btn btn-ghost", disabled: first ? "disabled" : null, onclick: function () { guideGo(-1); } }, "Назад"),
         // The guide of the macOS theme has no section of its own: its last button opens «Тема» in the profile menu;
-        // the guide of the folded sidebar just closes.
+        // the guide of the folded sidebar just closes; «Скиллы» open on the «Промты» page.
         last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () {
           gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close();
-          if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section !== "sidebar") setPage(g.section);
-        } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : "Открыть раздел «" + g.title + "»")
+          if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section === "skills") openSkills(); else if (g.section !== "sidebar") setPage(g.section);
+        } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : g.section === "skills" ? "Открыть «Скиллы»" : "Открыть раздел «" + g.title + "»")
           : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
   }
   // Delegation also covers guide buttons in sections mounted after the app starts.
@@ -5536,12 +5938,17 @@
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();
       setPage("prompts");
-      if (!state.editorOpen) openEditor(null); else els.fTitle.focus();
+      if (state.lib === "skills") { if (!sk.draft) pickSkill(); }
+      else if (!state.editorOpen) openEditor(null); else els.fTitle.focus();
     }
     else if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyF")) {
       e.preventDefault();
       setPage("prompts");
-      if (!els.toolbar.hidden) { els.search.focus(); els.search.select(); }
+      if (state.lib === "skills") { if (!skEls.toolbar.hidden) { skEls.search.focus(); skEls.search.select(); } }
+      else if (!els.toolbar.hidden) { els.search.focus(); els.search.select(); }
+    }
+    else if (e.key === "Escape" && document.activeElement === skEls.search && skEls.search.value) {
+      skEls.search.value = ""; sk.query = ""; render();
     }
     else if (e.key === "Escape" && document.activeElement === els.search && els.search.value) {
       els.search.value = ""; state.query = ""; render();

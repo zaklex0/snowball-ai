@@ -75,4 +75,38 @@ function extractZip(source, dest) {
   });
 }
 
-module.exports = { writeZip, extractZip };
+// What a skill archive holds, without unpacking it: the list of files ({ path, size }, folders left out) and the text
+// of its main Markdown file — SKILL.md nearest to the top, otherwise the first .md nearest to the top (at most 512 KB).
+const SKILL_MD_MAX = 512 * 1024;
+function readZipIndex(source) {
+  return new Promise((resolve, reject) => {
+    yauzl.open(source, { lazyEntries: true, decodeStrings: true, validateEntrySizes: true }, (err, zip) => {
+      if (err) { reject(badFile()); return; }
+      const files = [];
+      let best = null;   // { path, rank, text }
+      let done = false;
+      const fail = (e) => { if (done) return; done = true; try { zip.close(); } catch (x) { /* already closed */ } reject(e && e.userMessage ? e : badFile()); };
+      zip.on('error', fail);
+      zip.on('end', () => { if (!done) { done = true; resolve({ files, main: best ? best.path : '', text: best ? best.text : '' }); } });
+      zip.on('entry', (entry) => {
+        const name = entry.fileName.replace(/\\/g, '/');
+        if (name.endsWith('/') || /(^|\/)(__MACOSX|\.DS_Store)(\/|$)/.test(name)) { zip.readEntry(); return; }
+        files.push({ path: name, size: entry.uncompressedSize });
+        const base = name.split('/').pop().toLowerCase();
+        const depth = name.split('/').length;
+        const rank = (base === 'skill.md' ? 0 : 1000) + depth;
+        if (!/\.(md|markdown)$/.test(base) || entry.uncompressedSize > SKILL_MD_MAX || (best && best.rank <= rank)) { zip.readEntry(); return; }
+        zip.openReadStream(entry, (e2, rs) => {
+          if (e2) { fail(e2); return; }
+          const parts = [];
+          rs.on('data', (c) => parts.push(c));
+          rs.on('error', fail);
+          rs.on('end', () => { best = { path: name, rank, text: Buffer.concat(parts).toString('utf8') }; zip.readEntry(); });
+        });
+      });
+      zip.readEntry();
+    });
+  });
+}
+
+module.exports = { writeZip, extractZip, readZipIndex };

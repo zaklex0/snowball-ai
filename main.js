@@ -1092,7 +1092,17 @@ function stubAnswer(last) {
 // Pretends to think, then sends the answer a few words at a time, like a real stream.
 async function* stubSource(messages, signal) {
   const lastUser = messages.slice().reverse().find((m) => m.role === 'user');
-  const answer = stubAnswer(lastUser ? lastUser.content : '');
+  let answer = stubAnswer(lastUser ? lastUser.content : '');
+  // A skill file with the message: the stub offers to keep it, without a description (ChatGPT or Claude write one).
+  const doc = lastUser && /Вложение: «([^»]+)», ссылка для skill_add: (\S+)/.exec(lastUser.content);
+  if (doc) {
+    let title = doc[1].replace(/\.(md|markdown|zip)$/i, '');
+    try { const f = await readSkillFile(chatFileOf(doc[2]), doc[1]); title = skillTitle(f.text, doc[1], f.inside); } catch (e) { /* the file name will do */ }
+    const r = runTool('skill_add', { attachment: doc[2], title, type: '', desc: '' });
+    answer = r.action
+      ? { text: 'Я заглушка и прочитать скилл не могу, но могу сохранить его во вкладку «Промты» → «Скиллы». Описание и тип там можно сделать кнопкой, когда в «Настройках» будет ключ ChatGPT или Claude.', action: r.action }
+      : { text: r.output };
+  }
   const pics = lastUser && lastUser.imgs ? lastUser.imgs.length : 0;
   if (pics) answer.text = 'Вижу ' + pics + ' ' + plural(pics, 'картинку', 'картинки', 'картинок') + '. Я заглушка и разглядеть их не могу — это сделают ChatGPT или Claude, когда в «Настройках» будет ключ.\n\n' + answer.text;
   await sleep(500 + Math.random() * 400, signal);
@@ -1140,6 +1150,7 @@ const SYSTEM_PROMPT = [
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. Чтобы изменить или удалить задачу, сначала найди её id через tasks_list.',
   'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
   'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, transcribe — «Транскрибация» (текст, тайминги и субтитры из аудио и видео), generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
+  'На странице «Промты» есть вкладка «Скиллы»: там пользователь хранит скиллы — инструкции для ИИ-ассистентов (файл .md или архив .zip). skills_list показывает их. Если пользователь приложил к сообщению файл скилла (в сообщении есть строка «ссылка для skill_add: …») и просит сохранить его («закинь в хранилище», «сохрани скилл»), прочитай файл и вызови skill_add: название — из name в файле или коротко по смыслу, тип — static (картинки), video (видео) или code (программирование и всё техническое), описание — 5–6 простых предложений по-русски: что это за скилл, для чего, как работает и что внутри.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
 ].join('\n\n');
 
@@ -1258,6 +1269,24 @@ const TOOLS = [
     parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
   },
   {
+    name: 'skills_list',
+    description: 'Показывает скиллы пользователя со страницы «Промты» → «Скиллы»: название, тип и начало описания.',
+    parameters: { type: 'object', additionalProperties: false, required: [], properties: {} }
+  },
+  {
+    name: 'skill_add',
+    description: 'Сохраняет приложенный к сообщению файл скилла (.md или .zip) на страницу «Промты» → «Скиллы» вместе с названием, типом и описанием (или показывает карточку для подтверждения — это скажет результат).',
+    parameters: {
+      type: 'object', additionalProperties: false, required: ['attachment', 'title', 'type', 'desc'],
+      properties: {
+        attachment: { type: 'string', description: 'Ссылка на вложение из строки «ссылка для skill_add: …» в сообщении пользователя' },
+        title: { type: 'string', description: 'Название скилла: name из его файла или коротко по смыслу' },
+        type: { type: 'string', enum: ['static', 'video', 'code'], description: 'static — картинки, video — видео, code — программирование и всё техническое' },
+        desc: { type: 'string', description: 'Описание по-русски: 5–6 простых предложений одним абзацем — что это за скилл, для чего, как работает и что внутри' }
+      }
+    }
+  },
+  {
     name: 'calendar_delete',
     description: 'Удаляет дело из календаря (или показывает карточку для подтверждения — это скажет результат).',
     parameters: {
@@ -1299,6 +1328,19 @@ function runTool(name, input) {
     return { output: after('Удалить из календаря: ' + eventLine(event)), action: { kind: 'calendar-delete', title: event.title, event } };
   }
   if (name === 'tasks_list') return { output: tasksForModel() };
+  if (name === 'skills_list') {
+    const list = store.skillsView().map((s) => ({ title: s.title, type: s.type, file: s.file.name, desc: s.desc.slice(0, 300) }));
+    return { output: list.length ? JSON.stringify(list) : 'Скиллов пока нет.' };
+  }
+  if (name === 'skill_add') {
+    const file = chatFileOf(a.attachment);
+    if (!file || !fs.existsSync(file)) return { output: 'Ошибка: такого вложения нет. Возьми ссылку из строки «ссылка для skill_add: …» в сообщении пользователя.', error: true };
+    const type = SKILL_TYPES.includes(a.type) ? a.type : '';
+    const title = String(a.title || '').trim().slice(0, 300) || 'Скилл';
+    const desc = String(a.desc || '').trim().slice(0, 6000);
+    const fileName = chatFileNames.get(String(a.attachment)) || path.basename(file);
+    return { output: after('Сохранить скилл «' + title + '» во вкладку «Скиллы»'), action: { kind: 'skill-add', title, category: type, text: desc, attachment: String(a.attachment), fileName, model: currentModelId() } };
+  }
   if (name === 'tasks_archive_search') return { output: archiveForModel(a.query) };
   if (name === 'task_add') {
     const task = normalizeTask(Object.assign({ title: a.title, status: a.status, subtasks: (Array.isArray(a.subtasks) ? a.subtasks : []).map((s) => ({ title: s })) }, taskFields(a)));
@@ -1604,15 +1646,37 @@ function notifyAnswer(text, failed, wc) {
 }
 
 // Reads the pictures of the conversation for the request: { media, data (base64) } in m.imgs. A missing file is skipped.
+// Skill files of a message (m.docs) become text: the list of files and the main Markdown, with the reference for skill_add.
 async function withImages(messages) {
   return Promise.all(messages.map(async (m) => {
-    if (!m.files) return m;
+    if (!m.files && !m.docs) return m;
     const imgs = [];
-    for (const f of m.files) {
+    for (const f of m.files || []) {
       try { imgs.push({ media: /\.png$/i.test(f) ? 'image/png' : 'image/jpeg', data: (await fsp.readFile(f)).toString('base64') }); } catch (e) { /* deleted meanwhile */ }
     }
-    return { role: m.role, content: m.content, imgs };
+    const docs = [];
+    for (const d of m.docs || []) docs.push(await docText(d));
+    const content = docs.length ? (m.content.trim() || 'Посмотри на приложенный файл.') + '\n\n' + docs.join('\n\n') : m.content;
+    return { role: m.role, content, imgs };
   }));
+}
+// A skill file in a message is "<chat id>/<stored>": that is what skill_add gets back from the model.
+const chatFileNames = new Map();   // that reference -> the file's own name
+function chatFileOf(ref) {
+  const m = /^([A-Za-z0-9_-]{1,64})\/([A-Za-z0-9_-]{1,64}\.(md|zip))$/.exec(String(ref || ''));
+  return m ? store.chatImagePath(m[1], m[2]) : null;
+}
+const currentModelId = () => { const m = currentModel(); return m ? m.id : ''; };
+async function docText(d) {
+  const head = 'Вложение: «' + d.name + '», ссылка для skill_add: ' + d.ref;
+  try {
+    const r = await readSkillFile(d.path, d.name);
+    const list = r.inside.slice(0, 150).map((f) => '- ' + f.path).join('\n');
+    return head + (r.kind === 'zip' ? '\nАрхив, файлов: ' + r.files + (list ? '\n' + list : '') : '') +
+      '\n' + (r.text ? 'Текст ' + (r.main || d.name) + ':\n```\n' + r.text.slice(0, 60000) + '\n```' : 'Текстового файла .md нет.');
+  } catch (e) {
+    return head + '\n(файл не прочитался: ' + (e.userMessage || 'его нет') + ')';
+  }
 }
 const IMAGE_ONLY_TEXT = 'Посмотри на картинку.';
 
@@ -1675,10 +1739,20 @@ handle('assistant-send', async function (messages, opts) {
       const out = { role: m.role, content: m.content.slice(0, 100000) };
       const files = m.role === 'user' && chatId && Array.isArray(m.images) ? m.images.map((x) => store.chatImagePath(chatId, x)).filter(Boolean).slice(0, 6) : [];
       if (files.length) out.files = files;
+      // Skill files (.md, .zip): [{ stored, name }]; they reach the model as text.
+      const docs = m.role === 'user' && chatId && Array.isArray(m.docs) ? m.docs.slice(0, 6).map((d) => {
+        const p = d && store.chatImagePath(chatId, String(d.stored || ''));
+        if (!p || !/\.(md|zip)$/.test(p)) return null;
+        const ref = chatId + '/' + d.stored;
+        const name = String(d.name || d.stored).slice(0, 200);
+        chatFileNames.set(ref, name);
+        return { path: p, ref, name };
+      }).filter(Boolean) : [];
+      if (docs.length) out.docs = docs;
       return out;
     });
   const last = list[list.length - 1];
-  if (!last || last.role !== 'user' || !(last.content.trim() || last.files)) return { ok: false, error: 'Напишите сообщение.' };
+  if (!last || last.role !== 'user' || !(last.content.trim() || last.files || last.docs)) return { ok: false, error: 'Напишите сообщение.' };
   const id = ++streamSeq;
   const controller = new AbortController();
   streams.set(id, controller);
@@ -2738,6 +2812,12 @@ async function applyAction(action) {
     if (!gone) throw userError('Этой задачи уже нет на доске.');
     return { undo: { restoreTask: gone }, extra: {} };
   }
+  if (action.kind === 'skill-add') {
+    const file = chatFileOf(action.attachment);
+    if (!file || !fs.existsSync(file)) throw userError('Файла скилла уже нет в разговоре.');
+    const skill = await store.addSkill({ path: file, name: action.fileName, title: action.title, type: action.category, desc: action.text, descBy: action.model || 'manual' });
+    return { undo: { skillId: skill.id }, extra: { skillId: skill.id } };
+  }
   throw userError('Такое действие ассистент пока не умеет.');
 }
 
@@ -2762,6 +2842,7 @@ handle('assistant-undo', async (actionId) => {
   if (u.restore) await store.saveEvent(u.restore);   // puts the old version back under the same id
   if (u.taskId) await store.deleteTask(u.taskId);
   if (u.restoreTask) await store.putTask(u.restoreTask);   // exactly as it was, not counted again
+  if (u.skillId) await store.deleteSkill(u.skillId);
   return ok({ date: u.restore ? u.restore.date : undefined });
 });
 

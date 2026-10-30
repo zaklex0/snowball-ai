@@ -39,6 +39,18 @@ http.createServer((req, res) => {
         usage: { input_tokens: 900, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, total_tokens: 1200 } }));
       return;
     }
+    if (req.url.startsWith('/v1/responses') && body.toString('utf8').includes('"name":"skill"')) {
+      // A skill description («Промты» → «Скиллы»): the same shape as SKILL_SCHEMA in main.js.
+      const reel = /рилс/i.test(body.toString('utf8'));
+      const skill = reel ? { type: 'video', desc: 'Скилл помогает написать сценарий короткого вертикального ролика. Ассистент придумывает хук на первые две секунды, раскладывает ролик на три сцены и заканчивает призывом к действию. '
+        + 'Для каждой сцены он пишет, что в кадре, что звучит и сколько она длится. Подходит для рилсов, шортсов и клипов в соцсетях. Пример: «сценарий рилса про утренний кофе».' } : { type: 'static', desc: 'Скилл помогает писать промты для картинок в одном узнаваемом стиле. Он задаёт порядок: сначала сюжет, потом свет, камера и детали. '
+        + 'Внутри есть примеры готовых промтов и список слов, которых лучше избегать. Подходит, когда нужно сделать серию картинок, похожих друг на друга. '
+        + 'Ассистент сам подставит ваши детали в шаблон. Пример: «сделай промт для обложки ролика про горы».' };
+      setTimeout(() => res.end(JSON.stringify({ id: 'resp_s', object: 'response', status: 'completed', output: [{ type: 'message', id: 'm3', role: 'assistant', status: 'completed',
+        content: [{ type: 'output_text', text: JSON.stringify(skill), annotations: [] }] }],
+        usage: { input_tokens: 2400, input_tokens_details: { cached_tokens: 0 }, output_tokens: 700, total_tokens: 3100 } })), Number(process.env.FAKE_DELAY) || 600);
+      return;
+    }
     if (req.url.startsWith('/v1/responses')) {
       res.end(JSON.stringify({ id: 'resp_1', object: 'response', status: 'completed', output: [{ type: 'message', id: 'm1', role: 'assistant', status: 'completed',
         content: [{ type: 'output_text', text: JSON.stringify(SUMMARY), annotations: [] }] }],

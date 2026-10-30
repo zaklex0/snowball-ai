@@ -187,8 +187,41 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Добавить промт <kbd class="kh">Ctrl + N</kbd>
               </button>
+              <button type="button" class="btn btn-primary" id="skill-add-btn" title="Выбрать файл .md или архив .zip со скиллом">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Добавить скилл <kbd class="kh">Ctrl + N</kbd>
+              </button>
             </div>
           </header>
+
+          <div class="lib-seg" id="lib-row" hidden>
+            <div class="tview" id="lib-seg" role="group" aria-label="Что показать">
+              <button type="button" data-lib="prompts" aria-pressed="true" title="Промты для картинок и видео">Промты <span class="n" id="lib-n-prompts"></span></button>
+              <button type="button" data-lib="skills" aria-pressed="false" title="Скиллы — инструкции для ассистентов: файл .md или архив .zip">Скиллы <span class="n" id="lib-n-skills"></span></button>
+            </div>
+            <span class="lib-why" id="lib-why">Инструкции для ассистентов: файл .md или архив .zip</span>
+            <button type="button" class="btn-mini sk-help" id="sk-help" data-guide="skills" title="Пошаговая инструкция с картинками">Как пользоваться</button>
+          </div>
+
+          <div class="skills-view" id="skills-view">
+            <div id="skill-form-slot"></div>
+            <section class="toolbar" id="sk-toolbar" aria-label="Поиск и фильтр скиллов">
+              <div class="search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+                <label for="sk-search" class="sr-only">Поиск скиллов</label>
+                <input class="input" id="sk-search" type="search" autocomplete="off" placeholder="Поиск по названию, описанию и тексту скилла">
+              </div>
+              <div class="filters" id="sk-filters" role="group" aria-label="Фильтр по типу"></div>
+            </section>
+            <section class="card" aria-label="Список скиллов">
+              <table class="table sk-table" id="sk-table" hidden>
+                <colgroup><col class="w-skill"><col class="w-type"><col></colgroup>
+                <thead><tr><th scope="col">Скилл</th><th scope="col">Тип</th><th scope="col">Описание</th></tr></thead>
+                <tbody id="sk-rows"></tbody>
+              </table>
+              <div class="state" id="sk-state"></div>
+            </section>
+          </div>
 
           <div id="editor-slot">
             <form class="editor" id="editor" hidden novalidate>
@@ -234,7 +267,7 @@
             <div class="filters" id="filters" role="group" aria-label="Фильтр по типу"></div>
           </section>
 
-          <section class="card" aria-label="Список промтов">
+          <section class="card" id="prompts-card" aria-label="Список промтов">
             <table class="table" id="table" hidden>
               <colgroup><col class="w-name"><col class="w-type"><col></colgroup>
               <thead>
@@ -520,10 +553,10 @@
                   <div class="att-row" id="chat-att" hidden></div>
                   <textarea id="chat-input" rows="1" maxlength="20000" placeholder="Напишите сообщение…"></textarea>
                   <div class="composer-bar">
-                    <button type="button" class="att-btn" id="chat-attach" title="Приложить картинку. Ещё можно вставить её через Ctrl + V или перетащить в окно" aria-label="Приложить картинку">
+                    <button type="button" class="att-btn" id="chat-attach" title="Приложить картинку или скилл (.md, .zip). Картинку можно вставить через Ctrl + V, любой файл — перетащить в окно" aria-label="Приложить картинку или скилл">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m20 11.5-7.8 7.8a5 5 0 0 1-7.1-7.1l8.2-8.2a3.3 3.3 0 0 1 4.7 4.7l-8.2 8.2a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6"/></svg>
                     </button>
-                    <input type="file" id="chat-file" accept="image/*" multiple hidden>
+                    <input type="file" id="chat-file" accept="image/*,.md,.markdown,.zip" multiple hidden>
                     <div class="model-wrap">
                       <div class="model-menu" id="model-menu" role="dialog" aria-label="Модель и размышления" hidden></div>
                       <button type="button" class="model-btn" id="model-btn" aria-haspopup="dialog" aria-expanded="false" aria-controls="model-menu" title="Выбрать модель">
@@ -829,6 +862,7 @@
 <script src="guides/1.17.0/boxes.js"></script>
 <script src="guides/1.18.1/boxes.js"></script>
 <script src="guides/1.19.2/boxes.js"></script>
+<script src="guides/1.20.0/boxes.js"></script>
 <script src="capture-shortcut.js"></script>
 <script src="screenshots.js"></script>
 <script src="app.js"></script>

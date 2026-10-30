@@ -45,6 +45,7 @@
   --cat-video-bg:  #E1EEFF; --cat-video-ink:  #0B4FA8; --cat-video-dot:  #007AFF;
   --cat-system-bg: #FFE5E3; --cat-system-ink: #B3261E; --cat-system-dot: #FF3B30;
   --cat-other-bg:  #EEEEF1; --cat-other-ink:  #48484D; --cat-other-dot:  #8E8E93;
+  --cat-code-bg:   #F1E6FB; --cat-code-ink:   #6A2C9C; --cat-code-dot:   #AF52DE;
   --ev-call: #AF52DE; --ev-call-bg: #F4E7FB;
   --ev-shoot: #FF9500; --ev-shoot-bg: #FFF0DA;
   --ev-edit: #30B0C7; --ev-edit-bg: #DFF4F8;
@@ -86,6 +87,7 @@
     --cat-video-bg:  #13304F; --cat-video-ink:  #A9CFFF; --cat-video-dot:  #0A84FF;
     --cat-system-bg: #4A1E1C; --cat-system-ink: #FFB4AE; --cat-system-dot: #FF453A;
     --cat-other-bg:  #3A3A3C; --cat-other-ink:  #E5E5EA; --cat-other-dot:  #98989D;
+    --cat-code-bg:   #3B2648; --cat-code-ink:   #E2C6F7; --cat-code-dot:   #BF5AF2;
     --ev-call: #BF5AF2; --ev-call-bg: #3B2648;
     --ev-shoot: #FF9F0A; --ev-shoot-bg: #48331A;
     --ev-edit: #5AC8DC; --ev-edit-bg: #173E46;
@@ -553,3 +555,8 @@
 :where(html[data-theme="macos"]) .capture-app .shot-stage { background: repeating-conic-gradient(var(--mac-fill) 0 25%, transparent 0 50%) 0 0 / 18px 18px, var(--surface); }
 :where(html[data-theme="macos"]) .capture-app .shot-toast { border: 0; border-radius: 10px; -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
 
+/* «Скиллы»: Apple radii (cards 8–10, labels 4–6) */
+:where(html[data-theme="macos"]) :is(.sk-inside, .sk-nokey, .sk-picked) { border-radius: 10px; }
+:where(html[data-theme="macos"]) :is(.sk-file, .bubble-doc) { border-radius: 6px; }
+:where(html[data-theme="macos"]) .skills-view { border-radius: 12px; }
+:where(html[data-theme="macos"]) .bubble-doc { border-color: transparent; box-shadow: 0 0 0 .5px var(--line), 0 2px 6px rgba(0, 0, 0, .08); }

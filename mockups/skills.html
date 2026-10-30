@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="ru" data-theme="macos" data-accent="peach">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Макет «Скиллы» — Snowball.ai</title>
+<!-- A mockup only: the «Промты» page of 1.19.1 with a «Промты / Скиллы» switch and a list of skills.
+     It loads the program's own styles (src/styles.css, src/theme-macos.css), so it looks like the real window;
+     the dark looks are copied below because the program takes them from Windows. Not loaded by the app. -->
+<link rel="stylesheet" href="../src/fonts.css">
+<link rel="stylesheet" href="../src/styles.css">
+<link rel="stylesheet" href="../src/screenshots.css">
+<link rel="stylesheet" href="../src/theme-macos.css">
+<style>
+  /* ---------- light and dark looks, switched by the mockup instead of Windows ---------- */
+  html.mock-light {
+    --bg: #FCEEE4; --glow: #F8D6C0; --titlebar: #F9E3D4; --surface: #FFF9F4; --surface-2: #FBE9DD; --line: #F0D7C7;
+    --ink: #4B3128; --ink-soft: #8A695B; --accent: #F4AA84; --accent-hover: #EF9B72; --accent-ink: #3F251C; --accent-strong: #BF603D;
+    --row-hover: #FFF4EB; --drop: #FBD9C4; --danger: #B5463B; --ok-bg: #DCEBD1; --ok-ink: #3B5934;
+    --toast-bg: #4B3128; --toast-ink: #FFF4EC; --scroll-thumb: #E6C6B3;
+    --shadow: 0 1px 0 rgba(120, 72, 52, .05), 0 22px 44px -28px rgba(150, 85, 55, .38);
+    --pop-shadow: 0 12px 32px -10px rgba(110, 60, 40, .35);
+    --cat-static-bg: #D3EBC9; --cat-static-ink: #2D5824; --cat-static-dot: #4F9A40;
+    --cat-video-bg:  #CFE0F6; --cat-video-ink:  #22487A; --cat-video-dot:  #3C78C8;
+    --cat-system-bg: #F7CBC6; --cat-system-ink: #7A2620; --cat-system-dot: #D0493E;
+    --cat-other-bg:  #EEDFD4; --cat-other-ink:  #5A4234; --cat-other-dot:  #A48474;
+    color-scheme: light;
+  }
+  html.mock-light[data-theme="macos"] {
+    --mac-acc: #F2793D; --mac-acc-text: color-mix(in srgb, var(--mac-acc) 78%, #000);
+    --mac-acc-soft: color-mix(in srgb, var(--mac-acc) 15%, transparent);
+    --mac-side: rgba(255, 255, 255, .40); --mac-veil: rgba(238, 238, 242, .62); --mac-content: #FFFFFF;
+    --mac-raised: rgba(255, 255, 255, .86); --mac-raised-hover: #FFFFFF;
+    --mac-fill: rgba(118, 118, 128, .11); --mac-fill-2: rgba(118, 118, 128, .19);
+    --mac-menu: rgba(248, 248, 250, .93); --mac-sheet: rgba(250, 250, 252, .92);
+    --mac-edge: rgba(255, 255, 255, .95); --mac-hair: rgba(0, 0, 0, .085);
+    --mac-raise-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px var(--mac-hair), 0 2px 8px rgba(0, 0, 0, .07);
+    --mac-grain-op: .05;
+    --bg: #F4F4F6; --glow: transparent; --titlebar: #ECECEF; --surface: #FFFFFF; --surface-2: #F1F1F4; --line: rgba(0, 0, 0, .09);
+    --ink: #1D1D1F; --ink-soft: #6E6E73;
+    --accent: var(--mac-acc); --accent-hover: color-mix(in srgb, var(--mac-acc) 88%, #fff);
+    --accent-ink: #FFFFFF; --accent-strong: var(--mac-acc-text);
+    --row-hover: #F8F8FA; --drop: color-mix(in srgb, var(--mac-acc) 16%, #fff); --danger: #D70015;
+    --ok-bg: #E2F5E5; --ok-ink: #1E7B34;
+    --toast-bg: rgba(30, 30, 32, .94); --toast-ink: #FFFFFF; --scroll-thumb: rgba(0, 0, 0, .18);
+    --shadow: 0 1px 2px rgba(0, 0, 0, .04), 0 6px 22px rgba(20, 20, 60, .06);
+    --pop-shadow: 0 0 0 .5px rgba(0, 0, 0, .12), 0 18px 50px rgba(20, 20, 60, .2);
+    --cat-static-bg: #E3F5E6; --cat-static-ink: #1E6B30; --cat-static-dot: #34C759;
+    --cat-video-bg:  #E1EEFF; --cat-video-ink:  #0B4FA8; --cat-video-dot:  #007AFF;
+    --cat-system-bg: #FFE5E3; --cat-system-ink: #B3261E; --cat-system-dot: #FF3B30;
+    --cat-other-bg:  #EEEEF1; --cat-other-ink:  #48484D; --cat-other-dot:  #8E8E93;
+    color-scheme: light;
+  }
+  html.mock-light[data-theme="macos"] body {
+    background:
+      radial-gradient(55% 45% at 6% 8%, color-mix(in srgb, var(--mac-acc) 28%, #FFF4EC) 0, transparent 70%),
+      radial-gradient(50% 50% at 96% 4%, #CCD8FF 0, transparent 70%),
+      radial-gradient(70% 60% at 72% 104%, #D8D2FF 0, transparent 70%),
+      radial-gradient(45% 40% at 8% 96%, #FFDCE8 0, transparent 70%),
+      #ECEDF2;
+  }
+  html.mock-dark {
+    --bg: #251B17; --glow: #3B2820; --titlebar: #2C201B; --surface: #30241E; --surface-2: #3A2C25; --line: #4A372E;
+    --ink: #F5E6DC; --ink-soft: #C3A596; --accent: #F2A982; --accent-hover: #F6B994; --accent-ink: #2B1C16; --accent-strong: #F7BE9E;
+    --row-hover: #362922; --drop: #4A3127; --danger: #F0907F; --ok-bg: #2F4430; --ok-ink: #CFE6C4;
+    --toast-bg: #F5E6DC; --toast-ink: #2B1C16; --scroll-thumb: #4E3A31;
+    --shadow: 0 1px 0 rgba(0, 0, 0, .25), 0 22px 44px -28px rgba(0, 0, 0, .7);
+    --pop-shadow: 0 14px 34px -10px rgba(0, 0, 0, .7);
+    --cat-static-bg: #2F4A2A; --cat-static-ink: #D3EBC9; --cat-static-dot: #8CCB7C;
+    --cat-video-bg:  #283F5E; --cat-video-ink:  #CFE0F6; --cat-video-dot:  #86B4F0;
+    --cat-system-bg: #5C2B28; --cat-system-ink: #F7CBC6; --cat-system-dot: #F08A80;
+    --cat-other-bg:  #45352D; --cat-other-ink:  #EEDFD4; --cat-other-dot:  #B99A8A;
+    color-scheme: dark;
+  }
+  html.mock-dark[data-theme="macos"] {
+    --mac-acc: #FF8C52;
+    --mac-acc-text: color-mix(in srgb, var(--mac-acc) 82%, #fff);
+    --mac-acc-soft: color-mix(in srgb, var(--mac-acc) 22%, transparent);
+    --mac-side: rgba(52, 52, 58, .42); --mac-veil: rgba(24, 24, 28, .66); --mac-content: #1C1C1E;
+    --mac-raised: rgba(255, 255, 255, .12); --mac-raised-hover: rgba(255, 255, 255, .17);
+    --mac-fill: rgba(118, 118, 128, .22); --mac-fill-2: rgba(118, 118, 128, .32);
+    --mac-menu: rgba(44, 44, 48, .93); --mac-sheet: rgba(36, 36, 40, .92);
+    --mac-edge: rgba(255, 255, 255, .16); --mac-hair: rgba(255, 255, 255, .10);
+    --mac-raise-shadow: inset 0 .5px 0 var(--mac-edge), 0 0 0 .5px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .25);
+    --mac-grain-op: .06;
+    --bg: #1C1C1E; --titlebar: #2A2A2D; --surface: #2C2C2E; --surface-2: #3A3A3C; --line: rgba(255, 255, 255, .10);
+    --ink: #F5F5F7; --ink-soft: #98989D;
+    --accent: var(--mac-acc); --accent-hover: color-mix(in srgb, var(--mac-acc) 86%, #fff);
+    --accent-ink: #FFFFFF; --accent-strong: var(--mac-acc-text);
+    --row-hover: #323235; --drop: color-mix(in srgb, var(--mac-acc) 24%, #2C2C2E); --danger: #FF6961;
+    --ok-bg: #1F3A25; --ok-ink: #9BE3AE;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 26px rgba(0, 0, 0, .28);
+    --pop-shadow: 0 0 0 .5px rgba(0, 0, 0, .6), 0 18px 50px rgba(0, 0, 0, .5);
+    --cat-static-bg: #1F3A25; --cat-static-ink: #A6E9B6; --cat-static-dot: #30D158;
+    --cat-video-bg:  #13304F; --cat-video-ink:  #A9CFFF; --cat-video-dot:  #0A84FF;
+    --cat-system-bg: #4A1E1C; --cat-system-ink: #FFB4AE; --cat-system-dot: #FF453A;
+    --cat-other-bg:  #3A3A3C; --cat-other-ink:  #E5E5EA; --cat-other-dot:  #98989D;
+  }
+  html.mock-dark[data-theme="macos"] body {
+    background:
+      radial-gradient(55% 45% at 6% 8%, color-mix(in srgb, var(--mac-acc) 26%, #1B1B22) 0, transparent 70%),
+      radial-gradient(50% 50% at 96% 4%, #1E2A55 0, transparent 70%),
+      radial-gradient(70% 60% at 72% 104%, #2A2257 0, transparent 70%),
+      radial-gradient(45% 40% at 8% 96%, #3D1C33 0, transparent 70%),
+      #141418;
+  }
+
+  /* ---------- the mockup page: the window on the left, explanations on the right ---------- */
+  html, body { height: auto; overflow: auto; }
+  body { padding: 16px; min-height: 100vh; }
+  .mock { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 20px; max-width: 1760px; margin: 0 auto; align-items: start; }
+  @media (max-width: 1200px) { .mock { grid-template-columns: 1fr; } }
+  .mock-bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; }
+  .mock-bar .lbl { font-size: 12px; color: var(--ink-soft); }
+  .mock-win { height: 880px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 30px 70px -30px rgba(0, 0, 0, .45); background: var(--bg); position: relative; }
+  html[data-theme="macos"] .mock-win { background: color-mix(in srgb, var(--bg) 70%, transparent); }
+  .mock-win .app { height: 100%; }
+  .wbtns { position: absolute; right: 0; top: 0; height: 40px; display: flex; z-index: 3; color: var(--ink-soft); font-size: 13px; }
+  .wbtns span { width: 46px; display: grid; place-items: center; }
+
+  /* numbered marks */
+  .r { position: relative; }
+  .mk { position: absolute; z-index: 6; width: 22px; height: 22px; border-radius: 50%; background: #2E9A92; color: #fff;
+    font: 700 12px/22px var(--font-body); text-align: center; box-shadow: 0 0 0 2px var(--surface); pointer-events: none; }
+
+  /* ---------- new parts of the page (the program would get them in styles.css) ---------- */
+  .lib-seg { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .lib-seg .tview button { font-size: 14px; padding: 7px 18px; display: inline-flex; gap: 7px; align-items: center; }
+  .lib-seg .tview .n { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .lib-seg .why { font-size: 12.5px; color: var(--ink-soft); }
+
+  .table col.w-skill { width: 30%; }
+  .sk-file { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 3px 9px 3px 6px; border-radius: 7px;
+    background: var(--surface-2); color: var(--ink-soft); font-size: 12px; }
+  .sk-file b { font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px;
+    background: var(--cat-other-bg); color: var(--cat-other-ink); }
+  .sk-file b.zip { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent-strong); }
+  .sk-desc { font-size: 14px; line-height: 1.6; color: var(--ink); margin: 0; }
+  .sk-desc.is-collapsed { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  .sk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
+  .sk-who { font-size: 12px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 6px; }
+  .sk-who svg { width: 14px; height: 14px; }
+  .sk-meta .spacer { flex: 1; }
+  .btn-mini.dl { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn-mini.dl:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+  .sk-inside { margin-top: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); padding: 10px 12px; display: grid; gap: 8px; }
+  .sk-inside ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font: 12.5px/1.5 var(--font-mono); }
+  .sk-inside li { display: flex; gap: 10px; }
+  .sk-inside li span:last-child { margin-left: auto; color: var(--ink-soft); }
+  .sk-inside li.main { font-weight: 600; }
+  .sk-inside pre { margin: 0; white-space: pre-wrap; font: 12.5px/1.55 var(--font-mono); color: var(--ink-soft); max-height: 7.8em; overflow: hidden; }
+  .sk-inside .cap { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); }
+
+  .sk-writing { display: grid; gap: 8px; color: var(--ink-soft); font-size: 13.5px; }
+  .sk-writing .bar { height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .sk-writing .bar i { display: block; width: 35%; height: 100%; border-radius: 4px; background: var(--accent); animation: sk-run 1.6s ease-in-out infinite; }
+  @keyframes sk-run { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+  .sk-nokey { display: grid; gap: 8px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--line); background: var(--surface-2); font-size: 13.5px; color: var(--ink-soft); }
+  .sk-nokey .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .from-file { font-size: 12px; color: var(--ink-soft); }
+  .from-file b { font-weight: 600; color: var(--accent-strong); }
+  .sk-picked { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+  .sk-picked .tile { width: 56px; height: 56px; flex: none; }
+  .sk-picked .t { font-weight: 600; font-size: 14px; }
+  .sk-picked .s { font-size: 12.5px; color: var(--ink-soft); }
+  .sk-auto { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); }
+  .sk-auto .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--ink); font-weight: 500; }
+  .sk-auto .pill svg { width: 14px; height: 14px; }
+  .textarea.prose { font-family: var(--font-body); font-size: 14px; min-height: 120px; }
+
+  .drop-veil { position: absolute; inset: 12px; z-index: 5; border: 2.5px dashed var(--accent-strong); border-radius: 18px;
+    background: color-mix(in srgb, var(--drop) 70%, transparent); display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; }
+  .drop-veil strong { font: 500 22px var(--font-display); color: var(--ink); }
+  .drop-veil span { color: var(--ink-soft); font-size: 14px; }
+  .drop-veil svg { width: 40px; height: 40px; color: var(--accent-strong); }
+
+  .toast-mock { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 7; display: flex; align-items: center; gap: 14px;
+    background: var(--toast-bg); color: var(--toast-ink); padding: 10px 16px; border-radius: 12px; font-size: 14px; box-shadow: var(--pop-shadow); white-space: nowrap; }
+  .toast-mock button { background: none; border: 0; color: inherit; text-decoration: underline; font: inherit; padding: 0; }
+
+  /* the Windows «Save as» window, drawn very simply */
+  .win-save { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 8; width: 520px; background: #fff; color: #1b1b1b;
+    border: 1px solid #c9c9c9; border-radius: 8px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); font: 13px "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  .win-save .hd { padding: 10px 14px; background: #f3f3f3; border-bottom: 1px solid #e3e3e3; display: flex; justify-content: space-between; }
+  .win-save .bd { padding: 14px; display: grid; gap: 10px; }
+  .win-save .fld { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 8px; }
+  .win-save .in { border: 1px solid #b9b9b9; border-radius: 4px; padding: 5px 8px; background: #fff; }
+  .win-save .ft { display: flex; justify-content: flex-end; gap: 8px; padding: 0 14px 14px; }
+  .win-save .wb { border: 1px solid #b9b9b9; border-radius: 4px; padding: 5px 18px; background: #fdfdfd; }
+  .win-save .wb.p { background: #0067c0; border-color: #0067c0; color: #fff; }
+  .win-save .tree { height: 120px; border: 1px solid #e3e3e3; border-radius: 4px; padding: 8px; color: #555; display: grid; gap: 4px; align-content: start; }
+
+  /* ---------- explanations ---------- */
+  .mlegend { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+  .mlegend h2 { font: 600 16px var(--font-display); margin: 0 0 6px; }
+  .mlegend > p { margin: 0 0 4px; font-size: 13.5px; color: var(--ink-soft); }
+  .mlegend ol { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 4px; }
+  .mlegend li { display: grid; grid-template-columns: 26px 1fr; gap: 8px; padding: 8px; border-radius: 10px; font-size: 13.5px; line-height: 1.45; cursor: pointer; }
+  .mlegend li:hover { background: var(--surface-2); }
+  .mlegend li.here { background: color-mix(in srgb, #2E9A92 12%, var(--surface)); }
+  .mlegend li .n { width: 22px; height: 22px; border-radius: 50%; background: #2E9A92; color: #fff; font: 700 12px/22px var(--font-body); text-align: center; }
+  .mlegend .go { font-size: 12px; color: var(--ink-soft); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 5px; background: #DCEFEA; color: #24675F; margin-left: 4px; white-space: nowrap; }
+  .tag.part { background: #FCEBC9; color: #7A5410; }
+  .tag.same { background: var(--surface-2); color: var(--ink-soft); }
+  .tag.ask { background: #E7E0FA; color: #4B3A8C; }
+  .mlegend .q { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); font-size: 13px; }
+  .mlegend .q b { display: block; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="mock">
+  <div>
+    <div class="mock-bar">
+      <span class="lbl">Что показать:</span>
+      <div class="tview" id="mv" role="group" aria-label="Что показать">
+        <button type="button" data-v="prompts" aria-pressed="false">Промты</button>
+        <button type="button" data-v="skills" aria-pressed="true">Скиллы</button>
+        <button type="button" data-v="add" aria-pressed="false">Новый скилл</button>
+        <button type="button" data-v="drop" aria-pressed="false">Перетаскивание</button>
+        <button type="button" data-v="save" aria-pressed="false">Скачать</button>
+        <button type="button" data-v="nokey" aria-pressed="false">Без ключей</button>
+      </div>
+      <span class="lbl">Тема:</span>
+      <div class="tview" id="mt" role="group" aria-label="Тема">
+        <button type="button" data-t="macos" aria-pressed="true">macOS</button>
+        <button type="button" data-t="macos-dark" aria-pressed="false">macOS тёмное</button>
+        <button type="button" data-t="light" aria-pressed="false">Светлая</button>
+        <button type="button" data-t="dark" aria-pressed="false">Тёмная</button>
+      </div>
+    </div>
+
+    <div class="mock-win">
+      <div class="wbtns" aria-hidden="true"><span>—</span><span>▢</span><span>✕</span></div>
+      <div class="app">
+        <div class="shell">
+          <!-- left panel, as in 1.19.1 -->
+          <nav class="side" aria-label="Разделы">
+            <div class="side-head"><img src="../assets/icon.png" alt=""><span>Snowball.ai</span></div>
+            <div class="side-top">
+              <div class="side-icons">
+                <button type="button" class="nav-icon" title="Главная"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg></button>
+                <button type="button" class="nav-icon" aria-current="page" title="Промты"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg></button>
+                <button type="button" class="nav-icon" title="Календарь"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span class="nav-badge">2</span></button>
+                <button type="button" class="nav-icon" title="Задачи"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></svg><span class="nav-badge">5</span></button>
+                <button type="button" class="nav-icon" title="LLM"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></svg></button>
+                <button type="button" class="nav-icon" title="Транскрибация"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/></svg></button>
+                <button type="button" class="nav-icon" title="Генератор"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/><path d="M18.5 3.5v3M17 5h3"/></svg></button>
+              </div>
+              <button type="button" class="capture-nav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg><span>Снимки</span><kbd>Alt + Z</kbd></button>
+              <div class="upcoming">
+                <p class="side-h">Ближайшие дела</p>
+                <div class="up-list">
+                  <p class="up-day">Сегодня</p>
+                  <button type="button" class="up-ev ev-call" style="--c: var(--ev-call)"><i></i><span class="tt">Созвон по монтажу</span><span class="tm">17:00</span></button>
+                  <button type="button" class="up-ev ev-edit" style="--c: var(--ev-edit)"><i></i><span class="tt">Монтаж ролика</span><span class="tm">19:30</span></button>
+                  <p class="up-day">Завтра</p>
+                  <button type="button" class="up-ev ev-shoot" style="--c: var(--ev-shoot)"><i></i><span class="tt">Съёмка в студии</span><span class="tm">11:00</span></button>
+                </div>
+              </div>
+            </div>
+            <div class="side-group side-bottom">
+              <button type="button" class="nav-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></svg><span>Статистика</span></button>
+              <div class="profile-row"><div class="profile-wrap">
+                <button type="button" class="profile-btn"><span class="avatar">Г</span><span class="profile-name">Гость</span><svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 14 5-5 5 5"/></svg></button>
+              </div></div>
+            </div>
+          </nav>
+
+          <div class="main-col">
+            <div class="titlebar win">
+              <div class="tabs">
+                <div class="tab"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></svg></span><span class="tab-t">Главная</span></div>
+                <div class="tab on"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></svg></span><span class="tab-t">Промты</span><button type="button" class="tab-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+                <div class="tab"><span class="tab-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span><span class="tab-t">Календарь</span></div>
+              </div>
+              <button type="button" class="tab-plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            </div>
+
+            <main class="scroller r" id="scroller">
+              <div class="page">
+                <section class="view">
+                  <header class="top">
+                    <div class="top-text">
+                      <p class="eyebrow">Система хранения информации</p>
+                      <h1>Snowball<span class="brand">.ai</span></h1>
+                      <p class="meta r" data-in="prompts">24 промта · Статика 11 · Видео 9 · Системные 4</p>
+                      <p class="meta r" data-in="skills add drop save nokey"><span class="mk" style="left:-30px;top:-2px">2</span>6 скиллов · Статика 2 · Видео 3 · Code 1</p>
+                    </div>
+                    <div class="top-actions">
+                      <button type="button" class="btn btn-primary" data-in="prompts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Добавить промт <kbd class="kh">Ctrl + N</kbd></button>
+                      <span class="r" data-in="skills add drop save nokey"><span class="mk" style="left:-10px;top:-10px">3</span>
+                        <button type="button" class="btn btn-primary" title="Выбрать файл .md или архив .zip со скиллом"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Добавить скилл <kbd class="kh">Ctrl + N</kbd></button>
+                      </span>
+                    </div>
+                  </header>
+
+                  <!-- 1: the switch -->
+                  <div class="lib-seg r">
+                    <span class="mk" style="left:-12px;top:-10px">1</span>
+                    <div class="tview" role="group" aria-label="Что показать" id="seg">
+                      <button type="button" data-seg="prompts" aria-pressed="false">Промты <span class="n">24</span></button>
+                      <button type="button" data-seg="skills" aria-pressed="true">Скиллы <span class="n">6</span></button>
+                    </div>
+                    <span class="why" data-in="skills add drop save nokey">Инструкции для ассистентов: файл .md или архив .zip</span>
+                  </div>
+
+                  <!-- 8: the editor of a new skill (after the file is picked) -->
+                  <form class="editor inline r" data-in="add" novalidate>
+                    <span class="mk" style="left:-10px;top:-10px">8</span>
+                    <h2>Новый скилл</h2>
+                    <div class="fields">
+                      <div class="field">
+                        <label class="field-label" for="sk-title">Название</label>
+                        <input class="input" id="sk-title" type="text" value="Склейка двух клипов">
+                        <span class="from-file">Подставлено из <b>SKILL.md</b> (строка name:) — можно поменять</span>
+                      </div>
+                      <div class="field">
+                        <span class="field-label">Тип</span>
+                        <div class="cat-picker">
+                          <label class="cat-option cat-static"><input type="radio" name="skcat"><span>Статика</span></label>
+                          <label class="cat-option cat-video"><input type="radio" name="skcat" checked><span>Видео</span></label>
+                          <label class="cat-option cat-code"><input type="radio" name="skcat"><span>Code</span></label>
+                        </div>
+                      </div>
+                      <div class="field full">
+                        <span class="field-label">Файл скилла</span>
+                        <div class="sk-picked">
+                          <span class="tile doc"><span class="ext">zip</span></span>
+                          <div><div class="t">continuity.zip</div><div class="s">Архив · 7 файлов · 184 КБ · внутри SKILL.md, 2 примера, скрипт</div></div>
+                          <span class="spacer" style="flex:1"></span>
+                          <button type="button" class="btn-mini">Выбрать другой…</button>
+                        </div>
+                      </div>
+                      <div class="field full r">
+                        <span class="mk" style="left:-12px;top:20px">9</span>
+                        <label class="field-label" for="sk-desc">Описание</label>
+                        <div class="sk-auto">
+                          <span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>Напишет GPT-6.1 Sol · Средне</span>
+                          <span>после сохранения и сам выберет тип, ≈ $0,02–0,05 · или впишите сами</span>
+                        </div>
+                        <textarea class="textarea prose" id="sk-desc" rows="4" placeholder="Оставьте пустым — ассистент прочитает SKILL.md и список файлов и напишет 5–6 предложений: что это за скилл, для чего он и как работает."></textarea>
+                      </div>
+                    </div>
+                    <div class="editor-actions">
+                      <button type="button" class="btn btn-primary">Сохранить</button>
+                      <button type="button" class="btn btn-ghost">Отмена</button>
+                      <span class="hint">Ctrl + Enter — сохранить, Esc — отмена</span>
+                    </div>
+                  </form>
+
+                  <section class="toolbar r">
+                    <span class="mk" style="left:-12px;top:6px" data-in="skills">4</span>
+                    <div class="search">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
+                      <input class="input" type="search" data-ph-prompts="Поиск по названию, тексту и комментарию" data-ph-skills="Поиск по названию, описанию и тексту скилла">
+                    </div>
+                    <div class="filters">
+                      <button type="button" class="fchip" aria-pressed="true">Все <span class="n" data-n="24|6">6</span></button>
+                      <button type="button" class="fchip cat-static" aria-pressed="false"><span class="dot"></span>Статика <span class="n" data-n="11|2">2</span></button>
+                      <button type="button" class="fchip cat-video" aria-pressed="false"><span class="dot"></span>Видео <span class="n" data-n="9|3">3</span></button>
+                      <button type="button" class="fchip cat-system" data-in="prompts" aria-pressed="false"><span class="dot"></span>Системные <span class="n">4</span></button><button type="button" class="fchip cat-code" data-in="skills add drop save nokey" aria-pressed="false"><span class="dot"></span>Code <span class="n">1</span></button>
+                    </div>
+                  </section>
+
+                  <!-- prompts: as now -->
+                  <section class="card" data-in="prompts">
+                    <table class="table">
+                      <colgroup><col class="w-name"><col class="w-type"><col></colgroup>
+                      <thead><tr><th>Название</th><th>Тип</th><th>Промт</th></tr></thead>
+                      <tbody>
+                        <tr><td class="c-name"><div class="name">Извлечение одежды</div><div class="when">Изменён 28 октября</div>
+                          <div class="row-actions"><button type="button" class="btn-mini">Редактировать</button><button type="button" class="btn-mini">Поделиться</button><button type="button" class="link-btn">Удалить</button></div></td>
+                          <td class="c-type"><button type="button" class="chip cat-static">Статика</button></td>
+                          <td class="c-prompt"><div class="prompt"><div class="prompt-text is-collapsed">Extract the outfit from the reference photo: keep the exact cut, fabric texture and colour. Lay it flat on a neutral grey background, soft studio light from the top left, no person, no hanger, front view, every seam visible…</div>
+                            <div class="prompt-bar"><button type="button" class="btn-mini">Развернуть</button><span class="chars">612 символов</span><span class="spacer"></span><button type="button" class="btn-mini">Комментарий</button><button type="button" class="btn-mini">Файл</button><button type="button" class="btn-mini copy">Копировать</button></div></div></td></tr>
+                        <tr><td class="c-name"><div class="name">Пролёт камеры над городом</div><div class="when">Создан 24 октября</div>
+                          <div class="row-actions"><button type="button" class="btn-mini">Редактировать</button><button type="button" class="btn-mini">Поделиться</button><button type="button" class="link-btn">Удалить</button></div></td>
+                          <td class="c-type"><button type="button" class="chip cat-video">Видео</button></td>
+                          <td class="c-prompt"><div class="prompt"><div class="prompt-text is-collapsed">Aerial drone shot gliding over a night city after rain, neon reflections on wet streets, slow forward motion, 24 fps, anamorphic lens flare…</div>
+                            <div class="prompt-bar"><button type="button" class="btn-mini">Развернуть</button><span class="chars">340 символов</span><span class="spacer"></span><button type="button" class="btn-mini">Комментарий</button><button type="button" class="btn-mini">Файл</button><button type="button" class="btn-mini copy">Копировать</button></div></div></td></tr>
+                      </tbody>
+                    </table>
+                  </section>
+
+                  <!-- skills: the new list -->
+                  <section class="card" data-in="skills add drop save nokey">
+                    <table class="table">
+                      <colgroup><col class="w-skill"><col class="w-type"><col></colgroup>
+                      <thead><tr><th>Скилл</th><th>Тип</th><th>Описание</th></tr></thead>
+                      <tbody id="sk-rows"></tbody>
+                    </table>
+                  </section>
+                </section>
+              </div>
+
+              <div class="drop-veil" data-in="drop">
+                <span class="mk" style="left:14px;top:14px">10</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"/><path d="m7.5 8.5 4.5-4.5 4.5 4.5"/><path d="M5 20h14"/></svg>
+                <strong>Отпустите — добавлю скилл</strong>
+                <span>Файл .md или архив .zip. Можно несколько сразу.</span>
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+
+      <div class="win-save" data-in="save">
+        <div class="hd"><span>Сохранить как</span><span>✕</span></div>
+        <div class="bd">
+          <div class="tree"><span>📁 Рабочий стол</span><span>📁 Документы</span><span><b>📁 Загрузки</b></span><span>📁 Мои скиллы — резерв</span></div>
+          <div class="fld"><span>Имя файла:</span><span class="in">seedance-prompter.zip</span></div>
+          <div class="fld"><span>Тип файла:</span><span class="in">Архив скилла (*.zip)</span></div>
+        </div>
+        <div class="ft"><span class="wb p">Сохранить</span><span class="wb">Отмена</span></div>
+      </div>
+      <div class="toast-mock r" data-in="save" style="bottom:22px;top:auto">
+        <span class="mk" style="left:-10px;top:-10px">7</span>
+        Скилл сохранён: Загрузки\seedance-prompter.zip <button type="button">Показать в папке</button>
+      </div>
+    </div>
+  </div>
+
+  <aside class="mlegend">
+    <h2>Скиллы на странице «Промты»</h2>
+    <p>Скилл — это инструкция для ассистента (ChatGPT, Claude): один файл .md или архив .zip с несколькими файлами. Они хранятся в программе как шпаргалка и резерв — на случай переезда на другую модель или аккаунт. Нажмите на пункт, чтобы увидеть его в окне.</p>
+    <ol id="legend">
+      <li data-show="skills"><span class="n">1</span><div>Переключатель <b>«Промты / Скиллы»</b> под заголовком, с числом в каждом. Промты и скиллы не смешиваются: у каждого свой список. Программа помнит, что было открыто. <span class="tag">Новое</span></div></li>
+      <li data-show="skills"><span class="n">2</span><div>Строка под заголовком считает скиллы по типам, как сейчас считает промты. <span class="tag part">Частично есть</span></div></li>
+      <li data-show="skills"><span class="n">3</span><div><b>«Добавить скилл»</b> на месте «Добавить промт» (и тот же Ctrl + N): открывает окно Windows для выбора файла .md или .zip. <span class="tag">Новое</span></div></li>
+      <li data-show="skills"><span class="n">4</span><div>Поиск ищет по названию, описанию и тексту самого скилла. Фильтры у скиллов — «Статика / Видео / Code» (у промтов остаются «Системные»). <span class="tag part">Частично есть</span></div></li>
+      <li data-show="skills"><span class="n">5</span><div>Строка скилла: название, дата, что за файл — <b>«SKILL.md · 6 КБ»</b> или <b>«Архив · 14 файлов · 2,3 МБ»</b>. Справа — описание в 5–6 предложений: что это, для чего и как работает. Под ним: кто написал описание и сколько стоило, <b>«Изменить»</b> и <b>«Пересоздать»</b>. <span class="tag">Новое</span></div></li>
+      <li data-show="skills"><span class="n">6</span><div><b>«Что внутри»</b> раскрывает список файлов архива и начало SKILL.md — посмотреть, не скачивая. Это моё предложение, можно убрать. <span class="tag ask">Новое, на ваше решение</span></div></li>
+      <li data-show="save"><span class="n">7</span><div><b>«Скачать»</b> открывает окно Windows «Сохранить как»: туда кладётся исходный .md или архив ровно таким, каким его загрузили. Внизу подсказка с «Показать в папке». <span class="tag">Новое</span></div></li>
+      <li data-show="add"><span class="n">8</span><div>После выбора файла открывается форма, как у нового промта. <b>Название подставлено само</b>: из строки name: в SKILL.md, иначе из имени файла или папки архива. Тип можно выбрать сразу или оставить ассистенту. <span class="tag">Новое</span></div></li>
+      <li data-show="add"><span class="n">9</span><div><b>Описание пишется само</b> после сохранения: GPT-6.1 Sol с размышлениями «Средне» (без ключа ChatGPT — Claude Haiku 5.5) читает SKILL.md и список файлов, пишет описание и <b>сам ставит тип</b> — Статика, Видео или Code. Тип можно поменять руками. Пока пишет — полоска в строке скилла (первая строка в таблице). Цена идёт в траты в «Настройках». Можно вписать описание самому — тогда ассистент не нужен. <span class="tag">Новое</span></div></li>
+      <li data-show="drop"><span class="n">10</span><div><b>Перетаскивание</b>: бросьте .md или .zip на страницу «Скиллы» — откроется та же форма. На странице «Промты» перетаскивание работает как раньше. <span class="tag part">Частично есть</span></div></li>
+      <li data-show="nokey"><span class="n">11</span><div><b>Без ключей</b> ChatGPT и Claude вместо описания — подсказка: «Подключить ChatGPT или Claude» или «Написать самому». Скилл при этом сохраняется. <span class="tag">Новое</span></div></li>
+      <li data-show="skills"><span class="n">12</span><div>Не видно на экране: скиллы лежат в папке с данными рядом с промтами (папка «Скиллы»), <b>входят в резервную копию .snowball</b> и переезжают при смене папки. Старые промты читаются как раньше. <span class="tag">Новое</span></div></li>
+    </ol>
+    <div class="q"><b>Вопрос к вам</b>Считать ли в «Статистике» добавление скилла и скачивание? Предлагаю считать новый скилл одним действием, а скачивание — нет.</div>
+  </aside>
+</div>
+
+<script>
+  // Mockup only: the view and theme switches and a few clicks. Nothing is saved.
+  var ICON = {
+    dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/></svg>',
+    pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg>',
+    star: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5-5.5-2L10 9Z"/></svg>',
+    redo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+  };
+  var SKILLS = [
+    { id: "s1", name: "Склейка двух клипов", cat: "video", when: "Добавлен сегодня", ext: "zip", file: "Архив · 7 файлов · 184 КБ", writing: true },
+    { id: "s2", name: "Seedance — кинопромты", cat: "video", when: "Добавлен 28 октября", ext: "zip", file: "Архив · 14 файлов · 2,3 МБ", who: "GPT-6.1 Sol · $0,03 · 28 октября",
+      desc: "Скилл превращает короткую идею сцены в готовый промт для видео-модели Seedance 2.0. Он раскладывает сцену по секундам: что в кадре, как движется камера, какой свет и звук. Нужен, когда клип должен выглядеть как кадр из фильма, а не как случайная генерация. Внутри — сама инструкция, шаблон YAML и примеры удачных промтов, на которые ассистент равняется. Работает так: вы описываете сцену своими словами, ассистент задаёт пару вопросов и выдаёт один промт целиком. Есть правила для продолжения клипа и для ссылок на картинки-референсы.",
+      inside: [["SKILL.md", "12 КБ", 1], ["templates/scene.yaml", "3 КБ"], ["examples/kaiju-paris.md", "4 КБ"], ["examples/rain-chase.md", "5 КБ"], ["references/camera-moves.md", "9 КБ"], ["… ещё 9 файлов", "2,2 МБ"]],
+      head: "---\nname: seedance-prompter\ndescription: Structured cinematic YAML prompts for Seedance 2.0…\n---\n# Seedance prompter\nTurn a one-line idea into a timed shot list…" },
+    { id: "s3", name: "Карточка персонажа", cat: "static", when: "Добавлен 25 октября", ext: "zip", file: "Архив · 5 файлов · 640 КБ", who: "GPT-6.1 Sol · $0,02 · 25 октября",
+      desc: "Собирает промт для листа-референса персонажа по одной фотографии: фигура целиком, лицо крупно, вид сбоку и со спины. Нужен, чтобы персонаж выглядел одинаково во всех следующих генерациях. Ассистент сначала описывает внешность по фото, затем раскладывает её по ракурсам и добавляет требования к фону и свету. В архиве — инструкция и три примера готовых листов. Подходит для Nano Banana и похожих моделей картинок." },
+    { id: "s4", name: "Промты для Nano Banana", cat: "static", when: "Добавлен 20 октября", ext: "md", file: "SKILL.md · 6 КБ", who: "Claude Haiku 5.5 · $0,01 · 20 октября",
+      desc: "Пишет промты для моделей картинок в двух видах сразу: обычным текстом и в виде JSON. Полезен, когда нужно точно управлять кадром — объектив, свет, поза, фон — и при этом легко менять одну деталь. Умеет и правки готовой картинки: что сейчас и что должно стать. Ассистент задаёт уточнения, если в запросе не хватает деталей, и выдаёт оба варианта подряд." },
+    { id: "s5", name: "Перевод промтов на китайский", cat: "video", when: "Добавлен 12 октября", ext: "md", file: "translate-zh.md · 3 КБ", who: "Описание написано вручную",
+      desc: "Переводит готовые промты для видео на упрощённый китайский, чтобы отправлять их в китайские сервисы генерации. Служебные слова и метки (@image1, таймкоды, названия полей) остаются по-английски, переводится только описание сцены. Нужен, когда сервис лучше понимает китайский. Просто вставьте промт — перевод придёт в том же виде." },
+    { id: "s6", name: "Дизайн в стиле macOS", cat: "code", when: "Добавлен 29 октября", ext: "zip", file: "Архив · 9 файлов · 410 КБ", who: "GPT-6.1 Sol · $0,04 · 29 октября",
+      desc: "Правила, по которым ассистент рисует интерфейсы в духе macOS: боковая панель, стекло только по краям, скругления, размеры кнопок и отступы. Нужен, когда хочется, чтобы программа выглядела «как на Mac». Внутри — инструкция, таблица размеров и примеры экранов. Ассистент сверяет свой макет с этими правилами и поясняет, что поменял." }
+  ];
+  var CAT = { static: ["cat-static", "Статика"], video: ["cat-video", "Видео"], code: ["cat-code", "Code"] };
+  var open = { s2: true };
+  var view = "skills";
+
+  function descCell(s, first) {
+    if (s.writing) {
+      if (view === "nokey") return '<div class="sk-nokey r"><span class="mk" style="left:-12px;top:-10px">11</span>' +
+        '<span>Описание не написано: чтобы оно появилось само, нужен ключ ChatGPT или Claude.</span>' +
+        '<div class="acts"><button type="button" class="btn-mini dl">Подключить ChatGPT или Claude</button><button type="button" class="btn-mini">' + ICON.pencil + '<span>Написать самому</span></button></div></div>';
+      return '<div class="sk-writing r"><span class="mk" style="left:-12px;top:-6px">9</span>' +
+        '<span>GPT-6.1 Sol читает скилл, пишет описание и выбирает тип… обычно 10–30 секунд</span><div class="bar"><i></i></div></div>';
+    }
+    var ins = s.inside && open[s.id] ? '<div class="sk-inside r">' + (first ? '<span class="mk" style="left:-12px;top:-10px">6</span>' : '') +
+      '<span class="cap">Файлы в архиве</span><ul>' + s.inside.map(function (f) {
+        return '<li class="' + (f[2] ? "main" : "") + '"><span>' + f[0] + '</span><span>' + f[1] + '</span></li>';
+      }).join("") + '</ul><span class="cap">Начало SKILL.md</span><pre>' + s.head.replace(/</g, "&lt;") + '</pre></div>' : "";
+    return '<p class="sk-desc' + (open[s.id] ? "" : " is-collapsed") + '">' + s.desc + '</p>' +
+      '<div class="sk-meta r">' + (first ? '<span class="mk" style="left:-12px;top:-4px">5</span>' : '') +
+      '<span class="sk-who">' + ICON.star + s.who + '</span><span class="spacer"></span>' +
+      '<button type="button" class="btn-mini">' + ICON.pencil + '<span>Изменить</span></button>' +
+      '<button type="button" class="btn-mini" title="Попросить ассистента написать описание заново">' + ICON.redo + '<span>Пересоздать</span></button></div>' + ins;
+  }
+  function renderSkills() {
+    var firstDone = false;
+    document.getElementById("sk-rows").innerHTML = SKILLS.map(function (s) {
+      var first = !s.writing && !firstDone; if (first) firstDone = true;
+      var c = CAT[s.cat];
+      return '<tr><td class="c-name"><div class="name">' + s.name + '</div><div class="when">' + s.when + '</div>' +
+        '<div class="sk-file"><b class="' + s.ext + '">' + s.ext + '</b>' + s.file + '</div>' +
+        '<div class="row-actions r">' + (first ? '<span class="mk" style="left:-12px;top:-8px">7</span>' : '') +
+        '<button type="button" class="btn-mini dl" title="Сохранить исходный файл скилла">' + ICON.dl + '<span>Скачать</span></button>' +
+        (s.inside ? '<button type="button" class="btn-mini" data-open="' + s.id + '" aria-expanded="' + !!open[s.id] + '">' + ICON.chev + '<span>' + (open[s.id] ? "Свернуть" : "Что внутри") + '</span></button>' : "") +
+        '<button type="button" class="link-btn">Удалить</button></div></td>' +
+        '<td class="c-type"><button type="button" class="chip ' + c[0] + '">' + c[1] + '</button></td>' +
+        '<td class="c-prompt">' + descCell(s, first) + '</td></tr>';
+    }).join("");
+  }
+
+  function show(v) {
+    view = v;
+    var lib = v === "prompts" ? "prompts" : "skills";
+    document.querySelectorAll("#mv button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.v === v)); });
+    document.querySelectorAll("#seg button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.seg === lib)); });
+    document.querySelectorAll("[data-in]").forEach(function (el) { el.hidden = el.dataset.in.split(" ").indexOf(v) < 0; });
+    var inp = document.querySelector(".search .input");
+    inp.placeholder = lib === "prompts" ? inp.dataset.phPrompts : inp.dataset.phSkills;
+    document.querySelectorAll(".fchip .n").forEach(function (n) { n.textContent = n.dataset.n.split("|")[lib === "prompts" ? 0 : 1]; });
+    document.querySelectorAll("#legend li").forEach(function (li) { li.classList.toggle("here", li.dataset.show === v); });
+    renderSkills();
+    document.getElementById("scroller").scrollTop = 0;
+  }
+  function theme(t) {
+    var root = document.documentElement;
+    document.querySelectorAll("#mt button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.t === t)); });
+    if (t.indexOf("macos") === 0) { root.dataset.theme = "macos"; root.dataset.accent = "peach"; } else { delete root.dataset.theme; delete root.dataset.accent; }
+    root.classList.toggle("mock-dark", /dark/.test(t));
+    root.classList.toggle("mock-light", !/dark/.test(t));
+  }
+  document.getElementById("mv").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) show(b.dataset.v); });
+  document.getElementById("mt").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) theme(b.dataset.t); });
+  document.getElementById("seg").addEventListener("click", function (e) { var b = e.target.closest("button"); if (b) show(b.dataset.seg); });
+  document.getElementById("legend").addEventListener("click", function (e) { var li = e.target.closest("li"); if (li) show(li.dataset.show); });
+  document.getElementById("sk-rows").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-open]"); if (!b) return;
+    open[b.dataset.open] = !open[b.dataset.open]; renderSkills();
+  });
+  theme("macos");
+  show("skills");
+</script>
+</body>
+</html>

@@ -29,6 +29,7 @@
   --cat-video-bg:  #CFE0F6; --cat-video-ink:  #22487A; --cat-video-dot:  #3C78C8;
   --cat-system-bg: #F7CBC6; --cat-system-ink: #7A2620; --cat-system-dot: #D0493E;
   --cat-other-bg:  #EEDFD4; --cat-other-ink:  #5A4234; --cat-other-dot:  #A48474;
+  --cat-code-bg:   #E6DCF6; --cat-code-ink:   #4A2F78; --cat-code-dot:   #8A5CC8;   /* skills only: «Code» */
 
   /* Calendar: kinds of events and day colours (weekend/holiday red, busy green) */
   --ev-task: var(--accent);  --ev-task-bg: color-mix(in srgb, var(--accent) 26%, var(--surface));
@@ -65,6 +66,7 @@
     --cat-video-bg:  #283F5E; --cat-video-ink:  #CFE0F6; --cat-video-dot:  #86B4F0;
     --cat-system-bg: #5C2B28; --cat-system-ink: #F7CBC6; --cat-system-dot: #F08A80;
     --cat-other-bg:  #45352D; --cat-other-ink:  #EEDFD4; --cat-other-dot:  #B99A8A;
+    --cat-code-bg:   #3D2F57; --cat-code-ink:   #E6DCF6; --cat-code-dot:   #B994E6;
     --ev-call: #B994E6; --ev-call-bg: #43325A;
     --ev-shoot: #F0BE5E; --ev-shoot-bg: #4A3A1B;
     --ev-edit: #6CCFC6; --ev-edit-bg: #1F4643;
@@ -368,6 +370,7 @@ button { cursor: pointer; }
 .cat-static { --chip-bg: var(--cat-static-bg); --chip-ink: var(--cat-static-ink); --dot: var(--cat-static-dot); }
 .cat-video  { --chip-bg: var(--cat-video-bg);  --chip-ink: var(--cat-video-ink);  --dot: var(--cat-video-dot); }
 .cat-system { --chip-bg: var(--cat-system-bg); --chip-ink: var(--cat-system-ink); --dot: var(--cat-system-dot); }
+.cat-code   { --chip-bg: var(--cat-code-bg);   --chip-ink: var(--cat-code-ink);   --dot: var(--cat-code-dot); }
 .cat-other  { --chip-bg: var(--cat-other-bg);  --chip-ink: var(--cat-other-ink);  --dot: var(--cat-other-dot); }
 
 /* Header */
@@ -1883,3 +1886,78 @@ h1 .brand { color: var(--accent-strong); }
 .rc-line mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 .cal-ev .flag, .cal-grid .ev .flag { display: inline-block; width: 13px; height: 13px; margin-right: 4px; vertical-align: -2px; opacity: .85; }
 .flag svg { width: 100%; height: 100%; display: block; }
+
+/* «Скиллы» on the «Промты» page: the switch «Промты / Скиллы» under the title and the list of skills (mockups/skills.html).
+   The page shows one list at a time: .lib-skills on the view hides the prompts' editor, toolbar and table. */
+.lib-seg { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.lib-seg .tview button { display: inline-flex; align-items: center; gap: 7px; padding: 7px 18px; font-size: 14px; }
+.lib-seg .tview .n { font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.lib-seg .tview .n:empty { display: none; }
+.lib-why { font-size: 12.5px; color: var(--ink-soft); }
+#view-prompts.lib-skills :is(#editor-slot, #toolbar, #prompts-card, #add-btn) { display: none !important; }
+#view-prompts:not(.lib-skills) :is(#skills-view, #skill-add-btn, #lib-why, #sk-help) { display: none !important; }
+.lib-seg .sk-help { margin-left: auto; }
+.skills-view { display: grid; gap: 22px; border-radius: 22px; transition: outline-color .15s; outline: 2.5px dashed transparent; outline-offset: 6px; }
+.skills-view.drop-over { outline-color: var(--accent-strong); background: color-mix(in srgb, var(--drop) 35%, transparent); }
+.skills-view [hidden] { display: none !important; }
+.table col.w-skill { width: 30%; }
+
+.sk-file { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin-top: 8px; padding: 3px 9px 3px 5px; border-radius: 7px; background: var(--surface-2); color: var(--ink-soft); font-size: 12px; }
+.sk-file span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sk-file b, .bubble-doc b, .att-doc-in b {
+  flex: none; font: 500 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px;
+  background: var(--cat-other-bg); color: var(--cat-other-ink);
+}
+.sk-file b.zip, .bubble-doc b, .att-doc-in b { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); color: var(--accent-strong); }
+.btn-mini.dl { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn-mini.dl:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.sk-desc { margin: 0; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+.sk-desc.is-collapsed { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.sk-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; }
+.sk-meta .sk-acts { display: flex; gap: 8px; margin-left: auto; }
+#skill-form-slot:empty { display: none; }
+.sk-who { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); }
+.sk-who .ico svg { width: 14px; height: 14px; display: block; }
+.sk-writing { display: grid; gap: 8px; color: var(--ink-soft); font-size: 13.5px; }
+.sk-writing .bar { height: 4px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.sk-writing .bar i { display: block; width: 35%; height: 100%; border-radius: 4px; background: var(--accent); animation: sk-run 1.6s ease-in-out infinite; }
+@keyframes sk-run { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@media (prefers-reduced-motion: reduce) { .sk-writing .bar i { animation: none; width: 100%; opacity: .5; } }
+.sk-nokey { display: grid; gap: 10px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--line); background: var(--surface-2); font-size: 13.5px; color: var(--ink-soft); }
+.sk-nokey .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.sk-inside { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); display: grid; gap: 8px; min-width: 0; }
+.sk-inside .cap { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); }
+.sk-inside ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font: 12.5px/1.5 var(--font-mono); max-height: 260px; overflow-y: auto; }
+.sk-inside li { display: flex; gap: 10px; min-width: 0; }
+.sk-inside li span:first-child { overflow-wrap: anywhere; }
+.sk-inside li span:last-child { margin-left: auto; flex: none; color: var(--ink-soft); }
+.sk-inside li.main { font-weight: 600; }
+.sk-inside pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12.5px/1.55 var(--font-mono); color: var(--ink-soft); max-height: 12.5em; overflow: hidden; }
+.sk-edit { display: grid; gap: 8px; }
+.sk-edit .field-label { margin-top: 2px; }
+.textarea.prose { font-family: var(--font-body); font-size: 14px; min-height: 110px; }
+
+.sk-form .from-file { font-size: 12px; color: var(--ink-soft); }
+.sk-picked { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.sk-picked .tile { width: 52px; height: 52px; flex: none; cursor: default; }
+.sk-picked .tile:hover { transform: none; border-color: var(--line); }
+.sk-picked > div { min-width: 0; }
+.sk-picked .t { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.sk-picked .s { font-size: 12.5px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.sk-picked .spacer { flex: 1; }
+.sk-auto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--ink-soft); }
+.sk-auto .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, var(--surface)); color: var(--ink); font-weight: 500; }
+.sk-auto .pill .ico svg { width: 14px; height: 14px; display: block; }
+.cat-option.sk-auto-opt span::before { background: none; border: 1.5px dashed var(--ink-soft); width: 8px; height: 8px; }
+
+/* LLM: skill files (.md, .zip) in the message box and in a sent message */
+.att-thumb.att-doc { width: auto; max-width: 220px; padding: 0 30px 0 10px; display: flex; align-items: center; }
+.att-doc-in { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; }
+.att-doc-in span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bubble-docs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-bottom: 6px; }
+.bubble-docs:last-child { margin-bottom: 0; }
+.bubble-doc { display: inline-flex; align-items: center; gap: 7px; max-width: 260px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.bubble-doc span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bubble-doc:hover { border-color: var(--ink-soft); }
+.sk-act-text { font-family: var(--font-body); white-space: pre-wrap; }

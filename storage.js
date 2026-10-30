@@ -18,6 +18,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
+const { readZipIndex } = require('./archive');
 
 const FORMAT = 'snowball';
 const DATA_FILE = 'prompts.json';
@@ -32,11 +33,14 @@ const CHATS_FILE = 'chats.json';
 const CALENDAR_FILE = 'calendar.json';
 const TASKS_FILE = 'tasks.json';
 const TRANSCRIPTS_DIR = 'Транскрибации';
+const SKILLS_FILE = 'skills.json';
+const SKILLS_DIR = 'Скиллы';
 // What counts as an action on the statistics page. Deleting and importing do not count.
 // calendar: a new or changed event; assistant: a message sent to the assistant;
 // tasks: a new task, one moved to another column, a new subtask or a subtask ticked off;
-// transcribe: a file turned into text, its short summary, its text or timings copied, subtitles or text saved to a file.
-const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks', 'transcribe', 'screenshots'];
+// transcribe: a file turned into text, its short summary, its text or timings copied, subtitles or text saved to a file;
+// skills: a new skill on the «Скиллы» page.
+const ACTIONS = ['created', 'edited', 'files', 'copied', 'calendar', 'assistant', 'tasks', 'transcribe', 'screenshots', 'skills'];
 const NAME_MAX = 32;
 
 const IMAGE_EXT = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.avif', '.svg', '.ico']);
@@ -305,8 +309,8 @@ function normalizeAction(a) {
   if (a.prevTask && typeof a.prevTask === 'object') out.prevTask = normalizeTask(a.prevTask);
   return out;
 }
-// A picture in a message: its file is "Файлы чатов/<chat id>/<stored>".
-const STORED_RE = /^[A-Za-z0-9_-]{1,64}\.(jpg|png)$/;
+// A picture in a message: its file is "Файлы чатов/<chat id>/<stored>". A skill file sent to LLM (.md or .zip) is kept the same way.
+const STORED_RE = /^[A-Za-z0-9_-]{1,64}\.(jpg|png|md|zip)$/;
 function normalizeChatImages(list) {
   return (Array.isArray(list) ? list : []).slice(0, CHAT_IMAGES_MAX).map((x) => {
     if (!x || typeof x !== 'object' || !STORED_RE.test(str(x.stored))) return null;
@@ -381,6 +385,67 @@ async function readTranscripts(dir) {
   return out;
 }
 
+/* ---------- «Скиллы»: instructions for assistants, a .md file or a .zip archive kept as it was ---------- */
+const SKILL_TYPES = ['static', 'video', 'code'];
+const SKILL_TEXT_MAX = 200000;     // the main Markdown file, for search, the description and the assistant
+const SKILL_INSIDE_MAX = 300;      // files of an archive listed in the record
+const SKILL_MD_SIZE = 2 * 1024 * 1024;
+const SKILL_ZIP_SIZE = 200 * 1024 * 1024;
+const skillKind = (name) => (/\.zip$/i.test(name) ? 'zip' : /\.(md|markdown)$/i.test(name) ? 'md' : '');
+function normalizeSkill(s) {
+  if (!s || typeof s !== 'object' || !ID_RE.test(str(s.id))) return null;
+  const f = s.file && typeof s.file === 'object' ? s.file : {};
+  const stored = sanitizeName(str(f.stored, 300) || str(f.name, 300) || 'skill.md');
+  if (!skillKind(stored)) return null;
+  const now = Date.now();
+  return {
+    id: s.id,
+    title: str(s.title, 300).trim(),
+    type: SKILL_TYPES.includes(s.type) ? s.type : '',
+    desc: str(s.desc, 6000).trim(),
+    descBy: str(s.descBy, 60),          // the model that wrote the description, 'manual', or '' while there is none
+    descCost: Math.max(0, num(s.descCost)),
+    descAt: num(s.descAt),
+    file: { name: str(f.name, 300) || stored, stored, size: Math.max(0, num(f.size)), kind: skillKind(stored) },
+    main: str(s.main, 500),             // the path of the main .md inside an archive
+    inside: (Array.isArray(s.inside) ? s.inside : []).slice(0, SKILL_INSIDE_MAX)
+      .map((x) => (x && typeof x === 'object' ? { path: str(x.path, 500), size: Math.max(0, num(x.size)) } : null)).filter((x) => x && x.path),
+    files: Math.max(0, num(s.files)),   // how many files the archive has (inside may be cut)
+    text: str(s.text, SKILL_TEXT_MAX),
+    createdAt: num(s.createdAt) || now,
+    updatedAt: num(s.updatedAt) || num(s.createdAt) || now
+  };
+}
+// The title a skill gives itself: "name:" in the front matter of its .md, else the folder of the archive or the file name.
+function skillTitle(text, fileName, inside) {
+  const fm = /^﻿?---\r?\n([\s\S]*?)\r?\n---/.exec(text || '');
+  const m = fm && /^name:\s*["']?(.+?)["']?\s*$/m.exec(fm[1]);
+  if (m && m[1].trim()) return m[1].trim().slice(0, 300);
+  const tops = new Set((inside || []).map((x) => x.path.split('/')[0]));
+  if (tops.size === 1 && (inside || []).every((x) => x.path.includes('/'))) return [...tops][0].slice(0, 300);
+  const stem = path.basename(String(fileName || ''), path.extname(String(fileName || '')));
+  if (/^skill$/i.test(stem)) { const h1 = /^#\s+(.+)$/m.exec(text || ''); if (h1) return h1[1].trim().slice(0, 300); }
+  return stem.slice(0, 300) || 'Скилл';
+}
+// Reads a skill file: its kind, size, files inside and the text of the main Markdown file. Throws userMessage errors.
+async function readSkillFile(file, name) {
+  const kind = skillKind(name || file);
+  const bad = (msg) => { const e = new Error('bad skill'); e.userMessage = msg; return e; };
+  if (!kind) throw bad('Скилл — это файл .md или архив .zip.');
+  const st = await fsp.stat(file);
+  if (!st.isFile()) throw bad('Это папка, а нужен файл .md или архив .zip.');
+  if (kind === 'md') {
+    if (st.size > SKILL_MD_SIZE) throw bad('Файл .md больше 2 МБ — это не похоже на скилл.');
+    const text = (await fsp.readFile(file, 'utf8')).replace(/^﻿/, '');
+    return { kind, size: st.size, text: text.slice(0, SKILL_TEXT_MAX), main: '', inside: [], files: 1 };
+  }
+  if (st.size > SKILL_ZIP_SIZE) throw bad('Архив больше 200 МБ — слишком большой для скилла.');
+  let idx;
+  try { idx = await readZipIndex(file); } catch (e) { throw bad('Этот архив не открылся: он повреждён или это не zip.'); }
+  if (!idx.files.length) throw bad('Архив пустой.');
+  return { kind, size: st.size, text: idx.text.replace(/^﻿/, '').slice(0, SKILL_TEXT_MAX), main: idx.main, inside: idx.files.slice(0, SKILL_INSIDE_MAX), files: idx.files.length };
+}
+
 async function uniqueTarget(dir, name) {
   const ext = path.extname(name);
   const stem = name.slice(0, name.length - ext.length);
@@ -404,6 +469,7 @@ class Store {
     this.columns = [];       // the user's own task columns, in their order
     this.archiveMode = 'day'; // done tasks go to the archive by themselves: 'day', 'week' or 'manual'
     this.transcripts = [];   // «Транскрибация»: one file per transcription in Транскрибации/
+    this.skills = [];        // «Скиллы»: skills.json, their files in Скиллы/<id>/
     this.queue = Promise.resolve();
   }
 
@@ -442,6 +508,23 @@ class Store {
     if (!ID_RE.test(str(id))) throw new Error('bad id');
     return path.join(this.transcriptsRoot, id + '.json');
   }
+  // A skill file sent with an LLM message (.md or .zip, as it is), beside the pictures of the conversation.
+  async saveChatFile(chatId, name, bytes) {
+    const kind = skillKind(name);
+    if (!kind) throw new Error('bad kind');
+    const dir = this.chatFilesDir(chatId);
+    await fsp.mkdir(dir, { recursive: true });
+    const id = newId('i');
+    const stored = id + '.' + kind;
+    await fsp.writeFile(path.join(dir, stored), Buffer.from(bytes));
+    return { id, name: str(name, NAME_MAX * 4).trim() || 'skill.' + kind, stored };
+  }
+  get skillsPath() { return path.join(this.dir, SKILLS_FILE); }
+  get skillsRoot() { return path.join(this.dir, SKILLS_DIR); }
+  skillDir(id) {
+    if (!ID_RE.test(str(id))) throw new Error('bad id');
+    return path.join(this.skillsRoot, id);
+  }
   get calendarPath() { return path.join(this.dir, CALENDAR_FILE); }
   get tasksPath() { return path.join(this.dir, TASKS_FILE); }
   promptDir(id) {
@@ -474,6 +557,8 @@ class Store {
     this.archiveMode = tasks && ARCHIVE_MODES.includes(tasks.archiveMode) ? tasks.archiveMode : 'day';
     this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean) : [];
     this.transcripts = await readTranscripts(this.transcriptsRoot);
+    const skills = await readJson(this.skillsPath);
+    this.skills = skills && Array.isArray(skills.skills) ? skills.skills.map(normalizeSkill).filter(Boolean) : [];
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
     this.activity = this.backfillActivity();
@@ -866,6 +951,80 @@ class Store {
     });
   }
 
+  /* ---------- «Скиллы» ---------- */
+  writeSkills() { return writeJson(this.skillsPath, { format: 'snowball-skills', version: 1, skills: this.skills }); }
+  findSkill(id) { return this.skills.find((s) => s.id === id) || null; }
+  skillFilePath(id) {
+    const s = this.findSkill(id);
+    return s ? path.join(this.skillDir(s.id), s.file.stored) : null;
+  }
+  // Newest first. The text is cut: the window needs it only for search and the beginning of the file.
+  skillsView() {
+    return this.skills.slice().sort((a, b) => b.createdAt - a.createdAt)
+      .map((s) => Object.assign({}, s, { text: s.text.slice(0, 40000) }));
+  }
+  // A new skill from a file (path) or its bytes (bytes + name): the file is kept as it was, in Скиллы/<id>/.
+  // The title comes from the file unless given; counted in the statistics.
+  addSkill(input) {
+    return this.run(async () => {
+      const o = input || {};
+      const name = sanitizeName(str(o.name, 300) || (o.path ? path.basename(String(o.path)) : ''));
+      if (!skillKind(name)) { const e = new Error('bad skill'); e.userMessage = 'Скилл — это файл .md или архив .zip.'; throw e; }
+      let id = newId('k');
+      while (this.findSkill(id)) id = newId('k');
+      const dir = this.skillDir(id);
+      await fsp.mkdir(dir, { recursive: true });
+      const target = path.join(dir, name);
+      try {
+        if (o.path) await fsp.copyFile(String(o.path), target);
+        else if (o.bytes) await fsp.writeFile(target, Buffer.from(o.bytes));
+        else throw new Error('empty source');
+        const r = await readSkillFile(target, name);
+        const now = Date.now();
+        const desc = str(o.desc, 6000).trim();
+        const skill = normalizeSkill({
+          id, title: str(o.title, 300).trim() || skillTitle(r.text, name, r.inside), type: o.type,
+          desc, descBy: desc ? str(o.descBy, 60) || 'manual' : '', descAt: desc ? now : 0, descCost: o.descCost,
+          file: { name, stored: name, size: r.size }, main: r.main, inside: r.inside, files: r.files, text: r.text, createdAt: now, updatedAt: now
+        });
+        this.skills.push(skill);
+        await this.writeSkills();
+        await this.bump('skills', 1);
+        return skill;
+      } catch (e) {
+        await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+        throw e;
+      }
+    });
+  }
+  // Changes only the fields passed: title, type, desc (with descBy, descCost, descAt). Not counted in the statistics.
+  saveSkill(input) {
+    return this.run(async () => {
+      const s = this.findSkill(input && input.id);
+      if (!s) return null;
+      const next = normalizeSkill(Object.assign({}, s, ['title', 'type', 'desc', 'descBy', 'descCost', 'descAt'].reduce((o, k) => {
+        if (input[k] !== undefined) o[k] = input[k];
+        return o;
+      }, {}), { updatedAt: Date.now() }));
+      if (!next.title) next.title = s.title;
+      this.skills[this.skills.indexOf(s)] = next;
+      await this.writeSkills();
+      return next;
+    });
+  }
+  // The record goes at once; its folder goes to the Recycle Bin.
+  deleteSkill(id) {
+    return this.run(async () => {
+      const s = this.findSkill(id);
+      if (!s) return null;
+      this.skills = this.skills.filter((x) => x !== s);
+      await this.writeSkills();
+      const dir = this.skillDir(s.id);
+      if (await exists(dir)) { try { await this.trash(dir); } catch (e) { /* the record is gone; leftover files are harmless */ } }
+      return s;
+    });
+  }
+
   async initData(seed) {
     await fsp.mkdir(this.dir, { recursive: true });
     let raw = null;
@@ -1116,6 +1275,13 @@ class Store {
       counts.events = this.events.length;
       counts.tasks = this.tasks.length;
       counts.transcripts = this.transcripts.length;
+      // Skills: the list and each skill's file as it was, in skills/<id>/.
+      entries.push({ name: SKILLS_FILE, data: JSON.stringify({ format: 'snowball-skills', version: 1, skills: this.skills }, null, 2) });
+      this.skills.forEach((s) => {
+        const file = path.join(this.skillDir(s.id), s.file.stored);
+        if (fs.existsSync(file)) entries.push({ name: 'skills/' + s.id + '/' + s.file.stored, file });
+      });
+      counts.skills = this.skills.length;
     }
     return { entries, counts };
   }
@@ -1199,6 +1365,19 @@ class Store {
         this.transcripts.push(t);
         res.transcripts++;
       }
+      // Skills come by id too, each with its file; one whose file is missing from the backup is skipped.
+      const skills = await readJson(path.join(dir, SKILLS_FILE));
+      res.skills = 0;
+      for (const s of (skills && Array.isArray(skills.skills) ? skills.skills : []).map(normalizeSkill).filter(Boolean)) {
+        if (this.findSkill(s.id)) continue;
+        const from = path.join(dir, 'skills', s.id, s.file.stored);
+        if (!(await exists(from))) continue;
+        await fsp.mkdir(this.skillDir(s.id), { recursive: true });
+        await fsp.copyFile(from, path.join(this.skillDir(s.id), s.file.stored));
+        this.skills.push(s);
+        res.skills++;
+      }
+      if (res.skills) await this.writeSkills();
       // Statistics: for each day and kind the larger number, so restoring the same backup twice does not double it.
       const act = await readJson(path.join(dir, ACTIVITY_FILE));
       if (act) {
@@ -1231,7 +1410,7 @@ class Store {
 async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
   await fsp.copyFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
-  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE, CALENDAR_FILE, TASKS_FILE]) {
+  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE, CALENDAR_FILE, TASKS_FILE, SKILLS_FILE]) {
     if (await exists(path.join(fromDir, name))) await fsp.copyFile(path.join(fromDir, name), path.join(toDir, name));
   }
   const files = path.join(fromDir, FILES_DIR);
@@ -1240,10 +1419,13 @@ async function copyDataTo(fromDir, toDir) {
   if (await exists(chatFiles)) await fsp.cp(chatFiles, path.join(toDir, CHAT_FILES_DIR), { recursive: true, force: false, errorOnExist: false });
   const transcripts = path.join(fromDir, TRANSCRIPTS_DIR);
   if (await exists(transcripts)) await fsp.cp(transcripts, path.join(toDir, TRANSCRIPTS_DIR), { recursive: true, force: false, errorOnExist: false });
+  const skills = path.join(fromDir, SKILLS_DIR);
+  if (await exists(skills)) await fsp.cp(skills, path.join(toDir, SKILLS_DIR), { recursive: true, force: false, errorOnExist: false });
   const shots = path.join(fromDir, 'Снимки');
   if (await exists(shots)) await fsp.cp(shots, path.join(toDir, 'Снимки'), { recursive: true, force: false, errorOnExist: false });
 }
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }
 
-module.exports = { Store, copyDataTo, hasData, sanitizeName, kindOf, parseData, dayKey, normalizeEvent, normalizeTask, TASK_STATUSES, DATA_FILE, FILES_DIR, NAME_MAX };
+module.exports = { Store, copyDataTo, hasData, sanitizeName, kindOf, parseData, dayKey, normalizeEvent, normalizeTask, TASK_STATUSES, DATA_FILE, FILES_DIR, NAME_MAX,
+  SKILL_TYPES, skillKind, readSkillFile, skillTitle };
