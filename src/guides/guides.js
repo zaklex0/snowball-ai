@@ -5,6 +5,24 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
+  // The folded sidebar is not a section either: section "sidebar" has no «Как пользоваться» button of its own
+  // (the banner after the update and «Настройки» → «Обновление» show it), its last button just closes the window.
+  { version: "1.19.2", section: "sidebar", news: "левую панель можно свернуть в полосу иконок", title: "Свёрнутая панель", steps: [
+    { title: "Как свернуть панель", lead: "Свёрнутая панель оставляет больше места для раздела. Всё, что было в ней, остаётся под рукой — только иконками.", frames: [
+      { name: "1. Нажмите", shot: "01-button", points: [
+        { box: "toggle", at: [760, 90], label: "Свернуть", text: "Кнопка справа от названия программы, вверху левой панели. То же делает Ctrl + B." }] },
+      { name: "2. Что получится", shot: "01b-folded", points: [
+        { box: "toggle", at: [380, 80], label: "Развернуть", text: "Та же кнопка возвращает панель. Программа запомнит выбор и после перезапуска." },
+        { box: "icons", at: [380, 240], label: "Разделы", text: "Иконки разделов идут столбиком, счётчики дел, задач и ответов остались на них. Наведите мышку — появится название." },
+        { box: "capture", at: [380, 400], label: "Снимки", text: "Снимок экрана — одной иконкой. Если сочетание клавиш не работает, на ней красная точка." },
+        { box: "bottom", at: [380, 690], label: "Внизу", text: "Таймер, «Статистика», меню профиля и звёздочка ассистента — как раньше, только без подписей." }] }
+    ] },
+    { title: "Узкое окно и таймер", lead: "Когда окно уже 900 пикселей, панель сворачивается сама, чтобы раздел не съезжал. Раскрыть её можно той же кнопкой — до тех пор, пока окно снова не станет шире или уже.", frames: [
+      { name: "Таймер в свёрнутой панели", shot: "02-timer", points: [
+        { box: "timer", at: [400, 760], label: "Таймер", text: "Пока таймер идёт, под часами видно, сколько осталось минут." },
+        { box: "pop", at: [600, 420], label: "Окошко таймера", text: "Нажмите на часы — справа откроется окошко: «+5 минут», «Пауза», «Остановить» и новое время." }] }
+    ] }
+  ] },
   // The macOS theme is not a section: section "theme" is opened by «Тема › macOS › Как пользоваться», its last button opens
   // «Тема» in the profile menu, and news is what the banner after the update says is new.
   { version: "1.18.1", updated: "1.19.1", section: "theme", news: "тема «macOS» с выбором цвета", title: "Тема macOS", steps: [

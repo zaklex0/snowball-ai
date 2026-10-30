@@ -928,6 +928,48 @@
   if (startTabs) document.documentElement.classList.add("solo");
   function isSolo() { return document.documentElement.classList.contains("solo"); }
   api.onWindowMain(function () { isMainWindow = true; document.documentElement.classList.remove("solo"); saveTabs(); render(); });
+
+  // The sidebar folds into a strip of icons: by the button at its top or Ctrl + B, and by itself in a window narrower than 900 px.
+  // The choice for a wide window is remembered (localStorage sideMini); in a narrow one the button opens the panel
+  // only until the window gets wide (or narrow) again.
+  var SIDE_NARROW = window.matchMedia("(max-width: 900px)");
+  var side = { el: document.querySelector(".side"), mini: false, narrowOpen: false, folded: null, sent: -1 };
+  try { side.mini = localStorage.getItem("sideMini") === "1"; } catch (e) {}
+  function applySide() {
+    var folded = SIDE_NARROW.matches ? !side.narrowOpen : side.mini, btn = $("side-toggle");
+    if (folded === side.folded) return;
+    // While it slides, nothing spills out of it; while it opens, the wide layout keeps its width.
+    if (side.folded !== null && !reducedMotion && !isSolo()) {
+      side.el.classList.add("side-moving");
+      side.el.classList.toggle("side-opening", !folded);
+      clearTimeout(side.timer);
+      side.timer = setTimeout(function () { side.el.classList.remove("side-moving", "side-opening"); }, 260);
+    }
+    side.folded = folded;
+    document.documentElement.classList.toggle("side-mini", folded);
+    var label = folded ? "Развернуть панель" : "Свернуть панель";
+    btn.title = label + " (Ctrl + B)";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("aria-expanded", String(!folded));
+  }
+  function toggleSide() {
+    if (SIDE_NARROW.matches) side.narrowOpen = !side.narrowOpen;
+    else {
+      side.mini = !side.mini;
+      try { localStorage.setItem("sideMini", side.mini ? "1" : "0"); } catch (e) {}
+    }
+    applySide();
+  }
+  SIDE_NARROW.addEventListener("change", function () { side.narrowOpen = false; applySide(); });
+  $("side-toggle").addEventListener("click", toggleSide);
+  // main.js has to know where the tab strip begins, to catch a separate window dropped back on it.
+  function reportSideWidth() {
+    if (!isMainWindow || isSolo()) return;
+    var w = Math.round(side.el.getBoundingClientRect().right);
+    if (w !== side.sent) { side.sent = w; api.sideWidth(w); }
+  }
+  if (window.ResizeObserver) new ResizeObserver(reportSideWidth).observe(side.el);
+  applySide();
   function activeTab() { return tabs.list[tabs.active] || null; }
   function chatTitle(id) { var c = hist.list.find(function (x) { return x.id === id; }); return c ? c.title : ""; }
   function tabTitle(t) {
@@ -1252,7 +1294,12 @@
   // The small counters on the section icons: what is left for today, tasks not done yet, answers not read yet.
   function renderCaptureKey() {
     var button = document.querySelector('.capture-nav'), key = window.SnowShortcut.format(state.info && state.info.captureShortcut);
-    if (button) { button.querySelector('kbd').textContent = key; button.title = 'Снимки экрана · ' + key; }
+    var broken = (state.info && state.info.captureNotice) || '';
+    if (button) {
+      button.querySelector('kbd').textContent = key;
+      button.title = 'Снимки экрана · ' + key + (broken ? '\n' + broken : '');
+      button.classList.toggle('warn', !!broken);
+    }
     var label = $('capture-settings-key');
     if (label) label.textContent = key;
     var notice = $('capture-shortcut-notice');
@@ -5384,11 +5431,12 @@
         })),
         h("span", { class: "gd-count", text: "Шаг " + (gd.step + 1) + " из " + g.steps.length }),
         h("button", { type: "button", class: "btn btn-ghost", disabled: first ? "disabled" : null, onclick: function () { guideGo(-1); } }, "Назад"),
-        // The guide of the macOS theme has no section of its own: its last button opens «Тема» in the profile menu.
+        // The guide of the macOS theme has no section of its own: its last button opens «Тема» in the profile menu;
+        // the guide of the folded sidebar just closes.
         last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () {
           gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close();
-          if (g.section === "theme") { setMenu(true); openSub("theme", true); } else setPage(g.section);
-        } }, g.section === "theme" ? "Открыть меню «Тема»" : "Открыть раздел «" + g.title + "»")
+          if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section !== "sidebar") setPage(g.section);
+        } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : "Открыть раздел «" + g.title + "»")
           : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
   }
   // Delegation also covers guide buttons in sections mounted after the app starts.
@@ -5484,6 +5532,7 @@
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyW") { e.preventDefault(); closeTab(tabs.active); return; }
     if (mod && !e.shiftKey && !e.altKey && e.code === "KeyK") { e.preventDefault(); setQuick(els.qa.hidden); return; }
     if (mod && !e.shiftKey && !e.altKey && e.code === "Comma") { e.preventDefault(); openSettings(); return; }
+    if (mod && !e.shiftKey && !e.altKey && e.code === "KeyB" && !isSolo()) { e.preventDefault(); toggleSide(); return; }
     if (mod && !e.shiftKey && !e.altKey && (e.code === "KeyN")) {
       e.preventDefault();
       setPage("prompts");

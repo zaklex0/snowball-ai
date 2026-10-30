@@ -7,8 +7,8 @@ const Anthropic = require('@anthropic-ai/sdk').default;
 const OpenAI = require('openai').default;
 const { toFile } = require('openai');
 const os = require('os');
-const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, sanitizeName } = require('./storage');
-const { writeZip, extractZip } = require('./archive');
+const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, sanitizeName, SKILL_TYPES, skillKind, readSkillFile, skillTitle } = require('./storage');
+const { writeZip, extractZip, readZipIndex } = require('./archive');
 const setupScreenshots = require('./screenshots');
 
 const APP_TITLE = 'Snowball.ai';
@@ -17,6 +17,7 @@ const LEGACY_TITLES = ['Промты Snowball.ai', 'Промты VideoSmile'];
 const IS_WIN = process.platform === 'win32';
 const TITLEBAR_HEIGHT = 40;
 const SIDEBAR_WIDTH = 236;   // .side in styles.css; a window with one moved tab has no sidebar
+let sideWidth = SIDEBAR_WIDTH;   // where the main window's sidebar ends now (folded, it is a strip of icons): 'side-width'
 // "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
 // "macos" (beta) is the macOS look with glass (src/theme-macos.css): its accent colour and light/dark come from
 // settings.macAccent and settings.macLook. "zaklex" was here until 1.17.1 (now in archive/theme-zaklex).
@@ -330,10 +331,16 @@ function createWindow(opts) {
 function overTabStrip(p) {
   if (!win || win.isDestroyed() || win.isMinimized() || !win.isVisible()) return null;
   const b = win.getContentBounds(), zoom = win.webContents.getZoomFactor();
-  const left = b.x + SIDEBAR_WIDTH * zoom, right = b.x + b.width - (IS_WIN ? 150 : 0), bottom = b.y + TITLEBAR_HEIGHT * zoom;
+  const left = b.x + sideWidth * zoom, right = b.x + b.width - (IS_WIN ? 150 : 0), bottom = b.y + TITLEBAR_HEIGHT * zoom;
   if (p.x < left || p.x > right || p.y < b.y - 4 || p.y > bottom + 6) return null;
   return { x: Math.round((p.x - b.x) / zoom) };
 }
+
+// The main window tells where its sidebar ends: it can be folded into a strip of icons.
+handle('side-width', async function (width) {
+  if (BrowserWindow.fromWebContents(this.sender) === win && Number.isFinite(width)) sideWidth = Math.max(0, Math.min(400, Math.round(width)));
+  return { ok: true };
+});
 
 // The tab of a separate window goes back into the main window (dropped on its tab strip or «Вернуть»);
 // x: where on the strip, or nothing for the end. The separate window closes.
@@ -362,7 +369,7 @@ handle('window-open', async function (tabs, mode, point) {
   // (otherwise a tab pulled out of a full-screen window would cover everything).
   const wa = (atPoint ? screen.getDisplayNearestPoint({ x: Math.round(point.x), y: Math.round(point.y) }) : screen.getDisplayMatching(fb)).workArea;
   const size = {
-    width: Math.round(Math.min(Math.max(640, fb.width - SIDEBAR_WIDTH), wa.width * 0.75)),
+    width: Math.round(Math.min(Math.max(640, fb.width - sideWidth), wa.width * 0.75)),
     height: Math.round(Math.min(fb.height, wa.height * 0.75))
   };
   let bounds;
@@ -374,7 +381,7 @@ handle('window-open', async function (tabs, mode, point) {
       width, height
     };
   } else {
-    bounds = visibleBounds({ x: fb.x + SIDEBAR_WIDTH + 36, y: fb.y + 36, width: size.width, height: size.height }) || size;
+    bounds = visibleBounds({ x: fb.x + sideWidth + 36, y: fb.y + 36, width: size.width, height: size.height }) || size;
   }
   createWindow({ tabs: list, bounds });
   return { ok: true };
@@ -467,7 +474,7 @@ nativeTheme.on('updated', paintWindows);
 
 /* ---------- IPC ---------- */
 function ok(extra) {
-  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView(), taskArchiveMode: store.archiveMode }, extra || {});
+  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView(), taskArchiveMode: store.archiveMode, skills: store.skillsView() }, extra || {});
 }
 function fail(e) {
   const code = e && e.code;
@@ -480,8 +487,8 @@ function fail(e) {
 }
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
-const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir',
-  'media-pick', 'media-info', 'media-read', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get', 'recap-text', 'recap-pick-file']);
+const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'side-width','chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir',
+  'media-pick', 'media-info', 'media-read', 'skill-pick', 'skill-inspect', 'skill-download', 'skill-reveal', 'chat-file-save', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get', 'recap-text', 'recap-pick-file']);
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
@@ -493,7 +500,7 @@ function handle(name, fn) {
 }
 function syncOthers(r, except) {
   const data = { info: info() };
-  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, taskArchiveMode: r.taskArchiveMode, profile: r.profile, activity: r.activity });
+  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, taskArchiveMode: r.taskArchiveMode, skills: r.skills, profile: r.profile, activity: r.activity });
   if (r.chats) data.chats = r.chats;
   if (r.transcripts) data.transcripts = r.transcripts;
   broadcast('sync', data, except);
@@ -774,7 +781,7 @@ async function openArchive(file) {
     if (kind === 'backup') {
       const when = m.createdAt ? new Date(m.createdAt).toLocaleString('ru-RU') : 'неизвестно когда';
       message = 'Восстановить данные из резервной копии?';
-      detail = 'Копия от ' + when + ': промтов ' + (c.prompts || 0) + ', файлов ' + (c.files || 0) + ', разговоров ' + (c.chats || 0) + ', дел в календаре ' + (c.events || 0) + (c.transcripts ? ', расшифровок ' + c.transcripts : '') + '.\n\n' +
+      detail = 'Копия от ' + when + ': промтов ' + (c.prompts || 0) + ', файлов ' + (c.files || 0) + ', разговоров ' + (c.chats || 0) + ', дел в календаре ' + (c.events || 0) + (c.transcripts ? ', расшифровок ' + c.transcripts : '') + (c.skills ? ', скиллов ' + c.skills : '') + '.\n\n' +
         'Из того, что уже есть в программе, ничего не удалится и не изменится: добавится только недостающее. Тема и выбор модели станут как в копии.\n\n' +
         'Ключей ChatGPT и Claude в копии нет: если нужно, введите их заново в «Настройках».';
     } else {
@@ -2556,6 +2563,145 @@ handle('assistant-reset', async () => {
   streams.forEach((c) => c.abort());
   pending.clear();
   return { ok: true };
+});
+
+/* «Скиллы» on the «Промты» page: instructions for assistants, a .md file or a .zip archive, kept as they were
+   (storage.js addSkill). The description (5–6 sentences) and the type are written by one request to GPT-6.1 Sol
+   with medium thinking (without a ChatGPT key, Claude Haiku); its price goes to the spending like any answer. */
+const SKILL_PROMPT = [
+  'Ты разбираешь скилл — набор инструкций для ИИ-ассистента (ChatGPT, Claude и других). Тебе дан список его файлов и текст главного файла.',
+  'desc — описание для человека, который не программист: 5–6 простых предложений по-русски, одним абзацем, без разметки и без списков. Скажи, что это за скилл, для чего он нужен и когда его брать, как он работает (что делает ассистент по шагам) и что лежит внутри, если файлов несколько. Не выдумывай того, чего нет в файлах.',
+  'type — для чего скилл: static — картинки (промты для генерации изображений, фото, иллюстрации, персонажи), video — видео (промты для видео-моделей, монтаж, клипы, сценарии роликов), code — программирование, интерфейсы, сайты, автоматизация, документы и всё остальное техническое. Если не подходит ни одно точно, выбери ближайшее по смыслу.'
+].join('\n\n');
+const SKILL_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['desc', 'type'],
+  properties: { desc: { type: 'string' }, type: { type: 'string', enum: SKILL_TYPES } }
+};
+function skillModel() { return keys.openai ? modelById('gpt-6.1-sol') : keys.anthropic ? modelById('claude-haiku-5-5') : null; }
+// What the model reads about a skill: the file, the list of files of an archive and the main Markdown text.
+function skillInput(s) {
+  const list = s.inside.slice(0, 150).map((f) => '- ' + f.path + ' (' + Math.max(1, Math.round(f.size / 1024)) + ' КБ)').join('\n');
+  return 'Файл: ' + s.file.name + (s.file.kind === 'zip' ? ', архив, файлов: ' + s.files + (s.files > 150 ? ' (показаны первые 150)' : '') + '\n' + list : '') +
+    '\n\n' + (s.text ? 'Главный файл' + (s.main ? ' (' + s.main + ')' : '') + ':\n' + s.text.slice(0, 60000) : 'Текстового файла .md в архиве нет.');
+}
+async function skillData(model, input, signal) {
+  if (model.provider === 'openai') {
+    const client = new OpenAI({ apiKey: keys.openai });
+    const r = await client.responses.create({
+      model: model.id, instructions: SKILL_PROMPT, input,
+      reasoning: { effort: 'medium' }, max_output_tokens: 8000, store: false,
+      text: { format: { type: 'json_schema', name: 'skill', strict: true, schema: SKILL_SCHEMA } }
+    }, { signal });
+    recordSpend(model, openaiUsage(r), signal);
+    if (r.status === 'incomplete') throw userError('Ответ оборвался. Попробуйте ещё раз.');
+    try { return JSON.parse(r.output_text || ''); } catch (e) { throw userError('Модель ответила не так, как нужно. Попробуйте ещё раз.'); }
+  }
+  const client = new Anthropic({ apiKey: keys.anthropic });
+  const r = await client.beta.messages.create({
+    model: model.id, max_tokens: 8000, messages: [{ role: 'user', content: input }],
+    system: [{ type: 'text', text: SKILL_PROMPT, cache_control: { type: 'ephemeral' } }],
+    tools: [{ name: 'save_skill', description: 'Сохраняет описание и тип скилла.', input_schema: SKILL_SCHEMA }],
+    tool_choice: { type: 'tool', name: 'save_skill' }
+  }, { signal });
+  const u = r.usage || {};
+  recordSpend(model, { input: u.input_tokens || 0, cached: u.cache_read_input_tokens || 0, cacheWrite: u.cache_creation_input_tokens || 0, output: u.output_tokens || 0 }, signal);
+  const b = (r.content || []).find((x) => x.type === 'tool_use');
+  if (!b) throw userError('Модель ответила не так, как нужно. Попробуйте ещё раз.');
+  return b.input;
+}
+// keepType: the type stays as it is (the user chose it); otherwise the model's type is put on the skill.
+async function describeSkill(id, keepType) {
+  const s = store.findSkill(String(id || ''));
+  if (!s) return { ok: false, error: 'Этого скилла уже нет.' };
+  const model = skillModel();
+  if (!model) return { ok: false, nokey: true, error: 'Чтобы описание написалось само, нужен ключ ChatGPT или Claude: «Настройки» → «API-ключи». Или напишите его сами.' };
+  const controller = new AbortController();
+  try {
+    const d = await skillData(model, skillInput(s), controller.signal);
+    const desc = String(d.desc || '').trim();
+    if (!desc) throw userError('Модель не написала описание. Попробуйте ещё раз.');
+    const cost = runCost.get(controller.signal) || 0;
+    const fields = { id: s.id, desc, descBy: model.id, descCost: cost, descAt: Date.now() };
+    if (!keepType && SKILL_TYPES.includes(d.type)) fields.type = d.type;
+    await store.saveSkill(fields);
+    return ok({ skillId: s.id, cost, info: info() });
+  } catch (e) {
+    if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('skill', e.status, e.code || e.type);
+    else if (!e.userMessage) console.error('skill', e);
+    return { ok: false, error: e.userMessage || modelError(e) || 'Описание не получилось. Попробуйте ещё раз.' };
+  }
+}
+const skillAllowed = new Set();   // only files the user picked or dropped can be added as skills
+const skillDownloads = new Map(); // skill id -> where it was last saved, for «Показать в папке»
+async function inspectSkill(file) {
+  file = String(file || '');
+  if (!skillKind(file)) return { ok: false, error: 'Скилл — это файл .md или архив .zip.' };
+  try {
+    const r = await readSkillFile(file, path.basename(file));
+    skillAllowed.add(file);
+    return { ok: true, path: file, name: path.basename(file), size: r.size, kind: r.kind, files: r.files, main: r.main, title: skillTitle(r.text, path.basename(file), r.inside) };
+  } catch (e) {
+    if (e.userMessage) return { ok: false, error: e.userMessage };
+    return { ok: false, error: 'Файл не открылся: возможно, его переместили или удалили.' };
+  }
+}
+handle('skill-pick', async function () {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
+    title: 'Выберите скилл: файл .md или архив .zip', properties: ['openFile'],
+    filters: [{ name: 'Скиллы', extensions: ['md', 'markdown', 'zip'] }]
+  });
+  if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
+  return inspectSkill(r.filePaths[0]);
+});
+handle('skill-inspect', (file) => inspectSkill(file));
+// o: { path (picked or dropped), title, type ('' — the assistant chooses), desc ('' — the assistant writes it) }
+handle('skill-add', async (o) => {
+  const file = String((o && o.path) || '');
+  if (!skillAllowed.has(file)) return { ok: false, error: 'Выберите файл скилла ещё раз.' };
+  const desc = String((o && o.desc) || '').trim();
+  const skill = await store.addSkill({ path: file, title: o.title, type: o.type, desc, descBy: desc ? 'manual' : '' });
+  return ok({ skillId: skill.id });
+});
+handle('skill-describe', (id, keepType) => describeSkill(id, !!keepType));
+handle('skill-save', async (o) => {
+  const s = o && typeof o === 'object' ? o : {};
+  const fields = { id: String(s.id || '') };
+  if (typeof s.title === 'string') fields.title = s.title;
+  if (typeof s.type === 'string') fields.type = s.type;
+  if (typeof s.desc === 'string') Object.assign(fields, { desc: s.desc, descBy: s.desc.trim() ? 'manual' : '', descCost: 0, descAt: Date.now() });
+  const saved = await store.saveSkill(fields);
+  if (!saved) return { ok: false, error: 'Этого скилла уже нет.' };
+  return ok();
+});
+handle('skill-delete', async (id) => { await store.deleteSkill(String(id || '')); return ok(); });
+// «Скачать»: the original .md or archive, exactly as it was added.
+handle('skill-download', async function (id) {
+  const s = store.findSkill(String(id || ''));
+  const file = s && store.skillFilePath(s.id);
+  if (!file || !fs.existsSync(file)) return { ok: false, error: 'Файла этого скилла нет в папке с данными.' };
+  const ext = s.file.kind === 'zip' ? 'zip' : path.extname(s.file.name).slice(1) || 'md';
+  const r = await dialog.showSaveDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
+    title: 'Сохранить скилл «' + s.title + '»',
+    defaultPath: path.join(app.getPath('downloads'), s.file.name),
+    filters: [{ name: s.file.kind === 'zip' ? 'Архив скилла' : 'Скилл', extensions: [ext] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: true, canceled: true };
+  await fsp.copyFile(file, r.filePath);
+  skillDownloads.set(s.id, r.filePath);
+  return { ok: true, path: r.filePath };
+});
+handle('skill-reveal', async (id) => {
+  const file = skillDownloads.get(String(id || ''));
+  if (!file || !fs.existsSync(file)) return { ok: false, error: 'Файла уже нет на этом месте.' };
+  shell.showItemInFolder(file);
+  return { ok: true };
+});
+// A skill file for an LLM message (.md or .zip as it is, at most 20 MB), beside the pictures of the conversation.
+handle('chat-file-save', async (chatId, name, bytes) => {
+  if (!skillKind(String(name || ''))) return { ok: false, error: 'В LLM можно приложить картинки, а также скиллы: .md или .zip.' };
+  if (!bytes || !(bytes.byteLength > 0) || bytes.byteLength > 20 * 1024 * 1024) return { ok: false, error: 'Этот файл больше 20 МБ.' };
+  const file = await store.saveChatFile(chatId, name, bytes);
+  return { ok: true, image: file };
 });
 
 // Makes the change a card describes. Returns what is needed to undo it.

@@ -210,10 +210,17 @@ button { cursor: pointer; }
 }
 /* The top of the sidebar is as high as the tab bar and drags the window too */
 .side-head {
-  flex: none; height: 40px; margin: 0 -10px; padding: 0 16px; display: flex; align-items: center; gap: 9px;
+  flex: none; height: 40px; margin: 0 -10px; padding: 0 8px 0 16px; display: flex; align-items: center; gap: 9px;
   font-size: 13px; font-weight: 600; color: var(--ink); -webkit-app-region: drag; user-select: none;
 }
 .side-head img { width: 18px; height: 18px; }
+/* Folds the panel into a strip of icons (Ctrl + B) */
+.side-toggle {
+  -webkit-app-region: no-drag; margin-left: auto; display: grid; place-items: center; width: 30px; height: 30px; flex: none;
+  border: 0; border-radius: 9px; background: none; color: var(--ink-soft); transition: background-color .15s, color .15s;
+}
+.side-toggle:hover { background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--ink); }
+.side-toggle svg { width: 18px; height: 18px; }
 /* Sections as icons; a small counter shows what waits there */
 .side-icons { display: flex; gap: 2px; justify-content: space-between; margin: 4px 0 16px; }
 .nav-icon {
@@ -1220,15 +1227,39 @@ h1 .brand { color: var(--accent-strong); }
 
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* Narrow window: the sidebar keeps only its icons */
-@media (max-width: 900px) {
-  .side { width: 62px; padding: 14px 8px 10px; }
-  .nav-item { justify-content: center; padding: 10px 0; }
-  .nav-item span, .profile-name, .profile-btn .chev { display: none; }
-  .mode-text, .mode-btn .chev { display: none; }
-  .mode-btn { justify-content: center; padding: 6px 0; }
-  .profile-btn { justify-content: center; padding: 6px 0; }
-}
+/* Folded sidebar (class side-mini on <html>, see applySide in app.js): a strip of icons, one under another.
+   The button at its top or Ctrl + B folds it; a window narrower than 900 px folds it by itself. */
+.side { transition: width .18s ease, padding .18s ease; }
+.side.side-moving { overflow: hidden; }                                   /* only while it slides */
+.side.side-opening :is(.side-top, .side-bottom) { min-width: 216px; }     /* the wide layout does not squeeze while it opens */
+@media (prefers-reduced-motion: reduce) { .side { transition: none; } }
+.side-mini .side { width: 60px; padding: 0 8px 10px; }
+.side-mini .side-head { justify-content: center; padding: 0; }
+.side-mini .side-head > :not(.side-toggle) { display: none; }
+.side-mini .side-toggle { margin: 0; }
+.side-mini .side-top { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.side-mini .side-icons { flex-direction: column; align-items: center; justify-content: flex-start; margin: 4px 0 8px; }
+.side-mini .nav-icon { flex: none; width: 40px; }
+.side-mini .capture-nav { position: relative; flex: none; justify-content: center; margin: 0 0 8px; padding: 9px 0; }
+.side-mini .capture-nav > :not(svg) { display: none; }
+/* The capture keys do not work: a red dot instead of the warning text */
+.side-mini .capture-nav.warn::after { content: ""; position: absolute; top: 4px; right: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+.side-mini :is(.capture-shortcut-notice, .upcoming) { display: none; }
+.side-mini .nav-item { justify-content: center; padding: 9px 0; }
+.side-mini .nav-item > span:not(.ico):not(.timer-time) { display: none; }
+/* The timer: the clock and the minutes under it; pause and stop are in its panel, which opens to the right */
+.side-mini .timer-row:is(.running, .paused) { padding: 0; }
+.side-mini .timer-ico { display: none; }
+.side-mini .timer-row:is(.running, .paused) .timer-main { flex-direction: column; gap: 1px; padding: 6px 0 7px; }
+.side-mini .timer-time { margin: 0; font-size: 11px; }
+.side-mini .timer-row.ringing .timer-time { display: none; }
+.side-mini .timer-pop { left: calc(100% + 10px); bottom: 0; }
+.side-mini .profile-row { flex-direction: column; align-items: center; }
+.side-mini .profile-row .profile-wrap { flex: none; }
+.side-mini .profile-btn { justify-content: center; padding: 4px; }
+.side-mini :is(.profile-name, .profile-btn .chev) { display: none; }
+.side-mini .qa-btn { width: 44px; height: 40px; }
+.side-mini .qa { left: 72px; bottom: 12px; }
 
 @media (max-width: 760px) {
   .page { padding: 24px 16px 48px; gap: 18px; }

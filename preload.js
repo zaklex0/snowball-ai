@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   setTheme: (theme) => ipcRenderer.invoke('set-theme', theme),
   setMacStyle: (style) => ipcRenderer.invoke('set-mac-style', style),
   setTabs: (tabs) => ipcRenderer.invoke('set-tabs', tabs),
+  sideWidth: (width) => ipcRenderer.invoke('side-width', width),
   windowOpen: (tabs, mode, point) => ipcRenderer.invoke('window-open', tabs, mode, point),
   windowReturn: (tab, x) => ipcRenderer.invoke('window-return', tab, x),
   // A separate window is dragged over this window's tab strip ({ x } or null when it leaves).

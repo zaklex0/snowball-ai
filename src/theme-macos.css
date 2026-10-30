@@ -171,7 +171,9 @@
   background: var(--mac-side);
   box-shadow: inset 0 .5px 0 var(--mac-edge), inset 0 0 0 .5px color-mix(in srgb, var(--mac-edge) 40%, transparent), 0 0 0 .5px var(--mac-hair), 0 10px 30px rgba(20, 20, 60, .08);
 }
-@media (max-width: 900px) { :where(html[data-theme="macos"]) .side { width: 54px; padding: 6px 4px 8px; } }
+:where(html[data-theme="macos"]) .side.side-opening :is(.side-top, .side-bottom) { min-width: 208px; }
+:where(html[data-theme="macos"]).side-mini .side { width: 56px; padding: 0 6px 8px; }
+:where(html[data-theme="macos"]).side-mini .qa-btn { width: 40px; }
 :where(html[data-theme="macos"]) .side-head { height: 34px; margin-top: 2px; }
 :where(html[data-theme="macos"]) .nav-icon:hover { background: var(--mac-fill); }
 :where(html[data-theme="macos"]) .nav-icon[aria-current="page"] { background: var(--mac-raised); color: var(--accent-strong); box-shadow: var(--mac-raise-shadow); }
