@@ -346,7 +346,7 @@
   display: flex;
   flex-direction: column;
 }
-/* One row: tools, their settings, the save status, «?» and «Копировать снимок». A narrow window wraps it. */
+/* One row: tools, settings, status, help and image actions. A narrow window wraps it. */
 .capture-app .shot-bar {
   display: flex;
   flex-wrap: wrap;
@@ -364,6 +364,11 @@
 }
 .capture-app .shot-bar button {
   padding: 6px 10px;
+}
+.capture-app .shot-image-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 .capture-app button.shot-help-btn {
   width: 32px;

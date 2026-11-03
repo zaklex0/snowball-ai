@@ -253,7 +253,10 @@
               <button data-guide="screenshots">Как пользоваться</button>
             </div>
           </div>
-          <button data-action="copy" class="primary">Копировать снимок</button>
+          <div class="shot-image-actions">
+            <button data-action="copy" class="primary">Копировать снимок</button>
+            <button data-action="export" class="primary">Сохранить как</button>
+          </div>
           </div>
           <div class="shot-stage">
             <p class="shot-empty">
@@ -421,6 +424,7 @@
       $('[data-action="undo"]').disabled = !current?.ops.length;
       $('[data-action="redo"]').disabled = !current?.redo.length;
       $('[data-action="copy"]').disabled = !current;
+      $('[data-action="export"]').disabled = !current;
       $('[data-action="llm"]').disabled = !current;
       $('.shot-crop-actions').hidden = !current || !cropSelection;
       $('[data-action="reset-crop"]').hidden = !current?.crop;
@@ -705,6 +709,12 @@
       check(await api.captureCopy(id, png.t, png.bytes));
       status('Снимок с пометками скопирован — можно вставить через Ctrl + V');
     }
+    async function exportShot(id) {
+      const png = await shotPng(id);
+      if (!png) return;
+      const result = check(await api.captureExport(id, png.t, png.bytes));
+      if (!result.canceled) status('Снимок сохранён.');
+    }
     // «Отправить снимок в LLM»: the main window opens a new LLM tab with this picture attached to the message box.
     async function sendToLlm(id) {
       const png = await shotPng(id);
@@ -899,6 +909,9 @@
     $('[data-action="redo"]').addEventListener('click', () => undo(true));
     $('[data-action="copy"]').addEventListener('click', () =>
       run(() => current && copyShot(current.id)),
+    );
+    $('[data-action="export"]').addEventListener('click', () =>
+      run(() => current && exportShot(current.id)),
     );
     $('[data-action="llm"]').addEventListener('click', () =>
       run(() => current && sendToLlm(current.id)),

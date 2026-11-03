@@ -12,6 +12,7 @@ const {
   app,
 } = require('electron');
 const path = require('path');
+const fs = require('fs/promises');
 const crypto = require('crypto');
 const { ScreenshotStore, pngSize, validSize, cropRect, discardUndo } = require('./screenshot-store');
 const SHORTCUTS = ['Alt+Z', 'Alt+V', 'Alt+B'];
@@ -430,6 +431,22 @@ module.exports = function setupScreenshots(options) {
     check(t);
     clipboard.writeImage(image);
     await options.record();
+    return {};
+  });
+  handle('capture-export', async (w, id, t, bytes) => {
+    check(t);
+    const item = await storage.get(id), size = pngSize(bytes), view = item.crop || item;
+    if (size.width !== view.width || size.height !== view.height)
+      throw Error('Размер изображения не совпадает со снимком.');
+    const name = (item.name || 'Снимок').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/[. ]+$/, '') || 'Снимок';
+    const result = await dialog.showSaveDialog(w, {
+      title: 'Сохранить снимок',
+      defaultPath: name.replace(/\.png$/i, '') + '.png',
+      filters: [{ name: 'Изображение PNG', extensions: ['png'] }],
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    check(t);
+    await fs.writeFile(result.filePath, Buffer.from(bytes));
     return {};
   });
   // The picture goes to the main window, which opens a new LLM tab with it (app.js, onCaptureLlm).

@@ -96,6 +96,14 @@ async function draw(page, tool, from, to) {
   await page.ev("document.querySelector('[data-action=copy]').click()");
   await page.until("document.querySelector('.shot-status').textContent.includes('скопирован')");
   assert.deepEqual(await main.ev('shotTestElectron.clipboard.readImage().getSize()'), { width: cropped.item.crop.width, height: cropped.item.crop.height });
+  const exported = path.join(tmp, 'export.png');
+  await main.ev(`shotTestElectron.dialog.showSaveDialog=async()=>({canceled:false,filePath:${JSON.stringify(exported)}});true`);
+  await page.ev("document.querySelector('.capture-app [data-action=export]').click()");
+  for (let i = 0; i < 300 && !(await page.ev("document.querySelector('.shot-status').textContent.includes('Снимок сохранён')")); i++) await page.sleep(100);
+  assert.equal(await page.ev("document.querySelector('.shot-status').textContent"), 'Снимок сохранён.');
+  assert.equal(await main.ev(`shotTestElectron.nativeImage.createFromPath(${JSON.stringify(exported)}).toBitmap().equals(shotTestElectron.clipboard.readImage().toBitmap())`), true);
+  await main.ev("shotTestElectron.dialog.showSaveDialog=async()=>({canceled:true});true");
+  await page.ev("document.querySelector('.capture-app [data-action=export]').click()");
   assert.deepEqual(fs.readFileSync(path.join(data, 'Снимки', ids[0], 'original.png')), beforeCrop);
   await page.ev("document.querySelector('[data-action=reset-crop]').click()");
   await page.until(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)}).then(r=>r.item.crop===null)`);

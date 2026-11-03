@@ -61,7 +61,7 @@ module.exports = async function ({ main, page, shot }) {
   await ev('window.screenshotEditor.flush()');
   await draw('focus', .64, .35, .91, .73);
   await ev('window.screenshotEditor.flush()');
-  await guideShot('04-focus', { tool: '[data-tool=focus]', blur: '.shot-blur-label', image: '.shot-stage canvas', copy: '[data-action=copy]' });
+  await guideShot('04-focus', { tool: '[data-tool=focus]', blur: '.shot-blur-label', image: '.shot-stage canvas', copy: '[data-action=copy]', save: '[data-action=export]' });
   // «Отправить в LLM»: the button, then the new LLM tab with the picture in the message box.
   await guideShot('08-llm-button', { llm: '[data-action=llm]' });
   await click('[data-action=llm]');
