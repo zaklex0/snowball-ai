@@ -519,10 +519,7 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.3-5.7"/><path d="M4 4v4.5h4.5M12 8v4l3 2"/></svg>
                 История
               </button>
-              <button type="button" class="btn btn-ghost" id="chat-new">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                Новый разговор
-              </button>
+
             </div>
           </header>
 
@@ -533,6 +530,10 @@
 
           <div class="chat-layout">
             <aside class="chat-history" id="chat-history" aria-labelledby="chat-history-title">
+              <button type="button" class="btn btn-ghost" id="chat-new">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                Новый разговор
+              </button>
               <h2 class="ch-title" id="chat-history-title">История</h2>
               <div class="ch-list" id="chat-list"></div>
             </aside>
@@ -574,10 +575,7 @@
                 </form>
                 <div class="composer-foot">
                   <p class="composer-hint"><kbd>Enter</kbd> — отправить, <kbd>Shift</kbd> + <kbd>Enter</kbd> — новая строка, <kbd>Esc</kbd> — остановить ответ</p>
-                  <button type="button" class="btn-mini chat-new-dock" id="chat-new-dock" title="Начать новый разговор (Ctrl + Shift + N)" hidden>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                    Новый разговор
-                  </button>
+
                 </div>
               </div>
             </div>

@@ -20,9 +20,24 @@ module.exports = async function ({ main, page, shot }) {
     await until(`document.querySelectorAll('.msg-user').length >= ${i + 1}`);
     await until("!document.getElementById('composer').classList.contains('busy')", 30000);
   }
-  await ev("document.getElementById('scroller').scrollTop = document.getElementById('scroller').scrollHeight");
-  await until("!document.getElementById('chat-new-dock').hidden");
+  await ev("document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight");
+  const before = await ev("document.getElementById('chat-new').getBoundingClientRect().top");
+  await ev("document.getElementById('chat').scrollTop = 0");
+  const after = await ev("document.getElementById('chat-new').getBoundingClientRect().top");
+  if (before !== after) throw Error('The new-conversation button moved with the dialogue');
+  if (!await ev("document.getElementById('chat').scrollHeight > document.getElementById('chat').clientHeight && document.getElementById('scroller').scrollHeight <= document.getElementById('scroller').clientHeight + 1")) throw Error('Only the dialogue should scroll');
   await sleep(300);
-  await shot('01-new-chat', { new: '#chat-new-dock' });
+  await shot('01-new-chat', { new: '#chat-new' });
+  for (const theme of ['dark', 'macos']) {
+    await ev(`vsApi.setTheme(${JSON.stringify(theme)})`);
+    await sleep(150);
+    if (!await ev("document.getElementById('chat-new').getBoundingClientRect().height > 0 && document.getElementById('chat').scrollHeight > document.getElementById('chat').clientHeight")) throw Error('Chat layout failed in ' + theme);
+  }
+  await main.ev("process.mainModule.require('electron').BrowserWindow.getAllWindows()[0].setContentSize(850,820)");
+  await sleep(200);
+  await ev("document.getElementById('chat-history-btn').click()");
+  if (!await ev("document.getElementById('chat-new').getBoundingClientRect().height > 0 && document.getElementById('chat').clientHeight > 100")) throw Error('Narrow history panel hides the chat');
+  await ev("document.getElementById('chat-new').click()");
+  await until("document.getElementById('chat-input') === document.activeElement && !document.getElementById('chat-history').classList.contains('open')");
   return shot.boxes;
 };

@@ -2790,7 +2790,7 @@
     return nodes;
   }
 
-  function scrollerOf(se) { return se.quick ? els.qaList : els.scroller; }
+  function scrollerOf(se) { return se.quick ? els.qaList : els.chat; }
   function nearBottom(se) { var el = scrollerOf(se); return el.scrollHeight - el.scrollTop - el.clientHeight < 90; }
   function scrollChat(se) {
     se = se || chat;
@@ -3453,12 +3453,6 @@
     els.chatInput.focus();
   });
   els.chatNew.addEventListener("click", newChat);
-  // A long conversation scrolls the header away: then «Новый разговор» shows up under the message box too
-  // (as soon as the header button is not fully seen: a sliver of it under the tab strip cannot be clicked).
-  $("chat-new-dock").addEventListener("click", newChat);
-  if (window.IntersectionObserver) new IntersectionObserver(function (list) {
-    $("chat-new-dock").hidden = list[list.length - 1].intersectionRatio >= 0.99;
-  }, { root: els.scroller, threshold: [0, 0.99] }).observe(els.chatNew);
   els.chatHistoryBtn.addEventListener("click", function () { setHistoryOpen(!els.chatHistory.classList.contains("open")); });
   refreshChats();
 

@@ -5,8 +5,8 @@
 // A point: box — the key of a box on its screenshot, at — where the label stands (pixels of the 1280 × 820 screenshot),
 // label — a few words on the screenshot, text — what to do. A step with two frames shows a button and what it opens.
 window.GUIDES = [
-  { version: "1.20.1", section: "assistant", news: "кнопка нового разговора остаётся под полем ввода, когда начало беседы прокручено", title: "Новый разговор в LLM", steps: [
-    { title: "Начните новый разговор", lead: "В длинном разговоре прокрутите сообщения вниз. Кнопка «Новый разговор» появится под полем ввода, когда верхняя кнопка уйдёт с экрана. Можно также нажать Ctrl + Shift + N на странице LLM.", frames: [
+  { version: "1.20.1", updated: "1.20.4", section: "assistant", news: "кнопка нового разговора находится над историей слева", title: "Новый разговор в LLM", steps: [
+    { title: "Начните новый разговор", lead: "Кнопка «Новый разговор» находится слева над историей и остаётся на месте при прокрутке переписки. В узком окне сначала откройте «История». Можно также нажать Ctrl + Shift + N на странице LLM.", frames: [
       { shot: "01-new-chat", points: [
         { box: "new", at: [940, 720], label: "Новый разговор", text: "Нажмите здесь, чтобы начать пустой разговор в этой вкладке. Старый разговор останется в истории." }
       ] }

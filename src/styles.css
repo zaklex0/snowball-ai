@@ -725,8 +725,9 @@ h1 .brand { color: var(--accent-strong); }
 .bchip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* Assistant page: the chat fills the window, the message box stays at the bottom while the messages scroll */
-.page:has(> .view-chat:not([hidden])) { display: flex; flex-direction: column; min-height: 100%; padding-bottom: 0; }
-.view-chat { flex: 1; display: flex; flex-direction: column; gap: 18px; }
+.scroller:has(.view-chat:not([hidden])) { overflow: hidden; }
+.page:has(> .view-chat:not([hidden])) { display: flex; flex-direction: column; height: 100%; min-height: 0; padding-bottom: 0; }
+.view-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 18px; }
 .test-note {
   display: flex; align-items: flex-start; gap: 11px;
   background: color-mix(in srgb, var(--accent) 22%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent-strong) 45%, var(--line));
@@ -736,7 +737,7 @@ h1 .brand { color: var(--accent-strong); }
 .test-note p { margin: 0; min-width: 0; }
 .test-note b { font-weight: 600; }
 
-.chat { flex: 1; display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.chat { flex: 1; display: flex; flex-direction: column; gap: 18px; min-width: 0; min-height: 0; overflow-y: auto; }
 .chat-empty {
   display: grid; gap: 12px; justify-items: start; padding: 28px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 20px; box-shadow: var(--shadow);
@@ -878,14 +879,15 @@ h1 .brand { color: var(--accent-strong); }
 .model-menu::-webkit-scrollbar-thumb:hover, .chat-history::-webkit-scrollbar-thumb:hover { background-color: var(--ink-soft); }
 
 /* History of conversations: a column on the left, behind the "История" button in a narrow window */
-.chat-layout { flex: 1; display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 20px; align-items: stretch; }
-.chat-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.chat-layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 20px; align-items: stretch; }
+.chat-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; min-height: 0; }
 .chat-history {
-  align-self: start; position: sticky; top: 14px; max-height: calc(100vh - 120px); overflow-y: auto;
-  display: grid; gap: 6px; align-content: start;
+  min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; gap: 6px;
 }
+.chat-history > .btn { flex: none; justify-content: flex-start; }
 .ch-title { margin: 0; padding: 2px 10px; font-size: 12px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-soft); }
-.ch-list { display: grid; gap: 2px; }
+.ch-list { display: grid; gap: 2px; min-height: 0; overflow-y: auto; align-content: start; }
 .ch-item { position: relative; display: flex; }
 .ch-open {
   flex: 1; min-width: 0; display: grid; gap: 1px; padding: 8px 32px 8px 10px; border: 0; border-radius: 11px;
@@ -909,7 +911,8 @@ h1 .brand { color: var(--accent-strong); }
 @media (max-width: 1080px) {
   .chat-layout { grid-template-columns: minmax(0, 1fr); }
   .chat-history { display: none; position: static; max-height: 320px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
-  .chat-history.open { display: grid; }
+  .chat-history.open { display: flex; max-height: 30vh; }
+  .chat-layout:has(.chat-history.open) { grid-template-rows: minmax(0, auto) minmax(0, 1fr); }
   .ch-toggle { display: inline-flex; }
 }
 .composer textarea::placeholder { color: var(--ink-soft); opacity: .75; }
@@ -922,11 +925,9 @@ h1 .brand { color: var(--accent-strong); }
 .send-btn .i-stop, .composer.busy .send-btn .i-send { display: none; }
 .composer.busy .send-btn .i-stop { display: block; }
 .composer-hint { margin: 7px 4px 0; font-size: 12.5px; color: var(--ink-soft); }
-/* Under the message box: the hint, and «Новый разговор» once the header has scrolled away */
+/* Keyboard hints below the message box. */
 .composer-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .composer-foot .composer-hint { flex: 1; min-width: 0; }
-.chat-new-dock { margin-top: 7px; padding: 4px 10px; font-size: 12.5px; }
-.chat-new-dock[hidden] { display: none; }
 
 /* Settings page */
 .set-card { padding: 20px 22px; display: grid; gap: 16px; }
