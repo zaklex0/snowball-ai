@@ -16,6 +16,8 @@ module.exports = async function ({ main, page, shot }) {
   // Refresh this window's own state after the direct API saves (sync is sent only to other windows).
   await page.send('Page.reload', {});
   await until("document.querySelector('#side-name')?.textContent === 'Гость'");
+  // Another Snowball window may own the shortcut on the test machine; keep that test-only warning out of the guide.
+  await ev("document.getElementById('capture-shortcut-notice').hidden = true");
   await closeDialogs();
   await click('[data-page="calendar"]');
   await until('!!document.querySelector("#cal-recap-btn") && !!document.querySelector(".cal-ev")');
@@ -35,7 +37,7 @@ module.exports = async function ({ main, page, shot }) {
   // Step 2: the event opens on «Дело», the summary is one button away.
   await ev(`document.querySelector('.cal-ev .flag').closest('.cal-ev').click()`);
   await until('document.getElementById("cal-dialog").open && !document.getElementById("cal-tabs").hidden');
-  await shot('02-open', { form: '#cal-form', tabs: '#cal-tabs', sum: '#cal-tab-sum', tr: '#cal-tab-tr' });
+  await shot('02-open', { form: '#cal-form', tabs: '#cal-tabs', sum: '#cal-tab-sum', tr: '#cal-tab-tr', close: '#cal-close' });
   await click('#cal-tab-sum');
   await until('!!document.querySelector("#cal-recap .rc-step")');
   await shot('02b-recap', { tabs: '#cal-tabs', brief: '#cal-recap .rc-blk:nth-child(2)', decisions: '#cal-recap .rc-blk:nth-child(3)', steps: '#cal-recap .rc-blk:nth-child(4)' });

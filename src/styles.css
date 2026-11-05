@@ -1864,9 +1864,18 @@ h1 .brand { color: var(--accent-strong); }
 .cal-recap > .editor-actions { margin-top: 12px; }
 .cal-recap > .rd-hint { margin: 14px 0 0; }
 .cal-dialog.wide { width: min(760px, calc(100vw - 32px)); }
-.cal-tabs { display: flex; gap: 4px; margin: 18px 22px 0; padding: 3px; border-radius: 12px; background: var(--surface-2); width: fit-content; }
+.cal-dialog-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 18px 20px 0 22px; background: var(--surface); }
+.cal-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface-2); width: fit-content; min-width: 0; }
 .cal-tabs button { padding: 6px 14px; border: 0; border-radius: 9px; background: none; color: var(--ink-soft); font: inherit; font-size: 14px; cursor: pointer; }
 .cal-tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.cal-close { flex: 0 0 36px; width: 36px; height: 36px; margin-left: auto; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--ink-soft); cursor: pointer; }
+.cal-close:hover, .cal-close:focus-visible { background: var(--surface-2); color: var(--ink); }
+.cal-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+@media (max-width: 440px) {
+  .cal-dialog-head { padding-left: 12px; padding-right: 12px; gap: 4px; }
+  .cal-tabs { gap: 0; }
+  .cal-tabs button { padding-left: 7px; padding-right: 7px; font-size: 13px; }
+}
 .cal-recap { padding: 16px 22px 22px; max-height: min(74vh, 720px); overflow-y: auto; }
 .rc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .rc-head h2 { margin: 0; }

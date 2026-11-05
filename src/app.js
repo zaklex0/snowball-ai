@@ -2339,6 +2339,7 @@
     });
   });
   els.cfCancel.addEventListener("click", closeEventForm);
+  $("cal-close").addEventListener("click", closeEventForm);
   // Close on a click outside only if it also started outside: dragging the note's resize handle and letting go
   // over the dark area is not a click outside.
   var calDownOnBackdrop = false;

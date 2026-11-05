@@ -766,10 +766,13 @@
 </dialog>
 
 <dialog class="cal-dialog" id="cal-dialog" aria-labelledby="cal-form-title">
-  <div class="cal-tabs" id="cal-tabs" role="tablist" hidden>
-    <button type="button" role="tab" data-tab="ev">Дело</button>
-    <button type="button" role="tab" data-tab="sum" id="cal-tab-sum">Итоги</button>
-    <button type="button" role="tab" data-tab="tr" id="cal-tab-tr" hidden>Расшифровка</button>
+  <div class="cal-dialog-head">
+    <div class="cal-tabs" id="cal-tabs" role="tablist" hidden>
+      <button type="button" role="tab" data-tab="ev">Дело</button>
+      <button type="button" role="tab" data-tab="sum" id="cal-tab-sum">Итоги</button>
+      <button type="button" role="tab" data-tab="tr" id="cal-tab-tr" hidden>Расшифровка</button>
+    </div>
+    <button type="button" class="cal-close" id="cal-close" aria-label="Закрыть" title="Закрыть"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg></button>
   </div>
   <div class="cal-recap" id="cal-recap" hidden></div>
   <form class="cal-form" id="cal-form" novalidate>
