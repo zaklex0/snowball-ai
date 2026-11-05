@@ -554,8 +554,8 @@ module.exports = function setupScreenshots(options) {
   screen.on('display-added', displaysChanged);
   screen.on('display-removed', displaysChanged);
   screen.on('display-metrics-changed', displaysChanged);
-  // Not at once: the first seconds after the start belong to the main window.
-  warmLater(3000);
+  // Let the main window appear first, then prepare selection windows for the first shortcut.
+  warmLater(1000);
   app.on('will-quit', () => {
     endRecording(false);
     globalShortcut.unregisterAll();
