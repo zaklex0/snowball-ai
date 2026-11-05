@@ -1823,9 +1823,6 @@
     var mb = bytes / (1024 * 1024);
     return (mb >= 10 ? Math.round(mb) : mb.toFixed(1).replace(".", ",")) + " МБ";
   }
-  // The full installer (size) is big, but the program downloads only what changed since your version (total in progress),
-  // usually much less. So before the download it says so, and after it — how much really came down.
-  function sizeNote() { return upd.size ? " Полная версия весит " + fmtMB(upd.size) + ", но скачается только то, что изменилось, — обычно намного меньше." : ""; }
   function updButton(label, primary, onclick, disabled) {
     return h("button", { type: "button", class: "btn " + (primary ? "btn-primary" : "btn-ghost"), disabled: !!disabled, onclick: onclick }, label);
   }
@@ -1845,10 +1842,10 @@
       line = "Не получилось проверить обновления. Проверьте интернет и попробуйте ещё раз.";
       actions.push(updButton("Попробовать ещё раз", true, checkForUpdates));
     } else if (s === "available") {
-      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + "." + sizeNote() + " Установится она после перезапуска.";
+      line = "Вышла новая версия " + v + ". Сейчас у вас " + upd.current + ". Размер загрузки появится после её начала. Обновление установится после перезапуска.";
       actions.push(updButton("Скачать обновление", true, startDownload));
     } else if (s === "progress") {
-      var total = upd.total || upd.size;
+      var total = upd.total;
       line = "Скачиваю версию " + v + ": " + (total ? fmtMB(upd.transferred) + " из " + fmtMB(total) + ", " : "") + upd.percent + "%. Можно закрыть настройки и продолжать работать, программа сообщит, когда всё будет готово.";
     } else if (s === "download-error") {
       line = "Не получилось скачать версию " + v + ". Проверьте интернет и попробуйте ещё раз.";
@@ -1885,6 +1882,7 @@
     call(api.checkUpdates()).then(function (r) { if (!r && upd.status === "checking") { upd.status = "error"; renderUpdates(); } });
   }
   function startDownload() {
+    upd.total = 0;
     call(api.downloadUpdate()).then(function (r) {
       if (!r) return;
       upd.status = "progress";
@@ -1897,7 +1895,7 @@
   // While the settings window is closed, the download shows in a banner with its own bar.
   function showProgressBanner() {
     if (upd.progressHidden || updatesInView()) return;
-    var total = upd.total || upd.size;
+    var total = upd.total;
     showBanner("Скачиваю Snowball.ai " + upd.version + ": " + (total ? fmtMB(upd.transferred) + " из " + fmtMB(total) + ", " : "") + upd.percent + "%.", {
       label: "Подробнее", close: "Скрыть", percent: upd.percent,
       onclick: function () { els.banner.hidden = true; openUpdates(false); },
@@ -1920,7 +1918,7 @@
     if (u.version) upd.version = u.version;
     if (u.size) upd.size = u.size;
     if (u.transferred !== undefined) upd.transferred = u.transferred;
-    if (u.total) upd.total = u.total;
+    if (u.total !== undefined) upd.total = u.total;
     if (u.kind === "available") {
       upd.status = "available";
       // The background check asks once per version; the button in Settings shows it right there.

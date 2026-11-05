@@ -451,7 +451,7 @@ function setupUpdates() {
   updater.on('update-not-available', () => { sendUpdate({ kind: 'latest', manual: manualCheck }); manualCheck = false; });
   updater.on('download-progress', (p) => {
     const percent = Math.floor(p.percent || 0);
-    lastProgress = { transferred: p.transferred || 0, total: p.total || updateSize };
+    lastProgress = { transferred: p.transferred || 0, total: p.total || 0 };
     if (percent !== lastPercent) { lastPercent = percent; sendUpdate({ kind: 'progress', version: updateFound, percent, size: updateSize, transferred: lastProgress.transferred, total: lastProgress.total }); }
   });
   updater.on('update-downloaded', (i) => {
@@ -666,7 +666,7 @@ handle('download-update', async () => {
   if (!downloading && !updateReady) {
     downloading = true;
     lastPercent = -1;
-    lastProgress = { transferred: 0, total: updateSize };
+    lastProgress = { transferred: 0, total: 0 };
     updater.downloadUpdate().catch(() => { /* reported by the 'error' event */ });
   }
   return { ok: true };
