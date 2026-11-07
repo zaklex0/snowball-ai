@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs/promises'), os = require('os'), path = require('path');
-const { ScreenshotStore, annotations, cropRect, normalizeCrop, pngSize } = require('../screenshot-store');
+const { ScreenshotStore, annotations, cropRect, normalizeCrop, pngSize, discardUndo } = require('../screenshot-store');
 const { writeZip, extractZip } = require('../archive');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9hoAAAAASUVORK5CYII=', 'base64');
 test('immutable originals, atomic revisions, concurrent windows, restart, ZIP restore and no overwrite', async () => {
@@ -52,4 +52,42 @@ test('non-destructive crop persists, validates bounds, and can restore the origi
   assert.deepEqual(normalizeCrop({ x: 0, y: 0, width: 256, height: 256 }, 256, 256), null);
   for (const bad of [{ x: -1, y: 0, width: 20, height: 20 }, { x: 250, y: 0, width: 20, height: 20 }, { x: 0.5, y: 0, width: 20, height: 20 }, { x: 0, y: 0, width: 1, height: 20 }])
     assert.throws(() => normalizeCrop(bad, 256, 256));
+});
+
+test('failed restoration keeps the undo copy and can be retried without overwriting other files', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-shot-restore-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = new ScreenshotStore(dir), shot = await store.add(png);
+  const removed = await store.remove(shot.id, (folder) => fs.rename(folder, path.join(dir, 'trash')));
+  t.after(() => discardUndo(removed.backup));
+  const rename = fs.rename;
+  fs.rename = async (from, to) => {
+    if (to === path.join(store.folder(shot.id), 'meta.json')) throw Object.assign(new Error('disk full'), { code: 'ENOSPC' });
+    return rename(from, to);
+  };
+  try { await assert.rejects(store.restore(removed), { code: 'ENOSPC' }); }
+  finally { fs.rename = rename; }
+  await assert.rejects(fs.stat(store.folder(shot.id)), { code: 'ENOENT' });
+  assert.deepEqual(await fs.readFile(path.join(removed.backup, 'original.png')), png);
+  await fs.mkdir(store.folder(shot.id));
+  await fs.writeFile(path.join(store.folder(shot.id), 'other.txt'), 'Не трогать');
+  await assert.rejects(store.restore(removed), { code: 'EEXIST' });
+  assert.equal(await fs.readFile(path.join(store.folder(shot.id), 'other.txt'), 'utf8'), 'Не трогать');
+  await fs.unlink(path.join(store.folder(shot.id), 'other.txt'));
+  await fs.rmdir(store.folder(shot.id));
+  await store.restore(removed);
+  assert.deepEqual(await fs.readFile(path.join(store.folder(shot.id), 'original.png')), png);
+});
+
+test('damaged screenshot records are reported and never silently omitted from backup', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-shot-damaged-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = new ScreenshotStore(dir), good = await store.add(png), broken = await store.add(png);
+  await fs.unlink(path.join(store.folder(broken.id), 'original.png'));
+  const result = await store.listDetails();
+  assert.equal(result.broken, 1);
+  assert.deepEqual(result.items.map((s) => s.id), [good.id]);
+  await assert.rejects(store.backupEntries(), (e) => e.userMessage && e.userMessage.includes('Резервная копия не создана'));
+  await fs.writeFile(path.join(store.folder(broken.id), 'original.png'), png);
+  assert.equal((await store.backupEntries()).count, 2);
 });

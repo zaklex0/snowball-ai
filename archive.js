@@ -8,6 +8,8 @@ const fsp = fs.promises;
 const path = require('path');
 const yazl = require('yazl');
 const yauzl = require('yauzl');
+const { pipeline } = require('stream/promises');
+const { writeExport } = require('./safe-export');
 
 // Pictures and videos are already compressed: packing them again only costs time.
 const STORE_ONLY = /\.(png|jpe?g|webp|gif|avif|heic|mp4|webm|mov|m4v|mkv|mp3|m4a|aac|ogg|opus|flac|zip|7z|rar)$/i;
@@ -22,21 +24,47 @@ function badFile() {
 // entries: [{ name: 'prompts.json', data: string | Buffer } or { name: 'files/p1/a.png', file: absolute path }]
 // The archive is written next to the target and renamed at the end, so a half-written file never stays behind.
 function writeZip(target, entries) {
-  return new Promise((resolve, reject) => {
-    const zip = new yazl.ZipFile();
-    const tmp = target + '.part';
-    const out = fs.createWriteStream(tmp);
-    let failed = false;
-    const fail = (e) => { if (failed) return; failed = true; out.destroy(); fsp.rm(tmp, { force: true }).finally(() => reject(e)); };
-    out.on('error', fail);
-    zip.outputStream.on('error', fail);
-    out.on('close', () => { if (!failed) fsp.rename(tmp, target).then(resolve, fail); });
-    zip.outputStream.pipe(out);
-    for (const e of entries) {
-      if (e.file) zip.addFile(e.file, e.name, { compress: !STORE_ONLY.test(e.name) });
-      else zip.addBuffer(Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data), 'utf8'), e.name);
+  return writeExport(target, async (handle) => {
+    let targetStat = null;
+    try { targetStat = await fsp.stat(target); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    const targetPath = path.resolve(target);
+    const samePath = (a, b) => process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b;
+    const prepared = [];
+    for (const entry of entries) {
+      if (!entry.file) { prepared.push(entry); continue; }
+      let stat;
+      try { stat = await fsp.stat(entry.file); }
+      catch (e) { e.exportSource = path.basename(entry.file); throw e; }
+      if (!stat.isFile()) throw new Error('not a file: ' + entry.file);
+      if (samePath(path.resolve(entry.file), targetPath) || (targetStat && stat.ino && targetStat.ino && stat.dev === targetStat.dev && stat.ino === targetStat.ino)) {
+        const e = new Error('archive target is an input file');
+        e.userMessage = 'Нельзя сохранить архив вместо файла, который в него входит. Выберите другое имя или папку.';
+        throw e;
+      }
+      prepared.push(Object.assign({}, entry, { stat }));
     }
-    zip.end();
+    const zip = new yazl.ZipFile();
+    const inputs = new Set();
+    // File read errors are emitted by ZipFile itself, not just by outputStream.
+    zip.on('error', (e) => zip.outputStream.destroy(e));
+    const done = pipeline(zip.outputStream, handle.createWriteStream());
+    try {
+      for (const e of prepared) {
+        if (e.file) zip.addReadStreamLazy(e.name, { compress: !STORE_ONLY.test(e.name), size: e.stat.size, mtime: e.stat.mtime, mode: e.stat.mode }, (callback) => {
+          const input = fs.createReadStream(e.file);
+          inputs.add(input);
+          input.on('error', (error) => { error.exportSource = path.basename(e.file); zip.emit('error', error); });
+          input.on('close', () => inputs.delete(input));
+          callback(null, input);
+        });
+        else zip.addBuffer(Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data), 'utf8'), e.name);
+      }
+      zip.end();
+    } catch (e) {
+      zip.outputStream.destroy(e);
+    }
+    try { await done; }
+    finally { inputs.forEach((input) => input.destroy()); }
   });
 }
 

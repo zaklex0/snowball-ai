@@ -7,8 +7,11 @@ const Anthropic = require('@anthropic-ai/sdk').default;
 const OpenAI = require('openai').default;
 const { toFile } = require('openai');
 const os = require('os');
+const crypto = require('crypto');
 const { Store, copyDataTo, hasData, normalizeEvent, normalizeTask, sanitizeName, SKILL_TYPES, skillKind, readSkillFile, skillTitle } = require('./storage');
 const { writeZip, extractZip, readZipIndex } = require('./archive');
+const { exportBytes, exportFile } = require('./safe-export');
+const { loadSettingsFile, writeSettings } = require('./settings-store');
 const setupScreenshots = require('./screenshots');
 
 const APP_TITLE = 'Snowball.ai';
@@ -38,24 +41,40 @@ let store = null;
 let settings = {};
 let captures = null;
 let firstRunNotice = null;
+let settingsRecoveryWarning = '';
+let settingsWriteWarning = '';
 
 /* ---------- settings ---------- */
 const settingsPath = () => path.join(app.getPath('userData'), 'settings.json');
 const defaultDataDir = () => path.join(app.getPath('documents'), APP_TITLE);
 
 function loadSettings() {
-  try { settings = JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) || {}; } catch (e) { settings = {}; }
+  const result = loadSettingsFile(settingsPath());
+  settings = result.settings;
+  settingsRecoveryWarning = result.warning || '';
+}
+function settingsWarning() { return [settingsRecoveryWarning, settingsWriteWarning].filter(Boolean).join(' '); }
+function updateSettingsWriteWarning(message) {
+  if (settingsWriteWarning === message) return;
+  settingsWriteWarning = message;
+  if (app.isReady()) broadcast('settings-warning', settingsWarning());
 }
 let settingsTimer = null;
 function saveSettings(now) {
   clearTimeout(settingsTimer);
   const doSave = () => {
     try {
-      fs.mkdirSync(path.dirname(settingsPath()), { recursive: true });
-      fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2), 'utf8');
-    } catch (e) { /* settings are a convenience */ }
+      const result = writeSettings(settingsPath(), settings);
+      updateSettingsWriteWarning(result.backupError ? 'Настройки сохранены, но не удалось обновить их запасную копию. Проверьте доступ к папке программы.' : '');
+      return true;
+    } catch (e) {
+      updateSettingsWriteWarning('Не удалось сохранить настройки. Изменения пока действуют только до закрытия программы. Проверьте свободное место и доступ к папке программы.');
+      return false;
+    }
   };
-  if (now) doSave(); else settingsTimer = setTimeout(doSave, 400);
+  if (now) return doSave();
+  settingsTimer = setTimeout(doSave, 400);
+  return true;
 }
 
 /* ---------- moving over from the old name ---------- */
@@ -76,9 +95,7 @@ async function migrateLegacy() {
       if (!settings.dataDir && legacy.dataDir && !isLegacyDefault(legacy.dataDir) && await hasData(legacy.dataDir)) settings.dataDir = legacy.dataDir;
     }
     saveSettings(true);
-    for (const ud of legacyUserData) {
-      try { await fsp.rm(ud, { recursive: true, force: true }); } catch (e) { /* only caches and old settings live there */ }
-    }
+    // Old profile folders may contain user data or encrypted keys; leave them untouched.
   }
 
   // Rename Документы\<old name> to Документы\<new name>. Retried on every start until it works
@@ -113,8 +130,7 @@ async function openStore() {
     if (wanted === defaultDataDir()) throw e;
     firstRunNotice = { kind: 'missing', dir: wanted };
     store = await new Store(defaultDataDir(), { trash }).init(SEED);
-    settings.dataDir = store.dir;
-    saveSettings(true);
+    // Keep the chosen location in settings so a temporarily disconnected disk is retried next time.
     return;
   }
   if (store.notice === 'created' && !firstRunNotice) firstRunNotice = { kind: 'created', dir: store.dir };
@@ -479,7 +495,10 @@ function ok(extra) {
 function fail(e) {
   const code = e && e.code;
   let error = 'Не получилось. Попробуйте ещё раз.';
-  if (code === 'EACCES' || code === 'EPERM') error = 'Windows не дал записать в папку с промтами. Проверьте, что папка не только для чтения.';
+  if (e && e.exportSource) error = 'Не удалось прочитать исходный файл «' + e.exportSource + '». Проверьте, что он на месте и доступен, и попробуйте ещё раз.';
+  else if (e && e.exportDestination && (code === 'EACCES' || code === 'EPERM')) error = 'Windows не дал сохранить файл в выбранную папку. Проверьте доступ к ней.';
+  else if (e && e.exportDestination && code === 'ENOENT') error = 'Выбранная папка недоступна. Проверьте, что диск подключён, и попробуйте ещё раз.';
+  else if (code === 'EACCES' || code === 'EPERM') error = 'Windows не дал записать в папку с промтами. Проверьте, что папка не только для чтения.';
   else if (code === 'ENOSPC') error = 'На диске закончилось место.';
   else if (code === 'ENOENT') error = 'Папка с промтами недоступна. Проверьте, что диск подключён.';
   else if (e && e.userMessage) error = e.userMessage;
@@ -488,10 +507,19 @@ function fail(e) {
 // fn runs with this = the IPC event, so a handler can see which window asked (this.sender).
 // When something changed, the other windows get the fresh data ('sync'), so all of them show the same.
 const NO_SYNC = new Set(['chat-image-save', 'chat-image-remove', 'chat-image-open', 'timer', 'load', 'update-state', 'set-tabs', 'side-width','chat-get', 'chat-list', 'assistant-send', 'assistant-stop', 'window-open', 'window-return', 'pick-files', 'pick-avatar', 'open-file', 'show-file', 'open-data-dir',
-  'media-pick', 'media-info', 'media-read', 'skill-pick', 'skill-inspect', 'skill-download', 'skill-reveal', 'chat-file-save', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get', 'recap-text', 'recap-pick-file']);
+  'media-pick', 'media-info', 'media-read', 'media-read-range', 'media-release', 'skill-pick', 'skill-inspect', 'skill-download', 'skill-reveal', 'chat-file-save', 'transcribe-piece', 'transcribe-diarize', 'transcript-list', 'transcript-get', 'recap-text', 'recap-pick-file']);
+let maintenance = null;
+async function withMaintenance(fn) {
+  while (maintenance) await maintenance;
+  let release;
+  maintenance = new Promise((resolve) => { release = resolve; });
+  try { return await fn(); }
+  finally { const done = release; maintenance = null; done(); }
+}
 function handle(name, fn) {
   ipcMain.handle(name, async (event, ...args) => {
     try {
+      while (maintenance) await maintenance;
       const r = await fn.apply(event, args);
       if (r && r.ok && !NO_SYNC.has(name) && liveWins().length > 1) syncOthers(r, event.sender);
       return r;
@@ -506,7 +534,7 @@ function syncOthers(r, except) {
   broadcast('sync', data, except);
 }
 function info() {
-  return { dataDir: store.dir, platform: process.platform, version: app.getVersion(), theme: currentTheme(), macAccent: macAccent(), macLook: macLook(), glass: glassOn(), captureShortcut: settings.captureShortcut || 'Alt+Z', captureNotice: captures ? captures.state().shortcutNotice : '', tabs: tabsSetting(), assistant: assistantInfo() };
+  return { dataDir: store.dir, dataWarnings: store.dataWarnings, settingsWarning: settingsWarning(), platform: process.platform, version: app.getVersion(), theme: currentTheme(), macAccent: macAccent(), macLook: macLook(), glass: glassOn(), captureShortcut: settings.captureShortcut || 'Alt+Z', captureNotice: captures ? captures.state().shortcutNotice : '', tabs: tabsSetting(), assistant: assistantInfo() };
 }
 
 handle('load', async () => {
@@ -592,6 +620,11 @@ handle('pick-avatar', async () => {
 // avatar: a data URL from pick-avatar, null to remove, undefined to keep the current one.
 handle('save-profile', async (input) => {
   const name = input && typeof input.name === 'string' ? input.name : undefined;
+  const expected = {};
+  if (input && input.expected && typeof input.expected === 'object') {
+    if (typeof input.expected.name === 'string') expected.name = input.expected.name;
+    if (typeof input.expected.avatar === 'string') expected.avatar = input.expected.avatar;
+  }
   let avatar;
   if (input && input.avatar === null) avatar = null;
   else if (input && typeof input.avatar === 'string') {
@@ -599,8 +632,8 @@ handle('save-profile', async (input) => {
     if (!m || m[1].length > 4 * 1024 * 1024) return { ok: false, error: 'Не получилось сохранить аватарку.' };
     avatar = Buffer.from(m[1], 'base64');
   }
-  await store.saveProfile({ name, avatar });
-  return ok();
+  const result = await store.saveProfile({ name, avatar, expected });
+  return ok({ profileSave: result });
 });
 
 handle('set-theme', async (theme) => {
@@ -693,24 +726,41 @@ handle('change-data-dir', async () => {
   });
   if (r.canceled || !r.filePaths[0]) return { ok: true, canceled: true };
   const dir = r.filePaths[0];
-  if (path.resolve(dir).toLowerCase() === path.resolve(store.dir).toLowerCase()) return { ok: true, canceled: true };
-  await captures.pause();
-  try {
-  let mode;
-  if (await hasData(dir)) {
-    mode = 'opened';
-  } else {
-    await store.queue;
-    await copyDataTo(store.dir, dir);
-    mode = 'copied';
+  if (sameDir(dir, store.dir)) {
+    // When a disconnected folder forced a temporary fallback, choosing this folder explicitly makes it permanent.
+    if (!settings.dataDir || sameDir(settings.dataDir, dir)) return { ok: true, canceled: true };
+    const previousSetting = settings.dataDir;
+    settings.dataDir = dir;
+    if (!saveSettings(true)) {
+      settings.dataDir = previousSetting;
+      return { ok: false, error: 'Не получилось запомнить эту папку. Проверьте доступ и свободное место, затем попробуйте ещё раз.' };
+    }
+    return ok({ info: info(), mode: 'opened', oldDir: store.dir });
   }
-  const next = await new Store(dir, { trash }).init(SEED);
-  const oldDir = store.dir;
-  store = next;
-  settings.dataDir = dir;
-  saveSettings(true);
-  return ok({ info: info(), mode, oldDir });
-  } finally { captures.resume(); }
+  return withMaintenance(async () => {
+    await captures.pause();
+    try {
+      return await store.run(async () => {
+        let mode;
+        if (await hasData(dir)) {
+          mode = 'opened';
+        } else {
+          await copyDataTo(store.dir, dir);
+          mode = 'copied';
+        }
+        const next = await new Store(dir, { trash }).init(SEED);
+        const oldDir = store.dir;
+        const previousSetting = settings.dataDir;
+        settings.dataDir = dir;
+        if (!saveSettings(true)) {
+          settings.dataDir = previousSetting;
+          throw userError('Не получилось запомнить новую папку. Прежняя папка остаётся открытой; проверьте доступ и свободное место, затем попробуйте ещё раз.');
+        }
+        store = next;
+        return ok({ info: info(), mode, oldDir });
+      });
+    } finally { captures.resume(); }
+  });
 });
 
 /* ---------- backup and sharing ---------- */
@@ -733,16 +783,21 @@ handle('backup-export', async () => {
     filters: [{ name: 'Резервная копия Snowball.ai', extensions: [BACKUP_EXT] }]
   });
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
-  await store.queue;
-  const pack = store.packEntries('backup', null);
-  await captures.flush();
-  const shots = await captures.backup();
-  pack.entries.push(...shots.entries);
-  pack.counts.screenshots = shots.count;
-  const look = {};
-  SETTINGS_IN_BACKUP.forEach((k) => { if (settings[k] !== undefined) look[k] = settings[k]; });
-  await writeZip(r.filePath, [manifest('backup', pack.counts)].concat(pack.entries, [{ name: 'settings.json', data: JSON.stringify(look, null, 2) }]));
-  return { ok: true, path: r.filePath, counts: pack.counts };
+  return withMaintenance(async () => {
+    await captures.pause();
+    try {
+      return await store.run(async () => {
+        const pack = store.packEntries('backup', null);
+        const shots = await captures.backup();
+        pack.entries.push(...shots.entries);
+        pack.counts.screenshots = shots.count;
+        const look = {};
+        SETTINGS_IN_BACKUP.forEach((k) => { if (settings[k] !== undefined) look[k] = settings[k]; });
+        await writeZip(r.filePath, [manifest('backup', pack.counts)].concat(pack.entries, [{ name: 'settings.json', data: JSON.stringify(look, null, 2) }]));
+        return { ok: true, path: r.filePath, counts: pack.counts, missing: pack.missing };
+      });
+    } finally { captures.resume(); }
+  });
 });
 
 // ids: the prompts to share; empty or missing — all of them.
@@ -756,10 +811,11 @@ handle('prompts-export', async (ids) => {
     filters: [{ name: 'Промты Snowball.ai', extensions: [SHARE_EXT] }]
   });
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
-  await store.queue;
-  const pack = store.packEntries('share', list);
-  await writeZip(r.filePath, [manifest('share', pack.counts)].concat(pack.entries));
-  return { ok: true, path: r.filePath, counts: pack.counts };
+  return withMaintenance(() => store.run(async () => {
+    const pack = store.packEntries('share', list);
+    await writeZip(r.filePath, [manifest('share', pack.counts)].concat(pack.entries));
+    return { ok: true, path: r.filePath, counts: pack.counts, missing: pack.missing };
+  }));
 });
 
 // Opens a .snowball or .snowprompt file: unpacks it to a temporary folder, asks before adding anything,
@@ -791,21 +847,29 @@ async function openArchive(file) {
     }
     const answer = await dialog.showMessageBox(activeWin(), { type: 'question', buttons: [kind === 'backup' ? 'Восстановить' : 'Добавить', 'Отмена'], defaultId: 0, cancelId: 1, title: APP_TITLE, message, detail, noLink: true });
     if (answer.response !== 0) return { ok: true, canceled: true };
-    const res = await store.mergeFrom(tmp, kind);
-    if (kind === 'backup') {
-      res.screenshots = await captures.merge(path.join(tmp, 'screenshots'));
-      let look = null;
-      try { look = JSON.parse(await fsp.readFile(path.join(tmp, 'settings.json'), 'utf8')); } catch (e) { look = null; }
-      if (look && typeof look === 'object') {
-        SETTINGS_IN_BACKUP.forEach((k) => { if (look[k] !== undefined) settings[k] = look[k]; });
-        migrateTheme(settings);
-        if (!THEMES.includes(settings.theme)) settings.theme = 'system';
-        applyTheme();
-        paintWindows();
-        saveSettings(true);
+    try {
+      const res = await store.mergeFrom(tmp, kind);
+      if (kind === 'backup') {
+        res.screenshots = await captures.merge(path.join(tmp, 'screenshots'));
+        let look = null;
+        try { look = JSON.parse(await fsp.readFile(path.join(tmp, 'settings.json'), 'utf8')); } catch (e) { look = null; }
+        if (look && typeof look === 'object') {
+          SETTINGS_IN_BACKUP.forEach((k) => { if (look[k] !== undefined) settings[k] = look[k]; });
+          migrateTheme(settings);
+          if (!THEMES.includes(settings.theme)) settings.theme = 'system';
+          applyTheme();
+          paintWindows();
+          saveSettings(true);
+        }
       }
+      return ok({ kind, result: res, info: info() });
+    } catch (e) {
+      // A previous section may already be saved. Refresh every window before reporting the interruption.
+      syncOthers(ok({ chats: store.chatList(), transcripts: store.transcriptList() }), null);
+      const result = fail(e);
+      result.error += ' Часть данных могла уже добавиться. Исправьте причину и загрузите этот файл ещё раз: уже добавленные данные будут пропущены.';
+      return result;
     }
-    return ok({ kind, result: res, info: info() });
   } finally {
     fsp.rm(tmp, { recursive: true, force: true }).catch(() => {});
   }
@@ -1417,10 +1481,28 @@ const MAX_TOOL_ROUNDS = 6;
 
 const keyPath = (provider) => path.join(app.getPath('userData'), PROVIDERS[provider].file);
 const keys = { openai: null, anthropic: null };
+const keyWarnings = { openai: false, anthropic: false };
+const keyGenerations = { openai: 0, anthropic: 0 };
+const keyQueues = { openai: Promise.resolve(), anthropic: Promise.resolve() };
+function runKeyMutation(provider, fn) {
+  const next = keyQueues[provider].then(fn, fn);
+  keyQueues[provider] = next.catch(() => {});
+  return next;
+}
+function keyStorageNeedsNormalClose() {
+  if (!IS_WIN) return false;
+  try {
+    const localState = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'Local State'), 'utf8'));
+    return !(localState && localState.os_crypt && typeof localState.os_crypt.encrypted_key === 'string' && localState.os_crypt.encrypted_key);
+  } catch (e) { return true; }
+}
 
 function loadKeys() {
   Object.keys(PROVIDERS).forEach((pr) => {
-    try { keys[pr] = safeStorage.decryptString(fs.readFileSync(keyPath(pr))) || null; } catch (e) { keys[pr] = null; }
+    try {
+      keys[pr] = safeStorage.decryptString(fs.readFileSync(keyPath(pr))) || null;
+      keyWarnings[pr] = !keys[pr];
+    } catch (e) { keys[pr] = null; keyWarnings[pr] = e.code !== 'ENOENT'; }
   });
 }
 const modelById = (id) => MODELS.find((m) => m.id === id) || null;
@@ -1483,6 +1565,8 @@ function assistantInfo() {
   return {
     hasKey: !!(keys.openai || keys.anthropic),
     keys: { openai: !!keys.openai, anthropic: !!keys.anthropic },
+    keyWarnings: { openai: keyWarnings.openai, anthropic: keyWarnings.anthropic },
+    keyStorageNeedsClose: !!(keys.openai || keys.anthropic) && keyStorageNeedsNormalClose(),
     model: currentModel().id, effort: currentEffort(), models: MODELS, efforts: EFFORTS, quickModel: (quickModel() || {}).id || null,
     spend: spendInfo(), notify: settings.notify !== false, confirm: settings.confirm !== false,
     prices: PRICES, fixedChars: SYSTEM_PROMPT.length + JSON.stringify(TOOLS).length + 200
@@ -1569,7 +1653,7 @@ async function* openaiSource(model, messages, signal, opts) {
         throw userError('Ответ получился слишком длинным и оборвался. Попросите продолжить или сократить.');
       } else if (event.type === 'response.failed' || event.type === 'error') {
         const err = event.type === 'error' ? event : (event.response && event.response.error) || {};
-        console.error('openai stream', err.code, err.message);
+        console.error('openai stream', err.code);
         if (/rate_limit/.test(err.code || '')) throw userError('Слишком много запросов подряд. Подождите минуту и попробуйте ещё раз.');
         if (OPENAI_BILLING.includes(err.code)) throw userError('На счёте OpenAI закончились деньги или достигнут лимит трат. Проверьте баланс на platform.openai.com в разделе Billing.');
         throw userError('ChatGPT не смог ответить. Попробуйте ещё раз.');
@@ -1682,14 +1766,15 @@ function notifyAnswer(text, failed, wc) {
   if (w && !w.isDestroyed()) w.flashFrame(true);
 }
 
-// Reads the pictures of the conversation for the request: { media, data (base64) } in m.imgs. A missing file is skipped.
+// Reads the pictures of the conversation for the request: { media, data (base64) } in m.imgs.
 // Skill files of a message (m.docs) become text: the list of files and the main Markdown, with the reference for skill_add.
 async function withImages(messages) {
   return Promise.all(messages.map(async (m) => {
     if (!m.files && !m.docs) return m;
     const imgs = [];
     for (const f of m.files || []) {
-      try { imgs.push({ media: /\.png$/i.test(f) ? 'image/png' : 'image/jpeg', data: (await fsp.readFile(f)).toString('base64') }); } catch (e) { /* deleted meanwhile */ }
+      try { imgs.push({ media: /\.png$/i.test(f) ? 'image/png' : 'image/jpeg', data: (await fsp.readFile(f)).toString('base64') }); }
+      catch (e) { throw userError('Не удалось прочитать картинку из разговора. Верните файл в папку данных или начните новый разговор и прикрепите картинку заново.'); }
     }
     const docs = [];
     for (const d of m.docs || []) docs.push(await docText(d));
@@ -1719,9 +1804,9 @@ const IMAGE_ONLY_TEXT = 'Посмотри на картинку.';
 
 async function runAssistant(id, messages, controller, quick) {
   const source = pickSource(quick);
-  try { messages = await withImages(messages); } catch (e) { /* send the text alone */ }
   let full = '';
   try {
+    messages = await withImages(messages);
     for await (const piece of source(messages, controller.signal)) {
       if (controller.signal.aborted) break;
       if (piece.type === 'text') { full += piece.text; sendAssistant({ id, kind: 'delta', text: piece.text }); }
@@ -1822,8 +1907,8 @@ const TRANSCRIBE_MODELS = { 'gpt-4o-mini-transcribe': 0.003, 'gpt-transcribe': 0
 const DIARIZE_MODEL = 'gpt-4o-transcribe-diarize';
 const MEDIA_EXT = ['mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', '3gp', 'mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac'];
 const AUDIO_ONLY = ['mp3', 'm4a', 'wav', 'ogg', 'opus', 'flac', 'aac'];
-const MEDIA_MAX = 2 * 1024 * 1024 * 1024;   // the window holds the whole file while it takes the sound out
-const mediaAllowed = new Set();   // only files the user picked or dropped can be read
+const MEDIA_FULL_READ_MAX = 2 * 1024 * 1024 * 1024; // the fallback decoder must hold the complete file in memory
+const mediaAllowed = new Map();   // one snapshot per selection, so selecting the same file elsewhere cannot replace it
 function mediaInfo(file) {
   file = String(file || '');
   const ext = path.extname(file).slice(1).toLowerCase();
@@ -1831,10 +1916,11 @@ function mediaInfo(file) {
   let st;
   try { st = fs.statSync(file); } catch (e) { return { ok: false, error: 'Файл не открылся: возможно, его переместили или удалили.' }; }
   if (!st.isFile()) return { ok: false, error: 'Это папка, а нужен файл.' };
-  if (st.size > MEDIA_MAX) return { ok: false, error: 'Файл больше 2 ГБ. Сохраните из него только звук (например, в mp3) и расшифруйте его.' };
-  mediaAllowed.add(file);
+  if (!Number.isSafeInteger(st.size)) return { ok: false, error: 'Не получилось определить размер файла.' };
+  const token = crypto.randomUUID();
+  mediaAllowed.set(token, { file, size: st.size, mtimeMs: st.mtimeMs });
   const { pathToFileURL } = require('url');
-  return { ok: true, file, name: path.basename(file), size: st.size, kind: AUDIO_ONLY.includes(ext) ? 'audio' : 'video', url: pathToFileURL(file).href };
+  return { ok: true, file, token, name: path.basename(file), size: st.size, kind: AUDIO_ONLY.includes(ext) ? 'audio' : 'video', url: pathToFileURL(file).href };
 }
 handle('media-pick', async function () {
   const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
@@ -1844,10 +1930,44 @@ handle('media-pick', async function () {
   return mediaInfo(r.filePaths[0]);
 });
 handle('media-info', async (file) => mediaInfo(file));
-handle('media-read', async (file) => {
-  if (!mediaAllowed.has(String(file))) return { ok: false, error: 'Выберите файл ещё раз.' };
+handle('media-release', async (token) => { mediaAllowed.delete(String(token)); return { ok: true }; });
+handle('media-read', async (file, token) => {
+  const expected = mediaAllowed.get(String(token));
+  if (!expected || expected.file !== String(file)) return { ok: false, error: 'Выберите файл ещё раз.' };
+  const st = await fsp.stat(file);
+  if (st.size !== expected.size || st.mtimeMs !== expected.mtimeMs) return { ok: false, error: 'Файл изменился. Выберите его ещё раз.' };
+  if (st.size > MEDIA_FULL_READ_MAX) return { ok: false, error: 'Этот файл не получилось прочитать по частям. Сохраните звук отдельно в MP3 или WAV и выберите его.' };
   const buf = await fsp.readFile(file);
-  return { ok: true, data: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length) };
+  const after = await fsp.stat(file);
+  if (after.size !== expected.size || after.mtimeMs !== expected.mtimeMs) return { ok: false, error: 'Файл изменился во время чтения. Выберите его снова.' };
+  // Large readFile buffers normally own their ArrayBuffer: avoid allocating a second copy before IPC.
+  const data = buf.byteOffset === 0 && buf.byteLength === buf.buffer.byteLength ? buf.buffer : buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+  return { ok: true, data };
+});
+// Read a bounded part of a chosen file; used by the streaming decoder without loading the whole video into memory.
+handle('media-read-range', async (file, token, start, end) => {
+  const expected = mediaAllowed.get(String(token));
+  if (!expected || expected.file !== String(file)) return { ok: false, error: 'Выберите файл ещё раз.' };
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end - start > 8 * 1024 * 1024)
+    return { ok: false, error: 'Не получилось прочитать часть файла.' };
+  const handle = await fsp.open(file, 'r');
+  try {
+    const st = await handle.stat(), size = st.size;
+    if (st.size !== expected.size || st.mtimeMs !== expected.mtimeMs)
+      return { ok: false, error: 'Файл изменился во время чтения. Выберите его снова.' };
+    if (end > size) return { ok: false, error: 'Файл изменился во время чтения. Выберите его снова.' };
+    const buffer = Buffer.allocUnsafeSlow(end - start);
+    let offset = 0;
+    while (offset < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.length - offset, start + offset);
+      if (!bytesRead) return { ok: false, error: 'Файл изменился во время чтения. Выберите его снова.' };
+      offset += bytesRead;
+    }
+    const after = await handle.stat();
+    if (after.size !== expected.size || after.mtimeMs !== expected.mtimeMs)
+      return { ok: false, error: 'Файл изменился во время чтения. Выберите его снова.' };
+    return { ok: true, data: buffer.buffer };
+  } finally { await handle.close(); }
 });
 // One piece of speech (a 16 kHz WAV made by the window) → text. prompt: what was said just before, so a short piece
 // keeps its meaning (only the text: an instruction there gets copied into the answer on an almost silent piece).
@@ -1913,7 +2033,10 @@ handle('transcript-delete', async (id) => {
   const gone = await store.deleteTranscript(id);
   return ok({ removed: gone, transcripts: store.transcriptList() });
 });
-handle('transcript-restore', async (t) => { await store.putTranscript(t); return ok({ transcripts: store.transcriptList() }); });
+handle('transcript-restore', async (t) => {
+  const restored = await store.putTranscript(t);
+  return restored ? ok({ transcripts: store.transcriptList() }) : { ok: false, error: 'Эта расшифровка уже есть в истории.' };
+});
 
 // «Кратко»: a couple of sentences about the main thing and the main points. Made only on request.
 const TRANSCRIPT_SUMMARY_PROMPT = [
@@ -1933,6 +2056,7 @@ handle('transcript-summary', async (id) => {
   const model = modelById('gpt-6.1-sol');
   const client = new OpenAI({ apiKey: keys.openai });
   const controller = new AbortController();
+  let recovery = null;
   try {
     const r = await client.responses.create({
       model: model.id, instructions: TRANSCRIPT_SUMMARY_PROMPT, input: 'Файл: «' + t.name + '».\n\n' + t.text.slice(0, 400000),
@@ -1943,12 +2067,14 @@ handle('transcript-summary', async (id) => {
     if (r.status === 'incomplete') return { ok: false, error: 'Ответ оборвался. Попробуйте ещё раз.' };
     let summary;
     try { summary = JSON.parse(r.output_text || ''); } catch (e) { return { ok: false, error: 'Модель ответила не так, как нужно. Попробуйте ещё раз.' }; }
-    const saved = await store.saveTranscript({ id: t.id, summary });
+    if (!summary || typeof summary.brief !== 'string' || !Array.isArray(summary.points)) return { ok: false, error: 'Модель ответила не так, как нужно. Попробуйте ещё раз.' };
+    recovery = { id: t.id, summary, expectedFields: { text: JSON.stringify(t.text), summary: JSON.stringify(t.summary) }, cost: runCost.get(controller.signal) || 0 };
+    const saved = await store.saveTranscript(recovery);
     await store.recordTranscribe();
     return ok({ transcript: saved, transcripts: store.transcriptList(), cost: runCost.get(controller.signal) || 0, info: info() });
   } catch (e) {
     console.error('transcript summary', e && e.status, e && (e.code || e.type));
-    return { ok: false, error: modelError(e) || 'Краткое содержание не получилось. Попробуйте ещё раз.' };
+    return { ok: false, error: e.userMessage || (recovery ? fail(e).error : modelError(e)) || 'Краткое содержание не получилось. Попробуйте ещё раз.', recovery };
   }
 });
 // Text or timings copied: counts in the statistics like copying a prompt.
@@ -1970,7 +2096,7 @@ handle('transcript-export', async function (id, kind, content) {
   });
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
   // A BOM so that old Windows programs read Russian letters right; editors for subtitles understand it too.
-  await fsp.writeFile(r.filePath, '﻿' + String(content || '').replace(/\r?\n/g, '\r\n'), 'utf8');
+  await exportBytes(r.filePath, '﻿' + String(content || '').replace(/\r?\n/g, '\r\n'));
   await store.recordTranscribe();
   return ok({ path: r.filePath });
 });
@@ -2495,17 +2621,38 @@ async function recapData(model, input, signal) {
   return b.input;
 }
 // o: { eventId (the event to put it on, or none for a new one), date (for a new event), text, name (where the text is from) }
+const unsavedRecaps = new Map();
+async function saveGeneratedRecap(p) {
+  let ev;
+  if (p.eventId) {
+    ev = await store.setRecap(p.eventId, p.recap, p.expected);
+    if (!ev) throw userError('Этого дела уже нет в календаре.');
+  } else {
+    ev = await store.saveEvent({ date: p.day, from: p.from, to: '', who: p.who, title: p.title || 'Созвон', kind: 'call', note: '', remind: 0, recap: p.recap });
+  }
+  return ok({ eventId: ev.id, date: ev.date, created: !p.eventId, cost: p.recap.cost, info: info() });
+}
+function recapRecoveryText(r) {
+  const lines = [];
+  if (r.brief) lines.push(String(r.brief));
+  if (Array.isArray(r.decisions) && r.decisions.length) lines.push('Решили:\n' + r.decisions.map((x) => '— ' + x).join('\n'));
+  if (Array.isArray(r.steps) && r.steps.length) lines.push('Следующие шаги:\n' + r.steps.filter(Boolean).map((x) => '— ' + (x.t || '') + (x.who ? ' (' + x.who + ')' : '') + (x.due ? ' до ' + x.due : '')).join('\n'));
+  if (Array.isArray(r.meets) && r.meets.length) lines.push('Новые созвоны:\n' + r.meets.filter(Boolean).map((x) => '— ' + (x.t || '') + (x.date ? ' ' + x.date : '') + (x.from ? ' ' + x.from : '')).join('\n'));
+  return lines.join('\n\n');
+}
 async function makeRecap(o) {
   const text = String(o.text || '').trim().slice(0, 400000);
   if (!text) return { ok: false, error: 'Вставьте текст итогов или выберите файл.' };
   let ev = o.eventId ? store.findEvent(String(o.eventId)) : null;
   if (o.eventId && !ev) return { ok: false, error: 'Этого дела уже нет в календаре.' };
+  const expectedRecap = ev ? store.recapRevision(ev.id) : null;
   const model = recapModel();
   if (!model) return { ok: false, error: 'Чтобы разобрать итоги, нужен ключ ChatGPT или Claude: «Настройки» → «API-ключи».' };
   const day = ev ? ev.date : (DATE_ONLY.test(String(o.date || '')) ? o.date : dayKeyOf(new Date()));
   const nick = store.profileView().name || 'не указан';
   const input = 'День созвона: ' + day + '.' + (ev ? ' Дело в календаре: «' + eventName(ev) + '».' : '') + ' Ник пользователя: ' + nick + '.\n\nТекст:\n' + text;
   const controller = new AbortController();
+  let generated = null;
   try {
     store.recordAssistant();
     const d = await recapData(model, input, controller.signal);
@@ -2513,25 +2660,42 @@ async function makeRecap(o) {
       brief: d.brief, decisions: d.decisions, steps: d.steps, meets: d.meets,
       source: String(o.name || '').slice(0, 200) || 'Вставленный текст', text, cost: runCost.get(controller.signal) || 0, madeAt: Date.now()
     };
-    if (!ev) {
-      const d2 = new Date();
-      ev = await store.saveEvent({ date: day, from: pad2(d2.getHours()) + ':' + pad2(Math.floor(d2.getMinutes() / 10) * 10), to: '', who: d.who, title: d.title || 'Созвон', kind: 'call', note: '', remind: 0 });
-    }
-    await store.setRecap(ev.id, recap);
-    return ok({ eventId: ev.id, date: ev.date, created: !o.eventId, cost: recap.cost, info: info() });
+    const d2 = new Date();
+    generated = { eventId: ev ? ev.id : '', expected: expectedRecap, day, from: pad2(d2.getHours()) + ':' + pad2(Math.floor(d2.getMinutes() / 10) * 10), who: d.who, title: d.title, recap };
+    return await saveGeneratedRecap(generated);
   } catch (e) {
     if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('recap', e.status, e.code || e.type);
     else if (!e.userMessage) console.error('recap', e);
-    return { ok: false, error: e.userMessage || modelError(e) || 'Итоги не получились. Попробуйте ещё раз.' };
+    let recovery = null;
+    if (generated) {
+      const id = crypto.randomBytes(16).toString('hex');
+      unsavedRecaps.set(id, generated);
+      recovery = { id, text: recapRecoveryText(generated.recap) };
+    }
+    return { ok: false, error: e.userMessage || (generated ? fail(e).error : modelError(e)) || 'Итоги не получились. Попробуйте ещё раз.', recovery };
   }
 }
 handle('recap-make', (o) => makeRecap(o || {}));
+handle('recap-commit', async (id) => {
+  const pending = unsavedRecaps.get(String(id || ''));
+  if (!pending) return { ok: false, error: 'Эти итоги больше недоступны для сохранения.' };
+  if (pending.saving) return { ok: false, error: 'Итоги уже сохраняются.' };
+  pending.saving = true;
+  try {
+    const result = await saveGeneratedRecap(pending);
+    unsavedRecaps.delete(id);
+    return result;
+  } finally { pending.saving = false; }
+});
 handle('recap-remake', (eventId) => {
   const ev = store.findEvent(String(eventId || ''));
   if (!ev || !ev.recap || !ev.recap.text) return { ok: false, error: 'У этого дела нет загруженного текста.' };
   return makeRecap({ eventId: ev.id, text: ev.recap.text, name: ev.recap.source });
 });
-handle('recap-update', async (eventId, recap) => { await store.setRecap(String(eventId || ''), recap && typeof recap === 'object' ? recap : null); return ok(); });
+handle('recap-update', async (eventId, recap, expected) => {
+  const saved = await store.setRecap(String(eventId || ''), recap && typeof recap === 'object' ? recap : null, expected);
+  return saved ? ok() : { ok: false, error: 'Этого дела уже нет в календаре.' };
+});
 handle('recap-text', async (eventId) => ({ ok: true, text: store.recapText(String(eventId || '')) }));
 handle('recap-pick-file', async function () {
   const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(this.sender) || activeWin(), {
@@ -2664,8 +2828,13 @@ handle('chat-get', async (id) => {
   return chat ? { ok: true, chat } : { ok: false, error: 'Этот разговор не найден. Возможно, его удалили.' };
 });
 handle('chat-save', async (chat) => {
-  const saved = await store.saveChat(chat);
-  return { ok: true, chats: store.chatList(), id: saved && saved.id };
+  try {
+    const saved = await store.saveChat(chat);
+    return { ok: true, chats: store.chatList(), id: saved && saved.id, updatedAt: saved && saved.updatedAt };
+  } catch (e) {
+    if (e.code === 'CHAT_CONFLICT') return { ok: false, conflict: true };
+    throw e;
+  }
 });
 handle('chat-delete', async (id) => { await store.deleteChat(id); return { ok: true, chats: store.chatList() }; });
 
@@ -2732,8 +2901,9 @@ async function describeSkill(id, keepType) {
     const desc = String(d.desc || '').trim();
     if (!desc) throw userError('Модель не написала описание. Попробуйте ещё раз.');
     const cost = runCost.get(controller.signal) || 0;
-    const fields = { id: s.id, desc, descBy: model.id, descCost: cost, descAt: Date.now() };
+    const fields = { id: s.id, desc, descBy: model.id, descCost: cost, descAt: Date.now(), expectedFields: { desc: JSON.stringify(s.desc) } };
     if (!keepType && SKILL_TYPES.includes(d.type)) fields.type = d.type;
+    if (fields.type !== undefined) fields.expectedFields.type = JSON.stringify(s.type);
     await store.saveSkill(fields);
     return ok({ skillId: s.id, cost, info: info() });
   } catch (e) {
@@ -2777,6 +2947,10 @@ handle('skill-describe', (id, keepType) => describeSkill(id, !!keepType));
 handle('skill-save', async (o) => {
   const s = o && typeof o === 'object' ? o : {};
   const fields = { id: String(s.id || '') };
+  if (s.expectedFields && typeof s.expectedFields === 'object') {
+    fields.expectedFields = {};
+    ['title', 'type', 'desc'].forEach((key) => { if (typeof s.expectedFields[key] === 'string') fields.expectedFields[key] = s.expectedFields[key]; });
+  }
   if (typeof s.title === 'string') fields.title = s.title;
   if (typeof s.type === 'string') fields.type = s.type;
   if (typeof s.desc === 'string') Object.assign(fields, { desc: s.desc, descBy: s.desc.trim() ? 'manual' : '', descCost: 0, descAt: Date.now() });
@@ -2784,7 +2958,10 @@ handle('skill-save', async (o) => {
   if (!saved) return { ok: false, error: 'Этого скилла уже нет.' };
   return ok();
 });
-handle('skill-delete', async (id) => { await store.deleteSkill(String(id || '')); return ok(); });
+handle('skill-delete', async (id) => {
+  const result = await store.deleteSkill(String(id || ''));
+  return ok({ skillFileStatus: result && result.fileStatus });
+});
 // «Скачать»: the original .md or archive, exactly as it was added.
 handle('skill-download', async function (id) {
   const s = store.findSkill(String(id || ''));
@@ -2797,7 +2974,7 @@ handle('skill-download', async function (id) {
     filters: [{ name: s.file.kind !== 'md' ? 'Архив скилла' : 'Скилл', extensions: [ext] }]
   });
   if (r.canceled || !r.filePath) return { ok: true, canceled: true };
-  await fsp.copyFile(file, r.filePath);
+  await exportFile(file, r.filePath);
   skillDownloads.set(s.id, r.filePath);
   return { ok: true, path: r.filePath };
 });
@@ -2816,6 +2993,7 @@ handle('chat-file-save', async (chatId, name, bytes) => {
 });
 
 // Makes the change a card describes. Returns what is needed to undo it.
+const eventActionSignature = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
 async function applyAction(action) {
   if (action.kind === 'create-prompt') {
     const r = await store.savePrompt({ item: { title: action.title, type: action.category, text: action.text } });
@@ -2827,11 +3005,11 @@ async function applyAction(action) {
   }
   if (action.kind === 'calendar-update') {
     if (!store.findEvent(action.prev.id)) throw userError('Этого дела уже нет в календаре.');
-    const ev = await store.saveEvent(Object.assign({}, action.event, { id: action.prev.id }));
+    const ev = await store.saveEvent(Object.assign({}, action.event, { id: action.prev.id, expectedAction: eventActionSignature(action.prev) }));
     return { undo: { restore: action.prev }, extra: { date: ev.date } };
   }
   if (action.kind === 'calendar-delete') {
-    const gone = await store.deleteEvent(action.event.id);
+    const gone = await store.deleteEvent(action.event.id, eventActionSignature(action.event));
     if (!gone) throw userError('Этого дела уже нет в календаре.');
     return { undo: { restore: gone }, extra: { date: gone.date } };
   }
@@ -2841,11 +3019,11 @@ async function applyAction(action) {
   }
   if (action.kind === 'task-update') {
     if (!store.findTask(action.prevTask.id)) throw userError('Этой задачи уже нет на доске.');
-    const t = await store.saveTask(Object.assign({ id: action.prevTask.id, title: action.task.title, status: action.task.status }, taskFields(action.task)));
+    const t = await store.saveTask(Object.assign({ id: action.prevTask.id, title: action.task.title, status: action.task.status, expectedAction: JSON.stringify(action.prevTask) }, taskFields(action.task)));
     return { undo: { restoreTask: action.prevTask }, extra: { taskId: t.id } };
   }
   if (action.kind === 'task-delete') {
-    const gone = await store.deleteTask(action.task.id);
+    const gone = await store.deleteTask(action.task.id, JSON.stringify(action.task));
     if (!gone) throw userError('Этой задачи уже нет на доске.');
     return { undo: { restoreTask: gone }, extra: {} };
   }
@@ -2870,17 +3048,23 @@ async function applyAction(action) {
 handle('assistant-decide', async (actionId, accept) => {
   const action = pending.get(actionId);
   if (!action) return { ok: false, error: 'Эта карточка устарела. Попросите ассистента ещё раз.' };
-  pending.delete(actionId);
-  if (!accept) return { ok: true };
-  const r = await applyAction(action);
-  return ok(r.extra);
+  if (action.busy) return { ok: false, error: 'Действие уже выполняется.' };
+  if (!accept) { pending.delete(actionId); return { ok: true }; }
+  action.busy = true;
+  try {
+    const r = await applyAction(action);
+    pending.delete(actionId);
+    return ok(r.extra);
+  } finally { action.busy = false; }
 });
 
 // "Отменить" on a card that was applied at once (confirmations off).
 handle('assistant-undo', async (actionId) => {
   const action = pending.get(actionId);
   if (!action || !action.undo) return { ok: false, error: 'Отменить уже нельзя: карточка устарела.' };
-  pending.delete(actionId);
+  if (action.busy) return { ok: false, error: 'Отмена уже выполняется.' };
+  action.busy = true;
+  try {
   const u = action.undo;
   if (u.promptId) await store.deletePrompt(u.promptId);
   if (u.eventId) await store.deleteEvent(u.eventId);
@@ -2893,7 +3077,9 @@ handle('assistant-undo', async (actionId) => {
     if (!s || s.updatedAt !== u.skillType.revision) throw userError('Скилл уже изменился. Верните прежнюю категорию вручную, если нужно.');
     await store.saveSkill({ id: s.id, type: u.skillType.before });
   }
+  pending.delete(actionId);
   return ok({ date: u.restore ? u.restore.date : undefined });
+  } finally { action.busy = false; }
 });
 
 // key: a new key from the settings field, or empty to check the saved one. A new key is saved only if it works
@@ -2922,6 +3108,8 @@ handle('assistant-check-key', async (provider, key) => {
   if (fresh && provider === 'anthropic' && PROVIDERS.openai.keyRe.test(fresh)) return { ok: false, error: 'Это ключ OpenAI (ChatGPT). Вставьте его в поле ChatGPT выше.' };
   if (fresh && !pr.keyRe.test(fresh)) return { ok: false, error: pr.keyHint };
   if (fresh && !safeStorage.isEncryptionAvailable()) return { ok: false, error: 'Windows не дал зашифровать ключ, поэтому он не сохранён.' };
+  if (fresh && keyWarnings[provider]) return { ok: false, error: 'Сохранённый ключ не удалось прочитать. Он оставлен на месте; чтобы заменить его, сначала удалите старый ключ кнопкой ниже.' };
+  const generation = fresh ? ++keyGenerations[provider] : keyGenerations[provider];
   let warning = null;
   try {
     await tryKey(provider, k);
@@ -2932,19 +3120,36 @@ handle('assistant-check-key', async (provider, key) => {
     if (!isBilling(e)) { console.error('check-key', provider, e && e.status, e && e.code); return { ok: false, error: modelError(e) || 'Не получилось проверить ключ. Попробуйте ещё раз.' }; }
     warning = modelError(e);
   }
-  if (fresh) {
-    await fsp.mkdir(path.dirname(keyPath(provider)), { recursive: true });
-    await fsp.writeFile(keyPath(provider), safeStorage.encryptString(fresh));
-    keys[provider] = fresh;
-  }
-  return { ok: true, saved: !!fresh, warning, info: info() };
+  return runKeyMutation(provider, async () => {
+    if (generation !== keyGenerations[provider] || (!fresh && keys[provider] !== k)) return { ok: false, error: 'Ключ изменили или удалили во время проверки. Проверьте его ещё раз.' };
+    if (fresh) {
+      let encrypted;
+      try { encrypted = safeStorage.encryptString(fresh); }
+      catch (e) { return { ok: false, error: 'Windows не дал зашифровать ключ, поэтому он не сохранён.' }; }
+      try {
+        await fsp.mkdir(path.dirname(keyPath(provider)), { recursive: true });
+        await exportBytes(keyPath(provider), encrypted);
+      } catch (e) {
+        return { ok: false, error: 'Не удалось сохранить новый ключ. ' + (keys[provider] ? 'Прежний ключ остался на месте. ' : '') + 'Проверьте свободное место и доступ к папке программы.' };
+      }
+      keys[provider] = fresh;
+      keyWarnings[provider] = false;
+    }
+    const keyStorageWarning = fresh && keyStorageNeedsNormalClose()
+      ? 'При первом сохранении ключа закройте программу обычным способом: она завершит сохранение данных шифрования. При внезапном сбое до этого ключ может не открыться.' : '';
+    return { ok: true, saved: !!fresh, warning, keyStorageWarning, info: info() };
+  });
 });
 
 handle('assistant-delete-key', async (provider) => {
   if (!PROVIDERS[provider]) return { ok: false, error: 'Неизвестный сервис.' };
-  await fsp.rm(keyPath(provider), { force: true });
-  keys[provider] = null;
-  return { ok: true, info: info() };
+  keyGenerations[provider]++;
+  return runKeyMutation(provider, async () => {
+    await fsp.rm(keyPath(provider), { force: true });
+    keys[provider] = null;
+    keyWarnings[provider] = false;
+    return { ok: true, info: info() };
+  });
 });
 
 // amount: dollars the user put on the account (counting restarts from now), or null to forget it.
@@ -3009,7 +3214,8 @@ if (!app.requestSingleInstanceLock()) {
   Menu.setApplicationMenu(null);
 
   app.whenReady().then(async () => {
-    loadSettings();
+    try { loadSettings(); }
+    catch (e) { dialog.showErrorBox(APP_TITLE, 'Не получилось прочитать или сохранить повреждённый файл настроек. Старый файл не изменён. Проверьте доступ к папке настроек и запустите программу снова.'); app.quit(); return; }
     if (settings.theme === 'zaklex') { migrateTheme(settings); saveSettings(true); }
     loadKeys();
     applyTheme();

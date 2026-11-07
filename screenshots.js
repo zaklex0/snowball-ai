@@ -15,6 +15,7 @@ const path = require('path');
 const fs = require('fs/promises');
 const crypto = require('crypto');
 const { ScreenshotStore, pngSize, validSize, cropRect, discardUndo } = require('./screenshot-store');
+const { exportBytes } = require('./safe-export');
 const SHORTCUTS = ['Alt+Z', 'Alt+V', 'Alt+B'];
 const shortcut = require('./src/capture-shortcut');
 // SNOWBALL_CAPTURE_TIMING=1 prints how long each step of a capture takes (tools/screenshot-timing.cjs reads it).
@@ -47,7 +48,7 @@ module.exports = function setupScreenshots(options) {
   });
   function check(t) {
     if (blocked || t !== token)
-      throw Error('Папка с данными изменилась. Откройте раздел «Снимки» заново.');
+      throw Error('Снимки временно недоступны. Попробуйте ещё раз после завершения операции с данными.');
   }
   function handle(name, fn, overlayOnly = false) {
     ipcMain.handle(name, async (e, ...args) => {
@@ -65,7 +66,10 @@ module.exports = function setupScreenshots(options) {
       try {
         return { ok: true, ...(await fn(w, ...args)) };
       } catch (e) {
-        return { ok: false, error: e.message || 'Не удалось выполнить действие со снимком.' };
+        const message = e && e.code === 'ENOSPC' ? 'На диске закончилось место.'
+          : e && (e.code === 'EACCES' || e.code === 'EPERM') ? 'Windows не дал сохранить файл. Проверьте доступ к папке.'
+          : e.message || 'Не удалось выполнить действие со снимком.';
+        return { ok: false, error: message };
       }
     });
   }
@@ -367,7 +371,7 @@ module.exports = function setupScreenshots(options) {
     } else if (!begin) endRecording();
     return state();
   });
-  handle('capture-list', async () => ({ ...state(), items: await storage.list() }));
+  handle('capture-list', async () => ({ ...state(), ...(await storage.listDetails()) }));
   handle('capture-guide', async () => {
     const main = windows().find((w) => !w.__snowCapture);
     if (main) {
@@ -409,14 +413,22 @@ module.exports = function setupScreenshots(options) {
     const entry = removed.get(undo);
     if (!entry || entry.token !== t || Date.now() > entry.expires)
       throw Error('Время отмены истекло. Снимок можно вернуть из корзины Windows.');
+    if (entry.restoring) throw Error('Снимок уже восстанавливается.');
+    entry.restoring = true;
     clearTimeout(entry.timer);
-    removed.delete(undo);
     try {
       const id = await entry.owner.restore(entry.record);
+      removed.delete(undo);
+      await discardUndo(entry.record.backup).catch(() => {});
       changed();
       return { id };
-    } finally {
-      await discardUndo(entry.record.backup);
+    } catch (error) {
+      entry.restoring = false;
+      entry.timer = setTimeout(() => {
+        removed.delete(undo);
+        discardUndo(entry.record.backup).catch(() => {});
+      }, Math.max(0, entry.expires - Date.now()));
+      throw error;
     }
   });
   handle('capture-copy', async (_w, id, t, bytes) => {
@@ -446,7 +458,19 @@ module.exports = function setupScreenshots(options) {
     });
     if (result.canceled || !result.filePath) return { canceled: true };
     check(t);
-    await fs.writeFile(result.filePath, Buffer.from(bytes));
+    await exportBytes(result.filePath, Buffer.from(bytes));
+    return {};
+  });
+  // Recovery remains available when the original was moved, deleted or cannot be saved.
+  handle('capture-recover', async (w, bytes) => {
+    pngSize(bytes);
+    const result = await dialog.showSaveDialog(w, {
+      title: 'Сохранить снимок с несохранёнными пометками',
+      defaultPath: 'Восстановленный снимок.png',
+      filters: [{ name: 'Изображение PNG', extensions: ['png'] }],
+    });
+    if (result.canceled || !result.filePath) return { canceled: true };
+    await exportBytes(result.filePath, Buffer.from(bytes));
     return {};
   });
   // The picture goes to the main window, which opens a new LLM tab with it (app.js, onCaptureLlm).

@@ -135,27 +135,50 @@ class ScreenshotStore {
       id,
     );
   }
-  async list() {
+  async listDetails() {
     await this.queue;
     let dirs;
     try {
       dirs = await fsp.readdir(this.root);
     } catch (e) {
-      if (e.code === 'ENOENT') return [];
+      if (e.code === 'ENOENT') return { items: [], broken: 0 };
       throw e;
     }
-    const out = [];
-    for (const id of dirs.filter((x) => ID.test(x))) {
+    const out = [], ids = dirs.filter((x) => ID.test(x));
+    let broken = 0, next = 0;
+    // Bound parallel reads: a large history should not wait for every file in turn.
+    const worker = async () => { while (next < ids.length) {
+      const id = ids[next++];
       try {
         const m = await this.read(id);
-        if (!fs.existsSync(path.join(this.folder(id), 'original.png'))) continue;
+        const stat = await fsp.stat(path.join(this.folder(id), 'original.png'));
+        if (!stat.isFile()) throw new Error('Missing original');
         const { ops, ...summary } = m;
         out.push(summary);
       } catch (e) {
-        /* One broken record must not hide the rest of the history. */
+        broken++;
       }
+    } };
+    await Promise.all(Array.from({ length: Math.min(16, ids.length) }, worker));
+    return { items: out.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id)), broken };
+  }
+  async list() { return (await this.listDetails()).items; }
+  // Create a new folder exclusively; on failure remove only the files created by this attempt.
+  async writeNew(id, bytes, meta) {
+    const folder = this.folder(id), written = [];
+    await fsp.mkdir(this.root, { recursive: true });
+    await fsp.mkdir(folder);
+    try {
+      for (const [name, data] of [['original.png', bytes], ['meta.json', JSON.stringify(meta)]]) {
+        const file = path.join(folder, name);
+        await atomic(file, data);
+        written.push(file);
+      }
+    } catch (e) {
+      for (const file of written.reverse()) await fsp.unlink(file).catch(() => {});
+      await fsp.rmdir(folder).catch(() => {});
+      throw e;
     }
-    return out.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id));
   }
   get(id) {
     return this.run(async () => ({
@@ -167,8 +190,7 @@ class ScreenshotStore {
     return this.run(async () => {
       const size = pngSize(bytes),
         id = 's' + crypto.randomBytes(16).toString('hex'),
-        now = Date.now(),
-        folder = this.folder(id);
+        now = Date.now();
       const m = normalize(
         {
           id,
@@ -183,9 +205,7 @@ class ScreenshotStore {
         },
         id,
       );
-      await fsp.mkdir(folder, { recursive: true });
-      await atomic(path.join(folder, 'original.png'), Buffer.from(bytes));
-      await atomic(path.join(folder, 'meta.json'), JSON.stringify(m));
+      await this.writeNew(id, Buffer.from(bytes), m);
       return m;
     });
   }
@@ -228,23 +248,19 @@ class ScreenshotStore {
   }
   restore(removed) {
     return this.run(async () => {
-      const target = this.folder(removed.id);
       const bytes = await fsp.readFile(path.join(removed.backup, 'original.png'));
       pngSize(bytes);
-      // mkdir without recursive refuses to overwrite an independently restored screenshot.
-      await fsp.mkdir(this.root, { recursive: true });
-      await fsp.mkdir(target);
-      await atomic(path.join(target, 'original.png'), bytes);
-      await atomic(
-        path.join(target, 'meta.json'),
-        JSON.stringify(normalize(removed.meta, removed.id)),
-      );
+      await this.writeNew(removed.id, bytes, normalize(removed.meta, removed.id));
       return removed.id;
     });
   }
   async backupEntries() {
-    const list = await this.list(),
-      entries = [];
+    const result = await this.listDetails(), list = result.items, entries = [];
+    if (result.broken) {
+      const e = new Error('Some screenshots cannot be read');
+      e.userMessage = 'Не удалось прочитать один или несколько снимков. Резервная копия не создана, чтобы не потерять их. Проверьте папку «Снимки» в папке данных.';
+      throw e;
+    }
     for (const m of list)
       for (const name of ['meta.json', 'original.png'])
         entries.push({
@@ -272,9 +288,7 @@ class ScreenshotStore {
           size = pngSize(bytes);
         if (size.width !== m.width || size.height !== m.height)
           throw new Error('Размер снимка в копии не совпадает с записью.');
-        await fsp.mkdir(target, { recursive: true });
-        await atomic(path.join(target, 'original.png'), bytes);
-        await atomic(path.join(target, 'meta.json'), JSON.stringify(m));
+        await this.writeNew(id, bytes, m);
         count++;
       }
       return count;

@@ -490,8 +490,13 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.capture-app .shot-conflict {
+.capture-app .shot-recovery {
   margin: 10px 14px;
+}
+.capture-app .shot-library-warning {
+  margin: 4px 12px 8px;
+  color: var(--danger);
+  font-size: 12px;
 }
 .capture-external body {
   height: 100vh;

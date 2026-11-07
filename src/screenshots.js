@@ -194,6 +194,7 @@
             Мои снимки
             <span class="shot-count">0</span>
           </strong>
+          <p class="shot-library-warning" role="status" hidden></p>
           <div class="shot-list"></div>
         </aside>
         <div class="shot-work">
@@ -267,7 +268,10 @@
             <canvas hidden aria-label="Снимок: рисуйте выбранным инструментом"></canvas>
             <div class="shot-brush-preview" hidden aria-hidden="true"></div>
           </div>
-          <button class="shot-conflict" hidden>Открыть сохранённую версию заново</button>
+          <div class="shot-recovery" hidden>
+            <button class="shot-recover">Сохранить снимок с пометками как файл…</button>
+            <button class="shot-conflict">Открыть сохранённую версию заново</button>
+          </div>
         </div>
       </div>
     `;
@@ -287,13 +291,17 @@
       run(async () => {
         const action = undoAction;
         if (!action) return;
-        undoAction = null;
-        clearTimeout(undoTimer);
-        undoToast.hidden = true;
-        const result = check(await api.captureRestore(action.undo, action.token));
-        await refresh();
-        await open(result.id);
-        status('Снимок восстановлен');
+        const button = undoToast.querySelector('button');
+        button.disabled = true;
+        try {
+          const result = check(await api.captureRestore(action.undo, action.token));
+          undoAction = null;
+          clearTimeout(undoTimer);
+          undoToast.hidden = true;
+          await refresh();
+          await open(result.id);
+          status('Снимок восстановлен');
+        } finally { button.disabled = false; }
       }),
     );
     let current = null,
@@ -478,13 +486,13 @@
           s.saved = generation;
           if (current === s) {
             status('Все пометки сохранены');
-            $('.shot-conflict').hidden = true;
+            $('.shot-recovery').hidden = true;
           }
         }
         return true;
       })()
         .catch((e) => {
-          if (current === s) $('.shot-conflict').hidden = false;
+          if (current === s) $('.shot-recovery').hidden = false;
           throw e;
         })
         .finally(() => {
@@ -584,7 +592,7 @@
         sizeCanvas(current);
         $('.shot-blur').value = item.blur;
         $('.shot-blur-out').textContent = item.blur + '%';
-        $('.shot-conflict').hidden = true;
+        $('.shot-recovery').hidden = true;
         render();
         fitCanvas();
         status(canvas.width + ' × ' + canvas.height + ' · Пометки сохраняются автоматически');
@@ -598,8 +606,10 @@
         r = check(await api.captureList());
       if (seq !== refreshSeq) return;
       if (token && token !== r.token) {
-        if (current && current.generation !== current.saved)
+        if (current && (current.generation !== current.saved || textEdit)) {
+          $('.shot-recovery').hidden = false;
           throw Error('Папка изменилась. Сначала завершите правку снимка.');
+        }
         current = null;
         loading++;
       }
@@ -607,8 +617,15 @@
       items = r.items;
       keyState(r);
       $('.shot-count').textContent = items.length;
+      const warning = $('.shot-library-warning');
+      warning.hidden = !r.broken;
+      warning.textContent = r.broken ? 'Некоторые снимки не удалось прочитать. Проверьте папку «Снимки» в папке данных.' : '';
       const ids = new Set(items.map((s) => s.id));
       if (current && !ids.has(current.id)) {
+        if (current.generation !== current.saved || textEdit) {
+          $('.shot-recovery').hidden = false;
+          throw Error('Снимок недоступен. Несохранённые пометки оставлены на экране.');
+        }
         current = null;
         drawing = null;
         cropSelection = null;
@@ -966,6 +983,16 @@
       run(async () => {
         if (current && window.confirm('Заменить несохранённые пометки версией с диска?'))
           await open(current.id, true);
+      }),
+    );
+    $('.shot-recover').addEventListener('click', () =>
+      run(async () => {
+        if (!current) return;
+        finishText();
+        const blob = await new Promise((resolve) => rendered(current).toBlob(resolve, 'image/png'));
+        if (!blob) throw Error('Не удалось подготовить изображение.');
+        const result = check(await api.captureRecover(new Uint8Array(await blob.arrayBuffer())));
+        if (!result.canceled) status('Снимок с пометками сохранён в файл.');
       }),
     );
     root.addEventListener('keydown', (e) => {

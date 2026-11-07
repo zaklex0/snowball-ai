@@ -1,7 +1,16 @@
 // Talking to the running test app over the DevTools protocol: main process (--inspect) and its window (--remote-debugging-port).
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function freePort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const port = server.address().port;
+  await new Promise((resolve, reject) => server.close((e) => e ? reject(e) : resolve()));
+  return port;
+}
 
 async function connect(port, pick) {
   let url = null;
@@ -50,4 +59,4 @@ function shotter(page, dir, format = 'png') {
   return shot;
 }
 
-module.exports = { connect, shotter, sleep };
+module.exports = { connect, shotter, sleep, freePort };

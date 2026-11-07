@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureSave: (id, token, value) => ipcRenderer.invoke('capture-save', id, token, value),
   captureCopy: (id, token, bytes) => ipcRenderer.invoke('capture-copy', id, token, bytes),
   captureExport: (id, token, bytes) => ipcRenderer.invoke('capture-export', id, token, bytes),
+  captureRecover: bytes => ipcRenderer.invoke('capture-recover', bytes),
   captureToLlm: (id, token, bytes) => ipcRenderer.invoke('capture-llm', id, token, bytes),
   onCaptureLlm: fn => { const f = (_e, shot) => fn(shot); ipcRenderer.on('capture-llm', f); return () => ipcRenderer.removeListener('capture-llm', f); },
   captureStart: () => ipcRenderer.invoke('capture-start'),
@@ -62,6 +63,11 @@ contextBridge.exposeInMainWorld('vsApi', {
     const listener = (_e, data) => fn(data);
     ipcRenderer.on('sync', listener);
     return () => ipcRenderer.removeListener('sync', listener);
+  },
+  onSettingsWarning: (fn) => {
+    const listener = (_e, message) => fn(message);
+    ipcRenderer.on('settings-warning', listener);
+    return () => ipcRenderer.removeListener('settings-warning', listener);
   },
   timer: (cmd, arg) => ipcRenderer.invoke('timer', cmd, arg),
   onTimer: (fn) => {
@@ -117,8 +123,9 @@ contextBridge.exposeInMainWorld('vsApi', {
   calAssistant: (text) => ipcRenderer.invoke('cal-assistant', text),
   calAssistantUndo: (undoId) => ipcRenderer.invoke('cal-assistant-undo', undoId),
   recapMake: (o) => ipcRenderer.invoke('recap-make', o),
+  recapCommit: (id) => ipcRenderer.invoke('recap-commit', id),
   recapRemake: (eventId) => ipcRenderer.invoke('recap-remake', eventId),
-  recapUpdate: (eventId, recap) => ipcRenderer.invoke('recap-update', eventId, recap),
+  recapUpdate: (eventId, recap, expected) => ipcRenderer.invoke('recap-update', eventId, recap, expected),
   recapText: (eventId) => ipcRenderer.invoke('recap-text', eventId),
   recapPickFile: () => ipcRenderer.invoke('recap-pick-file'),
   calSave: (ev) => ipcRenderer.invoke('cal-save', ev),
@@ -146,7 +153,9 @@ contextBridge.exposeInMainWorld('vsApi', {
   skillReveal: (id) => ipcRenderer.invoke('skill-reveal', id),
   mediaPick: () => ipcRenderer.invoke('media-pick'),
   mediaInfo: (file) => ipcRenderer.invoke('media-info', file),
-  mediaRead: (file) => ipcRenderer.invoke('media-read', file),
+  mediaRead: (file, token) => ipcRenderer.invoke('media-read', file, token),
+  mediaReadRange: (file, token, start, end) => ipcRenderer.invoke('media-read-range', file, token, start, end),
+  mediaRelease: (token) => ipcRenderer.invoke('media-release', token),
   transcribePiece: (wav, prompt, model, seconds) => ipcRenderer.invoke('transcribe-piece', wav, prompt, model, seconds),
   transcribeDiarize: (wav, refs, seconds) => ipcRenderer.invoke('transcribe-diarize', wav, refs, seconds),
   transcriptList: () => ipcRenderer.invoke('transcript-list'),

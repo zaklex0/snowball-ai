@@ -599,6 +599,7 @@ h1 .brand { color: var(--accent-strong); }
 .table tbody tr:hover td { background: var(--row-hover); }
 .table tbody tr.drop-target td { background: var(--drop); }
 .table tbody tr.editing td, .table tbody tr.editing:hover td { background: var(--surface-2); padding: 14px; }
+.prompt-pages-inner { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; color: var(--ink-soft); font-size: 13px; }
 
 .name { font-weight: 600; font-size: 15.5px; line-height: 1.35; overflow-wrap: anywhere; }
 .when { margin-top: 4px; font-size: 12.5px; color: var(--ink-soft); }
@@ -947,6 +948,8 @@ h1 .brand { color: var(--accent-strong); }
 .settings-dlg:focus { outline: none; }
 .sd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 14px 22px; border-bottom: 1px solid var(--line); }
 .sd-head h2 { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 18px; letter-spacing: -0.01em; }
+.settings-persist-warning { margin: 0; padding: 10px 22px; max-height: 30%; overflow: auto; overflow-wrap: anywhere; color: var(--ink); border-bottom: 1px solid var(--line); }
+.set-security-note { margin: 8px 0 0; color: var(--ink-soft); overflow-wrap: anywhere; }
 .sd-close { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: none; color: var(--ink-soft); }
 .sd-close:hover { background: var(--surface-2); color: var(--ink); }
 .sd-close svg { width: 18px; height: 18px; }
@@ -1291,6 +1294,7 @@ h1 .brand { color: var(--accent-strong); }
   .table tbody tr.drop-target { background: var(--drop); }
   .table tbody tr.drop-target td { background: transparent; }
   .table tbody tr.editing { display: block; padding: 12px; background: var(--surface-2); }
+  .table tbody tr.prompt-pages { display: block; }
   .table tbody tr:last-child { border-bottom: 0; }
   .table td, .table tbody tr.editing td { padding: 0; border: 0; }
   .c-name { grid-column: 1; }
@@ -1857,6 +1861,8 @@ h1 .brand { color: var(--accent-strong); }
 @media (max-width: 900px) { .cbar-wrap { flex-wrap: wrap; } .cbar-recap { height: 40px; } }
 .rd-hint { margin: 8px 0 0; color: var(--ink-soft); font-size: 14px; line-height: 1.5; }
 .recap-dlg .textarea { min-height: 180px; }
+.recap-recovery { margin: 12px 20px 20px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.recap-recovery p { margin: 0 0 10px; }
 
 /* The event window: two buttons on top, «Дело» (the usual form) and «Итоги» (the call summary, or a box to load one) */
 .cal-tabs button.has::after { content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 7px; border-radius: 50%; background: var(--accent); vertical-align: 2px; }

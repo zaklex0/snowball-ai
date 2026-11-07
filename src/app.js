@@ -30,6 +30,7 @@
   var MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
   var WEEKDAYS = ["понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье"];
 
+  var PROMPT_PAGE_SIZE = 100;
   var state = {
     loaded: false,
     page: "prompts",      // what the open tab shows, a key of els.views: "home", "prompts", "calendar", "tasks", "assistant" (LLM), "generator", "stats"
@@ -44,6 +45,7 @@
     skills: [],           // «Скиллы» on the «Промты» page: { id, title, type, desc, descBy, descCost, descAt, file, main, inside, files, text, createdAt }
     lib: "prompts",       // which list the «Промты» page shows: "prompts" or "skills"
     query: "",
+    promptPage: 0,        // only the current page of a large prompt library is rendered
     type: "all",
     expanded: new Set(),
     notesOpen: new Set(),   // prompts whose comment is shown in full
@@ -57,8 +59,8 @@
   // «Транскрибация»: list — the history (newest first, without timings); file — the picked file before it is transcribed;
   // open — the transcription on the screen (with cues and pauses); view — "text", "cues" or "sum".
   var tr = {
-    list: [], q: "", file: null, open: null, view: "text", fmt: "plain", busy: false, stop: false,
-    prog: 0, progText: "", error: "", sumBusy: false, model: "gpt-transcribe", subs: null
+    list: [], q: "", file: null, open: null, view: "text", fmt: "plain", busy: false, stop: false, retryFlat: false,
+    prog: 0, progText: "", error: "", sumBusy: false, model: "gpt-transcribe", subs: null, pending: null, pendingBusy: false, pendingSummary: null, draft: null
   };
   // trModel2: the choice remembered since GPT transcribe became the main model (the old trModel was mostly mini).
   try { tr.model = localStorage.getItem("trModel2") || tr.model; tr.fmt = localStorage.getItem("trFmt") || tr.fmt; } catch (e) { /* defaults */ }
@@ -269,6 +271,9 @@
   // action: optional { label, onclick } for a button next to the text, { close, onclose } for the close link.
   var bannerOnClose = null;
   function showBanner(text, action) {
+    delete els.banner.dataset.chatSave;
+    delete els.banner.dataset.recapPending;
+    delete els.banner.dataset.settingsWarning;
     els.bannerText.textContent = text;
     // action.percent: a download bar under the text
     if (action && typeof action.percent === "number") {
@@ -300,14 +305,49 @@
   }
   function applyData(r) {
     if (r.prompts) setItems(r.prompts);
-    if (r.info) state.info = r.info;
+    if (r.info) { state.info = r.info; showSettingsWarning(r.info.settingsWarning, false); }
     if (r.profile) state.profile = r.profile;
     if (r.activity) state.activity = r.activity;
-    if (r.events) state.events = r.events;
+    if (r.events) {
+      if (recapUi && recapUi.text) {
+        var oldRevisions = new Map(state.events.map(function (e) { return [e.id, e.recapRevision]; }));
+        r.events.forEach(function (e) { if (oldRevisions.get(e.id) !== e.recapRevision) delete recapUi.text[e.id]; });
+      }
+      state.events = r.events;
+    }
     if (r.tasks) state.tasks = r.tasks;
     if (r.taskColumns) state.taskColumns = r.taskColumns;
     if (r.taskArchiveMode) state.taskArchiveMode = r.taskArchiveMode;
     if (r.skills) state.skills = r.skills;
+  }
+  function showDataWarnings(info) {
+    var warnings = info && info.dataWarnings;
+    if (!warnings || !warnings.length) return;
+    var text = warnings.map(function (w) {
+      if (w.transcript) return w.file + ": расшифровку не удалось прочитать; исходный файл оставлен на месте";
+      return w.file + (w.missing ? ": файл отсутствовал, данные восстановлены из последней копии" :
+        (w.restored ? ": данные восстановлены из последней копии" : ": исправной копии нет, раздел открыт пустым") + "; исходный файл сохранён как " + w.broken);
+    }).join(". ");
+    var message = "Не удалось прочитать некоторые данные. " + text + ". Файлы находятся в папке с данными.";
+    if (!els.banner.hidden && els.bannerText.textContent) message = els.bannerText.textContent + " " + message;
+    showBanner(message);
+    if (els.settingsDlg.open) els.setBackupMsg.textContent = message;
+  }
+  function showSettingsWarning(message, announce) {
+    var box = $("settings-persist-warning");
+    box.textContent = message || "";
+    box.hidden = !message;
+    if (els.banner.dataset.settingsWarning) {
+      if (!message) { els.banner.hidden = true; delete els.banner.dataset.settingsWarning; }
+      else els.bannerText.textContent = message;
+      if (announce && message && els.settingsDlg.open) toast(message, true);
+      return;
+    }
+    if (!announce || !message) return;
+    if (!els.banner.hidden) { toast(message, true); return; }
+    showBanner(message);
+    els.banner.dataset.settingsWarning = "1";
+    if (els.settingsDlg.open) toast(message, true);
   }
   // Every call returns { ok, prompts?, error? }. Fresh prompts replace the list.
   function call(promise) {
@@ -616,7 +656,8 @@
     state.editorOpen = true;
     state.editingId = item ? item.id : null;
     state.confirmId = null;
-    state.draft = { existing: item ? item.files.slice() : [], removed: new Set(), pending: [] };
+    state.draft = { existing: item ? item.files.slice() : [], removed: new Set(), pending: [],
+      expected: item ? JSON.stringify([item.title, item.type, item.text, item.comment, item.files.map(function (f) { return f.id; })]) : null };
     els.editor.classList.toggle("inline", !!item);
     els.editorTitle.textContent = item ? "Редактирование" : "Новый промт";
     els.fTitle.value = item ? item.title : "";
@@ -667,7 +708,8 @@
     var existing = state.editingId ? findItem(state.editingId) : null;
     var d = state.draft || { pending: [], removed: new Set() };
     var payload = {
-      item: { id: existing ? existing.id : newId(), title: title, type: type, text: text, comment: els.fComment.value.trim() },
+      item: { id: state.editingId || newId(), title: title, type: type, text: text, comment: els.fComment.value.trim() },
+      expected: d.expected,
       addFiles: d.pending.map(function (p) { return p.source; }),
       removeFileIds: Array.from(d.removed)
     };
@@ -678,6 +720,10 @@
       if (!r) { setMsg("Не сохранилось. Попробуйте ещё раз."); return; }
       var saved = findItem(r.id);
       if (saved && !matches(saved)) { state.type = "all"; state.query = ""; els.search.value = ""; }
+      if (saved) {
+        var index = sortItems(state.items).filter(matches).findIndex(function (item) { return item.id === saved.id; });
+        if (index >= 0) state.promptPage = Math.floor(index / PROMPT_PAGE_SIZE);
+      }
       closeEditor(false);
       if (r.errors && r.errors.length) toast("Промт сохранён, но не получилось прикрепить: " + r.errors.join(", "), true);
       else toast(existing ? "Изменения сохранены" : "Промт добавлен");
@@ -698,7 +744,7 @@
 
   // Keeps the one editor form in the right place (top panel or inside the row) without losing what was typed.
   function placeEditor() {
-    var target = state.editingId ? document.getElementById("edit-cell") : els.editorSlot;
+    var target = state.editingId ? document.getElementById("edit-cell") || els.editorSlot : els.editorSlot;
     if (!target || els.editor.parentNode === target) return;
     target.appendChild(els.editor);
   }
@@ -733,7 +779,7 @@
   function typeChip(type) {
     return h("button", {
       type: "button", class: "chip " + catClass(type), title: "Показать только «" + type + "»",
-      onclick: function () { state.type = norm(type); render(); }
+      onclick: function () { state.type = norm(type); state.promptPage = 0; render(); }
     }, type);
   }
 
@@ -840,12 +886,13 @@
     var stats = typeStats();
 
     if (state.editingId && !findItem(state.editingId)) {
-      state.editingId = null;
-      state.editorOpen = false;
-      releaseDraft();
-      els.editor.hidden = true;
+      // Keep the unsaved text accessible even if another window deleted its row.
+      els.editorSlot.appendChild(els.editor);
       els.editor.classList.remove("inline");
-      toast("Этот промт удалили, пока вы его редактировали");
+      if (state.draft && !state.draft.deleted) {
+        state.draft.deleted = true;
+        setMsg("Промт удалили в другом окне. Скопируйте свой текст перед закрытием редактора.");
+      }
     }
 
     els.addBtn.hidden = loading;
@@ -858,12 +905,12 @@
     els.toolbar.hidden = loading || total === 0;
     var chips = [h("button", {
       type: "button", class: "fchip", "aria-pressed": String(state.type === "all"),
-      onclick: function () { state.type = "all"; render(); }
+      onclick: function () { state.type = "all"; state.promptPage = 0; render(); }
     }, "Все", h("span", { class: "n", text: String(total) }))];
     stats.forEach(function (s) {
       chips.push(h("button", {
         type: "button", class: "fchip " + s.cls, "aria-pressed": String(state.type === s.key),
-        onclick: function () { state.type = state.type === s.key ? "all" : s.key; render(); }
+        onclick: function () { state.type = state.type === s.key ? "all" : s.key; state.promptPage = 0; render(); }
       }, h("span", { class: "dot", "aria-hidden": "true" }), s.label, h("span", { class: "n", text: String(s.count) })));
     });
     els.filters.replaceChildren.apply(els.filters, chips);
@@ -885,12 +932,33 @@
       if (!visible.length) {
         setState("Ничего не нашлось", "Попробуйте другое слово или сбросьте фильтр по типу.",
           h("button", { type: "button", class: "btn btn-ghost", onclick: function () {
-            state.type = "all"; state.query = ""; els.search.value = ""; render(); els.search.focus();
+            state.type = "all"; state.query = ""; state.promptPage = 0; els.search.value = ""; render(); els.search.focus();
           } }, "Сбросить поиск"));
       } else {
         els.stateBox.hidden = true;
         els.table.hidden = false;
-        els.rows.replaceChildren.apply(els.rows, visible.map(row));
+        var perPage = PROMPT_PAGE_SIZE, lastPage = Math.ceil(visible.length / perPage) - 1;
+        state.promptPage = Math.max(0, Math.min(state.promptPage, lastPage));
+        if (state.editingId) {
+          var editingIndex = visible.findIndex(function (item) { return item.id === state.editingId; });
+          if (editingIndex !== -1) state.promptPage = Math.floor(editingIndex / perPage);
+        }
+        var from = state.promptPage * perPage, to = Math.min(from + perPage, visible.length);
+        var rows = visible.slice(from, to).map(row);
+        if (lastPage > 0) {
+          var goPage = function (next) {
+            if (state.editorOpen) { toast("Сначала сохраните или отмените правку промта.", true); return; }
+            state.promptPage = next;
+            render();
+            els.table.scrollIntoView({ block: "start" });
+          };
+          rows.push(h("tr", { class: "prompt-pages" }, h("td", { colspan: "3" },
+            h("div", { class: "prompt-pages-inner", "aria-label": "Страницы промтов" },
+              h("button", { type: "button", class: "btn btn-ghost btn-sm", disabled: state.promptPage === 0, onclick: function () { goPage(state.promptPage - 1); } }, "Назад"),
+              h("span", { text: fmtNum(from + 1) + "–" + fmtNum(to) + " из " + fmtNum(visible.length), "aria-live": "polite" }),
+              h("button", { type: "button", class: "btn btn-ghost btn-sm", disabled: state.promptPage === lastPage, onclick: function () { goPage(state.promptPage + 1); } }, "Дальше")))));
+        }
+        els.rows.replaceChildren.apply(els.rows, rows);
         queueMeasure();
       }
     }
@@ -1519,7 +1587,7 @@
 
   /* ---------- profile window ---------- */
   // avatar: undefined = keep the saved one, null = remove it, string = a new picture (data URL).
-  var pd = { avatar: undefined, welcome: false };
+  var pd = { avatar: undefined, welcome: false, baseName: "", baseAvatar: "" };
   function pdAvatar() { return pd.avatar === undefined ? (state.profile && state.profile.avatar) || null : pd.avatar; }
   function renderPdAvatar() {
     fillAvatar(els.pdAvatar, pdAvatar(), els.pdName.value);
@@ -1530,6 +1598,8 @@
     setMenu(false);
     pd.avatar = undefined;
     pd.welcome = !!welcome;
+    pd.baseName = (state.profile && state.profile.name) || "";
+    pd.baseAvatar = (state.profile && state.profile.avatarVersion) || JSON.stringify([0, ""]);
     els.pdTitle.textContent = welcome ? "Добро пожаловать в Snowball.ai" : "Профиль";
     els.pdText.textContent = welcome ? "Как вас называть? Ник и аватарка видны внизу слева, поменять их можно в любой момент." : "";
     els.pdSave.textContent = welcome ? "Начать" : "Сохранить";
@@ -1545,7 +1615,11 @@
   function closeProfile() {
     if (!pd.welcome) { els.profileDlg.close(); return; }
     // Skipping the welcome still remembers it was shown, so it does not come back on every start.
-    call(api.saveProfile({})).then(function () { els.profileDlg.close(); render(); });
+    call(api.saveProfile({})).then(function (r) {
+      if (!r) { els.pdMsg.textContent = "Не получилось сохранить выбор. Попробуйте ещё раз."; return; }
+      els.profileDlg.close(); render();
+      if (r.profileSave && !r.profileSave.backupUpdated) toast("Профиль сохранён, но запасную копию обновить не удалось.", true);
+    });
   }
   els.pdName.addEventListener("input", function () { els.pdMsg.textContent = ""; renderPdAvatar(); });
   els.pdPick.addEventListener("click", function () {
@@ -1570,16 +1644,19 @@
     e.preventDefault();
     var name = els.pdName.value.trim();
     if (pd.welcome && !name) { els.pdMsg.textContent = "Введите ник или нажмите «Пропустить»."; els.pdName.focus(); return; }
-    var input = { name: name };
-    if (pd.avatar !== undefined) input.avatar = pd.avatar;
+    var input = { expected: {} };
+    if (name !== pd.baseName) { input.name = name; input.expected.name = pd.baseName; }
+    if (pd.avatar !== undefined) { input.avatar = pd.avatar; input.expected.avatar = pd.baseAvatar; }
     els.pdSave.disabled = true;
     call(api.saveProfile(input)).then(function (r) {
       els.pdSave.disabled = false;
-      if (!r) return;
+      if (!r) { els.pdMsg.textContent = "Не сохранилось. Ваши изменения остались в форме."; return; }
       var wasWelcome = pd.welcome;
       els.profileDlg.close();
       render();
-      toast(wasWelcome ? "Приятно познакомиться, " + name + "!" : "Профиль сохранён");
+      if (r.profileSave && !r.profileSave.backupUpdated) toast("Профиль сохранён, но запасную копию обновить не удалось." + (r.profileSave.oldAvatarLeft ? " Прежняя аватарка оставлена в папке данных." : ""), true);
+      else if (r.profileSave && r.profileSave.oldAvatarLeft) toast("Профиль сохранён, но старую аватарку не удалось переместить в корзину: она осталась в папке данных.", true);
+      else toast(wasWelcome ? "Приятно познакомиться, " + name + "!" : "Профиль сохранён");
     });
   });
   els.statsEdit.addEventListener("click", function () { openProfile(false); });
@@ -1710,12 +1787,17 @@
   });
   /* ---------- backup and sharing ---------- */
   // ".snowprompt" carries prompts with comments and files to another Snowball.ai; ".snowball" is a backup of everything.
+  function missingFilesText(missing) {
+    if (!missing || !missing.length) return "";
+    return " Не найдены и не попали в файл вложения (" + missing.length + "): " + missing.slice(0, 5).join("; ") + (missing.length > 5 ? "; и ещё " + (missing.length - 5) : "") + ".";
+  }
   function exportPrompts(ids) {
     call(api.promptsExport(ids)).then(function (r) {
       if (!r || r.canceled) return;
       var c = r.counts;
-      toast("Сохранено: " + c.prompts + " " + plural(c.prompts, "промт", "промта", "промтов") +
-        (c.files ? " и " + c.files + " " + plural(c.files, "файл", "файла", "файлов") : "") + ". Этот файл можно отправить другу.", true);
+      var text = "Сохранено: " + c.prompts + " " + plural(c.prompts, "промт", "промта", "промтов") +
+        (c.files ? " и " + c.files + " " + plural(c.files, "файл", "файла", "файлов") : "") + ". Этот файл можно отправить другу." + missingFilesText(r.missing);
+      if (r.missing && r.missing.length) showBanner(text); else toast(text, true);
     });
   }
   // In the settings window the result is written under the buttons, otherwise in the banner.
@@ -1727,7 +1809,7 @@
     call(api.backupExport()).then(function (r) {
       if (!r || r.canceled) return;
       var c = r.counts;
-      backupMessage("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + (c.transcripts ? ", расшифровок " + c.transcripts : "") + ". Ключей ChatGPT и Claude в ней нет.");
+      backupMessage("Резервная копия сохранена: " + r.path + ". В ней промтов " + c.prompts + ", файлов " + c.files + ", разговоров " + c.chats + ", дел в календаре " + c.events + (c.transcripts ? ", расшифровок " + c.transcripts : "") + ". Ключей ChatGPT и Claude в ней нет." + missingFilesText(r.missing));
     });
   }
   // file: a path (drag and drop) or nothing (the program asks which file).
@@ -1749,10 +1831,15 @@
       if (x.prompts) parts.push("промтов " + x.prompts);
       if (x.chats) parts.push("разговоров " + x.chats);
       if (x.events) parts.push("дел в календаре " + x.events);
+      if (x.tasks) parts.push("задач " + x.tasks);
       if (x.transcripts) parts.push("расшифровок " + x.transcripts);
       if (x.screenshots) parts.push("снимков " + x.screenshots);
-      backupMessage(parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
-        : "Всё из этой копии уже есть в программе, ничего добавлять не пришлось.");
+      if (x.skills) parts.push("скиллов " + x.skills);
+      if (x.profile) parts.push("профиль");
+      var message = parts.length ? "Восстановлено из копии: " + parts.join(", ") + (x.skipped ? ". Уже были в программе и остались как есть: " + x.skipped : "") + "."
+        : "Всё из этой копии уже есть в программе, ничего добавлять не пришлось.";
+      if (x.profileBackupWarning) message += " Профиль восстановлен, но его запасную копию обновить не удалось.";
+      backupMessage(message);
       return;
     }
     render();
@@ -1782,6 +1869,7 @@
         render();
         if (r.mode === "copied") showBanner("Промты и файлы скопированы в новую папку. Старая папка осталась на месте: " + r.oldDir + ". Её можно удалить, когда убедитесь, что всё на месте.");
         else toast("Открыл промты из выбранной папки", true);
+        showDataWarnings(r.info);
       });
   }
   els.setDir.addEventListener("click", function () { call(api.openDataDir()); });
@@ -2283,6 +2371,7 @@
   function openEventForm(e, time) {
     ensureCal();
     cal.editing = e ? e.id : "";
+    cal.editExpected = e ? JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]) : null;
     cal.confirmDelete = false;
     els.calFormTitle.textContent = e ? "Изменить дело" : "Новое дело";
     els.cfWho.value = e ? e.who || "" : "";
@@ -2318,7 +2407,7 @@
     var checked = els.cfKind.querySelector("input:checked");
     var isNew = !cal.editing;
     var ev = { id: cal.editing || undefined, date: els.cfDate.value, from: from, to: to, who: els.cfWho.value.trim(), title: title,
-      kind: checked ? checked.value : "task", remind: +els.cfRemind.value, note: els.cfNote.value.trim() };
+      kind: checked ? checked.value : "task", remind: +els.cfRemind.value, note: els.cfNote.value.trim(), expected: cal.editExpected };
     els.cfSave.disabled = true;
     call(api.calSave(ev)).then(function (r) {
       els.cfSave.disabled = false;
@@ -2358,6 +2447,42 @@
      The summary is made in main.js (recap-make); the button beside the calendar assistant loads one for any event or a new one. */
   var calTabs = $("cal-tabs"), calRecap = $("cal-recap"), calTabTr = $("cal-tab-tr");
   var recapUi = { tab: "ev", picked: {}, q: "", text: {}, draft: {}, fname: {}, confirmRemove: false, busy: false };
+  var pendingRecaps = new Map();
+  function savePendingRecap(recovery) {
+    if (recovery.saving) return;
+    recovery.saving = true;
+    call(api.recapCommit(recovery.id)).then(function (r) {
+      recovery.saving = false;
+      if (!r) return;
+      pendingRecaps.delete(recovery.id);
+      document.querySelectorAll('.recap-recovery').forEach(function (el) { if (el.dataset.id === recovery.id) el.remove(); });
+      if (els.banner.dataset.recapPending === recovery.id) { els.banner.hidden = true; delete els.banner.dataset.recapPending; }
+      renderCalendar(); refreshRecap();
+      toast("Итоги сохранены.");
+      showPendingRecaps();
+    });
+  }
+  function copyPendingRecap(recovery) {
+    api.copyText(recovery.text).then(function (r) { if (r && r.ok) toast("Итоги скопированы."); });
+  }
+  function showPendingRecaps() {
+    if (!pendingRecaps.size || (!els.banner.hidden && !els.banner.dataset.recapPending)) return;
+    var recovery = pendingRecaps.values().next().value;
+    showBanner("Итоги готовы, но не сохранились. Они пока хранятся в программе: сохраните или скопируйте их до закрытия программы.", {
+      label: "Повторить сохранение", onclick: function () { savePendingRecap(recovery); },
+      label2: "Скопировать итоги", onclick2: function () { copyPendingRecap(recovery); }, close: "Скрыть"
+    });
+    els.banner.dataset.recapPending = recovery.id;
+  }
+  function keepPendingRecap(recovery, dlg) {
+    if (!recovery || !recovery.id) return;
+    pendingRecaps.set(recovery.id, recovery);
+    if (dlg && dlg.open) dlg.append(h("div", { class: "recap-recovery", "data-id": recovery.id },
+      h("p", { text: "Итоги готовы, но не сохранились. Сохраните или скопируйте их до закрытия программы." }),
+      h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: function () { savePendingRecap(recovery); } }, "Повторить сохранение"), " ",
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { copyPendingRecap(recovery); } }, "Скопировать итоги")));
+    showPendingRecaps();
+  }
   function eventById(id) { return state.events.find(function (x) { return x.id === id; }) || null; }
   function recapCopy(r) { var c = JSON.parse(JSON.stringify(r)); c.text = ""; return c; }
   function stepAdded(s) { return !!s.added && state.tasks.some(function (t) { return t.id === s.added; }); }
@@ -2419,13 +2544,13 @@
         recapUi.busy = true; renderRecap(e);
         api.recapRemake(e.id).then(function (x) {
           recapUi.busy = false;
-          if (!x || !x.ok) { toast((x && x.error) || "Не получилось. Попробуйте ещё раз.", true); refreshRecap(); return; }
+          if (!x || !x.ok) { toast((x && x.error) || "Не получилось. Попробуйте ещё раз.", true); refreshRecap(); if (x && x.recovery) keepPendingRecap(x.recovery, els.calDialog); return; }
           applyData(x); renderCalendar(); refreshRecap(); toast("Итоги написаны заново" + (x.cost > 0 ? " · " + fmtCost(x.cost) : ""));
         }, function () { recapUi.busy = false; toast("Не получилось. Попробуйте ещё раз.", true); refreshRecap(); });
       } }, recapUi.busy ? "Пересоздаю…" : "Пересоздать итоги") : null,
       h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () {
         if (!recapUi.confirmRemove) { recapUi.confirmRemove = true; renderRecap(e); return; }
-        call(api.recapUpdate(e.id, null)).then(function (x) { if (!x) return; recapUi.text[e.id] = undefined; renderCalendar(); showCalTab("sum"); toast("Итоги убраны из дела"); });
+        call(api.recapUpdate(e.id, null, e.recapRevision)).then(function (x) { if (!x) return; recapUi.text[e.id] = undefined; renderCalendar(); showCalTab("sum"); toast("Итоги убраны из дела"); });
       } }, recapUi.confirmRemove ? "Точно убрать? Нажмите ещё раз" : "Убрать итоги"),
       h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: closeEventForm }, "Закрыть"));
     calRecap.replaceChildren(head, body, foot);
@@ -2523,7 +2648,7 @@
       go.textContent = "Разбираю…";
       var back = function (text) { if (cal.editing !== e.id) return; [ta, go, pick].forEach(function (x) { x.disabled = false; }); go.textContent = "Разобрать итоги"; fail(text || "Не получилось. Попробуйте ещё раз."); };
       api.recapMake({ eventId: e.id, text: ta.value, name: recapUi.fname[e.id] || "" }).then(function (r) {
-        if (!r || !r.ok) { back(r && r.error); return; }
+        if (!r || !r.ok) { back(r && r.error); if (r && r.recovery) keepPendingRecap(r.recovery, els.calDialog); return; }
         applyData(r);
         recapUi.draft[e.id] = ""; recapUi.fname[e.id] = ""; recapUi.picked = {};
         renderCalendar();
@@ -2538,7 +2663,7 @@
   function recapSave(id, mutate) {
     var ev = eventById(id), rc = recapCopy(ev.recap);
     mutate(rc);
-    return call(api.recapUpdate(id, rc));
+    return call(api.recapUpdate(id, rc, ev.recapRevision));
   }
   function recapAddTasks(e) {
     var list = e.recap.steps.filter(function (s) { return recapUi.picked[s.id] && !stepAdded(s); }), made = [], i = 0;
@@ -2634,7 +2759,7 @@
     setRecapBusy(true);
     var fail = function (msg) { setRecapBusy(false); rd.msg.classList.add("error"); rd.msg.textContent = msg || "Не получилось. Попробуйте ещё раз."; };
     api.recapMake({ eventId: rd.ev.value || "", date: rd.date.value, text: rd.text.value, name: rd.name }).then(function (r) {
-      if (!r || !r.ok) { fail(r && r.error); return; }
+      if (!r || !r.ok) { fail(r && r.error); if (r && r.recovery) keepPendingRecap(r.recovery, rd.dlg); return; }
       applyData(r);
       setRecapBusy(false);
       rd.dlg.close();
@@ -2644,7 +2769,7 @@
       toast((r.created ? "Создал дело и разобрал итоги" : "Итоги разобраны") + (r.cost > 0 ? " · " + fmtCost(r.cost) : ""));
     }, function () { fail(); });
   });
-  $("cal-recap-btn").addEventListener("click", function () { openRecapLoad(); });
+  $("cal-recap-btn").addEventListener("click", function () { showPendingRecaps(); openRecapLoad(); });
 
   /* The calendar assistant bar: the same as above the tasks, but it only knows the calendar. */
   var cbar = { el: $("cbar"), input: $("cbar-input"), model: $("cbar-model"), send: $("cbar-send"), busy: false };
@@ -2962,9 +3087,11 @@
     });
   }
   function undoAction(msg, a) {
+    if (a.undoBusy) return;
+    a.undoBusy = true;
     call(api.assistantUndo(a.id)).then(function (r) {
-      a.undoable = false;
-      if (r) { a.status = "undone"; render(); toast("Отменено"); }
+      a.undoBusy = false;
+      if (r) { a.undoable = false; a.status = "undone"; render(); toast("Отменено"); }
       renderActions(msg);
       persist(sessionOf(msg));
     });
@@ -3134,14 +3261,77 @@
       return out;
     });
   }
+  var pendingChatSaves = new Map();
+  var failedChatSaves = new Set();
+  function saveConversation(saving) {
+    if (saving.inflight || saving.conflict) return;
+    var snapshot = saving.snapshot;
+    saving.inflight = true;
+    api.chatSave(Object.assign({}, snapshot, { expectedUpdatedAt: saving.version })).then(function (r) {
+      saving.inflight = false;
+      if (pendingChatSaves.get(snapshot.id) !== saving) return;
+      if (!r || !r.ok) { saving.conflict = !!(r && r.conflict); failedConversationSave(saving); return; }
+      saving.version = r.updatedAt;
+      var current = saving.snapshot === snapshot;
+      if (current) { pendingChatSaves.delete(snapshot.id); failedChatSaves.delete(snapshot.id); }
+      hist.list = r.chats; renderHistory(); renderTabs();
+      if (current && !failedChatSaves.size && els.banner.dataset.chatSave) { els.banner.hidden = true; delete els.banner.dataset.chatSave; }
+      if (!current) saveConversation(saving);
+    }, function () { saving.inflight = false; failedConversationSave(saving); });
+  }
+  function failedConversationSave(saving) {
+    if (pendingChatSaves.get(saving.snapshot.id) !== saving) return;
+    failedChatSaves.add(saving.snapshot.id);
+    showFailedConversationSaves();
+  }
+  function showFailedConversationSaves() {
+    if (!failedChatSaves.size) return;
+    var conflicts = Array.from(failedChatSaves).filter(function (id) { var s = pendingChatSaves.get(id); return s && s.conflict; });
+    if (conflicts.length) {
+      showBanner("Разговор изменили или удалили в другом окне. Чтобы не потерять ваш текст, скопируйте его; вложения в копию текста не войдут.", {
+        label: "Скопировать текст", onclick: function () {
+          var text = conflicts.map(function (id) {
+            var s = pendingChatSaves.get(id);
+            return s ? s.snapshot.title + "\n\n" + s.snapshot.messages.map(function (m) { return (m.role === "user" ? "Вы: " : "Ассистент: ") + (m.text || ""); }).join("\n\n") : "";
+          }).join("\n\n---\n\n");
+          api.copyText(text).then(function (r) {
+            if (!r || !r.ok) return;
+            conflicts.forEach(function (id) { pendingChatSaves.delete(id); failedChatSaves.delete(id); });
+            els.banner.hidden = true; delete els.banner.dataset.chatSave;
+            toast("Текст скопирован. Откройте актуальный разговор или начните новый.", true);
+            showFailedConversationSaves();
+          });
+        }
+      });
+      els.banner.dataset.chatSave = "1";
+      return;
+    }
+    if (!els.banner.hidden && !els.banner.dataset.chatSave) {
+      toast("Не удалось сохранить разговор. Текст пока хранится в программе; не закрывайте её и попробуйте ещё раз.", true);
+      return;
+    }
+    showBanner("Не удалось сохранить разговор. Текст пока хранится в программе; не закрывайте её до сохранения.", {
+      label: "Повторить сохранение", onclick: function () {
+        failedChatSaves.forEach(function (id) {
+          var latest = pendingChatSaves.get(id);
+          if (latest) saveConversation(latest);
+        });
+      }
+    });
+    els.banner.dataset.chatSave = "1";
+  }
   function persist(se) {
     se = se || chat;
     if (!se || se.quick || !se.id) return;
     var messages = savedMessages(se);
     if (!messages.length) return;
-    api.chatSave({ id: se.id, title: se.title, messages: messages }).then(function (r) {
-      if (r && r.ok) { hist.list = r.chats; renderHistory(); renderTabs(); }
-    }, function () {});
+    var snapshot = { id: se.id, title: se.title, messages: messages };
+    if (!se.saveState) se.saveState = { version: null, inflight: false, conflict: false };
+    var saving = se.saveState;
+    saving.snapshot = snapshot;
+    pendingChatSaves.set(snapshot.id, saving);
+    if (saving.conflict) { failedConversationSave(saving); return; }
+    saveConversation(saving);
   }
   // Before another conversation opens in this tab: stop the answer and turn unanswered cards into "устарела".
   function leaveChat(se) {
@@ -3157,6 +3347,7 @@
     se.attach = [];
     if (se === chat) renderAttach();
     se.id = null;
+    se.saveState = null;
     se.title = "";
     se.messages = [];
     se.current = null;
@@ -3201,6 +3392,7 @@
       if (!r || !r.ok) { toast((r && r.error) || "Не получилось открыть разговор."); renderTabs(); return; }
       clearChat(se);
       se.id = r.chat.id;
+      se.saveState = { version: r.chat.updatedAt, inflight: false, conflict: false };
       se.title = r.chat.title;
       r.chat.messages.forEach(function (m) {
         var msg = addMessage(m.role, m.text, se, m.images);
@@ -3232,7 +3424,11 @@
   function removeChat(id) {
     api.chatDelete(id).then(function (r) {
       hist.confirmId = null;
-      if (r && r.ok) hist.list = r.chats;
+      if (!r || !r.ok) { toast((r && r.error) || "Не получилось удалить разговор.", true); renderHistory(); return; }
+      pendingChatSaves.delete(id);
+      failedChatSaves.delete(id);
+      if (!failedChatSaves.size && els.banner.dataset.chatSave) { els.banner.hidden = true; delete els.banner.dataset.chatSave; }
+      hist.list = r.chats;
       sessions.forEach(function (se) {
         if (se.id !== id && se.loadId !== id) return;
         if (se.current) stopChat(se);
@@ -3535,10 +3731,12 @@
 
   // One card per service on the settings page: status, key field, "Проверить ключ" and "Удалить ключ".
   var keyCards = Array.prototype.slice.call(document.querySelectorAll(".set-provider")).map(function (card) {
+    var storageNote = h("p", { class: "set-security-note", hidden: true });
+    card.querySelector(".set-key").append(storageNote);
     return {
       provider: card.dataset.provider, card: card,
       status: card.querySelector(".set-status"), form: card.querySelector(".set-key"), input: card.querySelector(".set-key-input"),
-      check: card.querySelector(".set-check"), del: card.querySelector(".set-delete"), msg: card.querySelector(".set-msg"),
+      check: card.querySelector(".set-check"), del: card.querySelector(".set-delete"), msg: card.querySelector(".set-msg"), storageNote: storageNote,
       spend: card.querySelector(".set-spend"), spendLine: card.querySelector(".set-spend-line"),
       balForm: card.querySelector(".set-balance"), balInput: card.querySelector(".set-bal-input"), balMsg: card.querySelector(".set-bal-msg")
     };
@@ -3580,10 +3778,14 @@
     updateCostHint();
     keyCards.forEach(function (c) {
       var has = !!a.keys[c.provider];
-      c.status.textContent = has ? "Ключ сохранён" : "Ключа нет";
+      var unreadable = !!(a.keyWarnings && a.keyWarnings[c.provider]);
+      c.status.textContent = has ? "Ключ сохранён" : unreadable ? "Ключ не удалось прочитать" : "Ключа нет";
       c.status.classList.toggle("on", has);
-      c.del.hidden = !has;
-      c.input.placeholder = has ? "Ключ сохранён. Вставьте новый, чтобы заменить" : c.input.dataset.placeholder;
+      c.del.hidden = !has && !unreadable;
+      c.input.placeholder = has ? "Ключ сохранён. Вставьте новый, чтобы заменить" : unreadable ? "Старый ключ оставлен на месте" : c.input.dataset.placeholder;
+      c.storageNote.hidden = !(unreadable || (has && a.keyStorageNeedsClose));
+      c.storageNote.textContent = unreadable ? "Сохранённый файл ключа оставлен на месте. Чтобы ввести новый ключ, сначала удалите старый кнопкой выше."
+        : has && a.keyStorageNeedsClose ? "При первом сохранении ключа закройте программу обычным способом, чтобы завершить сохранение данных шифрования. При внезапном сбое до этого ключ может не открыться." : "";
       var sp = (a.spend && a.spend[c.provider]) || { month: 0, amount: null, left: null };
       c.spend.hidden = !has && !(sp.month > 0);
       var line = ["Потрачено через Snowball в этом месяце: ", h("b", { text: "≈ " + fmtUsd(sp.month) })];
@@ -3714,8 +3916,10 @@
         state.info = r.info;
         c.input.value = "";
         render();
-        if (r.warning) say((r.saved ? "Ключ сохранён, но " : "Ключ верный, но ") + r.warning.charAt(0).toLowerCase() + r.warning.slice(1));
-        else say(r.saved ? "Ключ работает и сохранён. Теперь в «Ассистенте» можно выбрать " + name + " кнопкой «Модель»." : "Ключ работает.", true);
+        var message = r.warning ? (r.saved ? "Ключ сохранён, но " : "Ключ верный, но ") + r.warning.charAt(0).toLowerCase() + r.warning.slice(1)
+          : r.saved ? "Ключ работает и сохранён. Теперь в «Ассистенте» можно выбрать " + name + " кнопкой «Модель»." : "Ключ работает.";
+        if (r.keyStorageWarning) message += " " + r.keyStorageWarning;
+        say(message, !r.warning);
       }, function () {
         c.check.disabled = false;
         say("Не получилось проверить ключ. Попробуйте ещё раз.");
@@ -3892,7 +4096,7 @@
   var TASK_WEEKDAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];   // by getDay(); the calendar has its own WEEKDAYS_SHORT from Monday
   // open: the task in the panel; fresh: tasks the assistant just changed (they flash once); focusSub: back to the subtask field;
   // colMenu: the column whose «⋯» menu is open; renaming: the column being renamed; newCol: the «+ Столбец» field is open.
-  var tb = { adding: null, dragId: null, focus: false, open: null, fresh: [], focusSub: false, colMenu: null, renaming: null, newCol: false };
+  var tb = { adding: null, dragId: null, focus: false, open: null, fresh: [], focusSub: false, colMenu: null, renaming: null, newCol: false, pending: new Set() };
   // What is shown: board or list, search, tag, importance (1 — important and urgent, 2 — urgent only), done tasks hidden.
   var tf = { view: "board", q: "", tag: "", prio: 0, hideDone: false, doneOpen: false };
   try {
@@ -3906,7 +4110,12 @@
     var ids = taskCols().map(function (c) { return c.id; });
     state.tasks.sort(function (a, b) { return ids.indexOf(a.status) - ids.indexOf(b.status) || a.order - b.order; });
   }
-  function saveTaskNow(t) { return call(api.taskSave(t)).then(function (r) { render(); return r; }); }
+  function saveTaskNow(t) {
+    return call(api.taskSave(t)).then(function (r) {
+      if (r) { render(); return r; }
+      return call(api.load()).then(function () { render(); return null; });
+    });
+  }
   function colOf(id) { return taskCols().find(function (x) { return x.id === id; }) || BASE_COLS[0]; }
   function colName(id) { return colOf(id).name; }
   // The colour of a column: its own for the three base ones, one of six for the user's.
@@ -3952,7 +4161,7 @@
       type: "button", class: "tchk" + (done ? " on" : "") + (big ? " big" : ""), html: ICONS.check,
       title: done ? "Снять галочку" : "Отметить сделанной", "aria-pressed": done ? "true" : "false",
       "aria-label": (done ? "Снять галочку с задачи «" : "Отметить сделанной задачу «") + t.title + "»",
-      onclick: function (e) { e.stopPropagation(); saveTaskNow({ id: t.id, status: done ? t.doneFrom || "todo" : "done" }); }
+      onclick: function (e) { e.stopPropagation(); saveTaskNow({ id: t.id, status: done ? t.doneFrom || "todo" : "done", expectedFields: { status: JSON.stringify(t.status) } }); }
     });
   }
   function renderTasks() {
@@ -4015,11 +4224,7 @@
       if (task.status === status && rest.length && rest[rest.length - 1].order < task.order) return;
       order = rest.length ? rest[rest.length - 1].order + 1 : Date.now();
     }
-    task.status = status;
-    task.order = order;
-    sortTasks();
-    renderTasks();
-    saveTaskNow({ id: id, status: status, order: order });
+    saveTaskNow({ id: id, status: status, order: order, expectedFields: { status: JSON.stringify(task.status), order: JSON.stringify(task.order) } });
   }
   function taskItem(t) {
     var cls = "task" + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
@@ -4122,6 +4327,7 @@
     skEls.nSkills.textContent = state.skills.length ? String(state.skills.length) : "";
     if (!on || loading) return;
     var total = state.skills.length;
+    var editingMissing = sk.edit && !findSkill(sk.edit.id);
     var counts = SKILL_TYPES.map(function (t) { return { t: t, n: state.skills.filter(function (s) { return s.type === t.key; }).length }; });
     els.meta.textContent = !total ? "Пока ни одного скилла" : fmtNum(total) + " " + plural(total, "скилл", "скилла", "скиллов") + counts.filter(function (c) { return c.n; }).map(function (c) { return " · " + c.t.label + " " + c.n; }).join("");
     if (sk.type !== "all" && !counts.some(function (c) { return c.t.key === sk.type && c.n; })) sk.type = "all";
@@ -4135,7 +4341,7 @@
         h("span", { class: "dot", "aria-hidden": "true" }), c.t.label, h("span", { class: "n", text: String(c.n) })));
     });
     skEls.filters.replaceChildren.apply(skEls.filters, chips);
-    if (!total) {
+    if (!total && !editingMissing) {
       skEls.table.hidden = true;
       skEls.state.hidden = false;
       skEls.state.replaceChildren(
@@ -4145,7 +4351,8 @@
         sk.draft ? null : h("button", { type: "button", class: "btn btn-primary", onclick: pickSkill }, "Добавить первый скилл"));
       return;
     }
-    var list = state.skills.filter(skillMatches);
+    var list = state.skills.filter(function (s) { return (sk.edit && sk.edit.id === s.id) || skillMatches(s); });
+    if (editingMissing) list.push(sk.edit.original);
     if (!list.length) {
       skEls.table.hidden = true;
       skEls.state.hidden = false;
@@ -4160,6 +4367,10 @@
   }
 
   function skillRow(s) {
+    if (sk.edit && sk.edit.id === s.id && !findSkill(s.id)) {
+      return h("tr", { "data-id": s.id }, h("td", { colspan: "3" },
+        h("p", { text: "Этот скилл удалили в другом окне. Скопируйте свой текст: сохранить изменения больше нельзя." }), skillEditor(s)));
+    }
     var t = skillType(s.type);
     var actions;
     if (sk.confirmId === s.id) {
@@ -4243,7 +4454,8 @@
     }));
   }
   function startSkillEdit(s) {
-    sk.edit = { id: s.id, title: s.title, type: s.type, desc: s.desc };
+    sk.edit = { id: s.id, title: s.title, type: s.type, desc: s.desc, original: s,
+      expectedFields: { title: JSON.stringify(s.title), type: JSON.stringify(s.type), desc: JSON.stringify(s.desc) } };
     render();
     var f = skEls.rows.querySelector(".sk-edit textarea");
     if (f) f.focus();
@@ -4256,7 +4468,8 @@
     desc.value = e.desc;
     desc.addEventListener("input", function () { e.desc = desc.value; });
     var save = function () {
-      call(api.skillSave({ id: s.id, title: e.title.trim() || s.title, type: e.type, desc: e.desc })).then(function (r) {
+      if (!findSkill(e.id)) return;
+      call(api.skillSave({ id: s.id, title: e.title.trim() || s.title, type: e.type, desc: e.desc, expectedFields: e.expectedFields })).then(function (r) {
         if (!r) return;
         sk.edit = null;
         delete sk.errors[s.id];
@@ -4269,7 +4482,7 @@
       h("span", { class: "field-label", text: "Тип" }), skillTypePicker(e.type, false, function (k) { e.type = k; }),
       h("span", { class: "field-label", text: "Описание" }), desc,
       h("div", { class: "editor-actions" },
-        h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: save }, "Сохранить"),
+        h("button", { type: "button", class: "btn btn-primary btn-sm", disabled: !findSkill(e.id), onclick: save }, "Сохранить"),
         h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { sk.edit = null; render(); } }, "Отмена"),
         h("span", { class: "hint", text: "Ctrl + Enter — сохранить, Esc — отмена" })));
     box.addEventListener("keydown", function (ev) {
@@ -4352,16 +4565,23 @@
   function addSkillFiles(paths) {
     var m = state.info && state.info.assistant && state.info.assistant.keys;
     var noKey = m && !m.openai && !m.anthropic;
+    var added = 0, failed = 0;
     paths.reduce(function (p, file) {
-      return p.then(function () { return api.skillInspect(file); }).then(function (info) {
-        if (!info || !info.ok) { toast((info && info.error) || "Файл не открылся", true); return; }
-        return call(api.skillAdd({ path: info.path, title: info.title, type: "", desc: "" })).then(function (r) {
-          if (!r) return;
-          render();
-          if (!noKey) describeSkill(r.skillId, false);
-        });
+      return p.then(function () {
+        return api.skillInspect(file).then(function (info) {
+          if (!info || !info.ok) { failed++; return; }
+          return call(api.skillAdd({ path: info.path, title: info.title, type: "", desc: "" })).then(function (r) {
+            if (!r) { failed++; return; }
+            added++;
+            render();
+            if (!noKey) describeSkill(r.skillId, false);
+          });
+        }, function () { failed++; });
       });
-    }, Promise.resolve()).then(function () { toast("Скиллы добавлены"); });
+    }, Promise.resolve()).then(function () {
+      if (failed) toast("Добавлено скиллов: " + added + ". Не удалось добавить: " + failed + ". Проверьте файлы и попробуйте снова.", true);
+      else if (added) toast("Скиллы добавлены");
+    });
   }
 
   // keepType: «Пересоздать» or a type the user chose keeps the type; otherwise the assistant puts its own.
@@ -4389,7 +4609,12 @@
   }
   function removeSkill(id) {
     sk.confirmId = null;
-    call(api.skillDelete(id)).then(function (r) { if (r) { render(); toast("Скилл удалён, его файл — в корзине Windows"); } });
+    call(api.skillDelete(id)).then(function (r) {
+      if (!r) return;
+      render();
+      toast(r.skillFileStatus === "trash" ? "Скилл удалён, его файл — в корзине Windows" : r.skillFileStatus === "left"
+        ? "Скилл удалён из списка, но его файл остался в папке данных: Windows не смогла переместить его в корзину." : "Скилл удалён из списка.", true);
+    });
   }
   skEls.add.addEventListener("click", pickSkill);
   skEls.search.addEventListener("input", function () { sk.query = skEls.search.value; render(); });
@@ -4703,25 +4928,55 @@
   function closeTask() {
     var a = document.activeElement;
     if (a && els.tpanel.contains(a)) a.blur();   // the field being typed in saves itself on blur
+    if (tb.pending.size) {
+      var id = tb.open;
+      Promise.all(Array.from(tb.pending)).then(function (results) {
+        if (tb.open === id && results.every(Boolean)) closeTask();
+      });
+      return;
+    }
     tb.open = null;
     renderTaskPanel(true);
     if (state.page === "tasks") renderTasks();
   }
-  function savePanel(id, fields) {
-    return call(api.taskSave(Object.assign({ id: id }, fields))).then(function (r) { render(); renderTaskPanel(true); return r; });
+  function savePanelChecked(id, fields, original) {
+    var expected = {};
+    Object.keys(fields).forEach(function (key) { expected[key] = JSON.stringify(original[key]); });
+    var pending = call(api.taskSave(Object.assign({ id: id, expectedFields: expected }, fields))).then(function (r) {
+      tb.pending.delete(pending);
+      if (!r) { els.tpanel.dataset.conflict = "1"; return null; }
+      render();
+      return r;
+    });
+    tb.pending.add(pending);
+    return pending;
   }
   function renderTaskPanel(force) {
     var p = els.tpanel, t = tb.open && state.page === "tasks" ? findTask(tb.open) : null;
     if (!t) {
+      var oldTitle = p.querySelector(".tp-title"), oldNote = p.querySelector(".tp-note");
+      var hasDraft = (oldTitle && oldTitle.value !== p.dataset.originalTitle) || (oldNote && oldNote.value !== p.dataset.originalNote);
+      if (tb.open && state.page === "tasks" && !p.hidden && (hasDraft || p.dataset.conflict === "1")) {
+        if (p.dataset.deleted !== "1") toast("Задачу удалили в другом окне. Скопируйте несохранённый текст перед закрытием панели.", true);
+        p.dataset.deleted = "1";
+        return;
+      }
       if (tb.open && !findTask(tb.open)) tb.open = null;
       p.hidden = true;
       p.replaceChildren();
       return;
     }
     var a = document.activeElement;
+    if (p.dataset.conflict === "1" && p.dataset.id === t.id) return;
+    if (tb.pending.size && p.dataset.id === t.id) return;
     if (!force && !p.hidden && p.dataset.id === t.id && a && p.contains(a) && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && a.type === "text"))) return;
     p.dataset.id = t.id;
+    p.dataset.conflict = "0";
+    p.dataset.deleted = "0";
+    p.dataset.originalTitle = t.title;
+    p.dataset.originalNote = t.note;
     p.hidden = false;
+    function savePanel(id, fields) { return savePanelChecked(id, fields, t); }
 
     var title = h("textarea", { class: "tp-title", rows: "1", maxlength: "300", "aria-label": "Название задачи" });
     title.value = t.title;
@@ -4748,12 +5003,13 @@
     // A tag is added by Enter, by picking it from the list (that only fills the field, without Enter) or by leaving
     // the field with something typed in it. The same tag twice (in any letter case) is not added.
     var addTag = function () {
+      if (tagIn.dataset.saving === "1") return;
       var v = tagIn.value.trim();
-      tagIn.value = "";
       if (!v) return;
       v = v.charAt(0).toUpperCase() + v.slice(1);
-      if (t.tags.some(function (g) { return g.toLowerCase() === v.toLowerCase(); })) return;
-      savePanel(t.id, { tags: t.tags.concat([v]) });
+      if (t.tags.some(function (g) { return g.toLowerCase() === v.toLowerCase(); })) { tagIn.value = ""; return; }
+      tagIn.dataset.saving = "1";
+      savePanel(t.id, { tags: t.tags.concat([v]) }).then(function () { tagIn.dataset.saving = "0"; });
     };
     tagIn.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); addTag(); } });
     tagIn.addEventListener("input", function (e) {
@@ -5075,157 +5331,27 @@
   function trPrice(m) { return Math.round((m.perMin + (m.text ? trModel(m.text).perMin : 0)) * 10000) / 10000; }
   function stemOf(name) { return String(name || "").replace(/\.[^.]+$/, ""); }
   function trId() { return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
-  // 00:12,4 for the screen and the timings; 00:00:12,400 for .srt.
-  function trTime(sec, full) {
-    var ms = Math.round(Math.max(0, sec) * 1000), hh = Math.floor(ms / 3600000), mm = Math.floor(ms / 60000) % 60, ss = Math.floor(ms / 1000) % 60;
-    var p = function (n, w) { return String(n).padStart(w || 2, "0"); };
-    if (full) return p(hh) + ":" + p(mm) + ":" + p(ss) + "," + p(ms % 1000, 3);
-    return (hh ? hh + ":" : "") + p(mm) + ":" + p(ss) + "," + Math.floor(ms % 1000 / 100);
-  }
-  function trShort(sec) { var s = Math.floor(sec), m = Math.floor(s / 60); return (m >= 60 ? Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0") : String(m)) + ":" + String(s % 60).padStart(2, "0"); }
+  // Pure timing and subtitle helpers live in transcription-core.js.
+  var transcriptionCore = window.transcriptionCore;
+  var trTime = transcriptionCore.trTime,
+    trShort = transcriptionCore.trShort,
+    findSpeech = transcriptionCore.findSpeech,
+    findSpeechLevels = transcriptionCore.findSpeechLevels,
+    placeParts = transcriptionCore.placeParts,
+    splitSentences = transcriptionCore.splitSentences,
+    sentencesOf = transcriptionCore.sentencesOf,
+    subtitlesOf = transcriptionCore.subtitlesOf,
+    srtOf = transcriptionCore.srtOf,
+    timingsOf = transcriptionCore.timingsOf,
+    cueText = transcriptionCore.cueText,
+    speakerGroups = transcriptionCore.speakerGroups,
+    speakerText = transcriptionCore.speakerText;
   // A local file as an address for <video>: every part of the path is encoded, the drive letter is kept.
   function fileUrl(p) {
     var parts = String(p || "").replace(/\\/g, "/").split("/");
     return "file:///" + parts.map(function (x, i) { return i === 0 && /^[A-Za-z]:$/.test(x) ? x : encodeURIComponent(x); }).join("/");
   }
 
-  // Where the voice is. 30 ms frames; a frame is speech if it is louder than the quiet background of this file.
-  // Short gaps inside a phrase are glued; a piece with less than MIN_SPEECH of loud frames is a click or a breath and is
-  // not sent. The threshold is soft and the margins are wide on purpose: a lost word is worse than a second of pause.
-  // A very long phrase is cut in its longest pause between 12 and 20 seconds (cutting in the quietest single moment
-  // can fall inside a word). Every quiet stretch of at least MIN_PAUSE is remembered: timings are put on them.
-  var VAD = { FRAME: 0.03, GAP: 0.8, PAD: 0.4, MIN_SPEECH: 0.3, MIN_PAUSE: 0.15, OVER_FLOOR: 7, MAX_LEN: 20, CUT_FROM: 12 };
-  function findSpeech(data, rate) {
-    var F = VAD.FRAME, size = Math.round(rate * F), n = Math.floor(data.length / size), db = new Float32Array(n), f, i;
-    for (f = 0; f < n; f++) {
-      var sum = 0;
-      for (i = f * size; i < (f + 1) * size; i++) sum += data[i] * data[i];
-      db[f] = 10 * Math.log10(sum / size + 1e-12);
-    }
-    var sorted = Array.prototype.slice.call(db).sort(function (a, b) { return a - b; });
-    var floor = sorted[Math.floor(n * 0.2)] || -90, thr = Math.max(floor + VAD.OVER_FLOOR, -60);
-    var regions = [], pauses = [], start = -1, last = -1, loud = 0, quiet = -1;
-    for (f = 0; f < n; f++) {
-      if (db[f] < thr) { if (quiet < 0) quiet = f; continue; }
-      if (quiet >= 0 && (f - quiet) * F >= VAD.MIN_PAUSE) pauses.push([quiet * F, f * F]);
-      quiet = -1;
-      if (start < 0) start = f;
-      else if ((f - last) * F > VAD.GAP) { regions.push([start, last, loud]); start = f; loud = 0; }
-      last = f; loud++;
-    }
-    if (start >= 0) regions.push([start, last, loud]);
-    var out = [], end = n * F;
-    regions.forEach(function (r) {
-      if (r[2] * F < VAD.MIN_SPEECH) return;
-      // a, b — what is sent (with margins); sa, sb — where the voice really starts and stops (for the timings).
-      var p = { a: Math.max(0, r[0] * F - VAD.PAD), b: Math.min(end, (r[1] + 1) * F + VAD.PAD), sa: r[0] * F, sb: (r[1] + 1) * F };
-      var prev = out[out.length - 1];
-      if (prev && p.a <= prev.b) { p.a = prev.a; p.sa = prev.sa; out.pop(); }
-      while (p.b - p.a > VAD.MAX_LEN) {
-        var lo = p.a + VAD.CUT_FROM, hi = p.a + VAD.MAX_LEN, best = null;
-        pauses.forEach(function (q) { if (q[0] >= lo && q[1] <= hi && (!best || q[1] - q[0] > best[1] - best[0])) best = q; });
-        if (!best) best = quietestStretch(db, lo, hi);
-        var cut = (best[0] + best[1]) / 2;
-        out.push({ a: p.a, b: cut, sa: p.sa, sb: best[0] });
-        p = { a: cut, b: p.b, sa: best[1], sb: p.sb };
-      }
-      out.push(p);
-    });
-    return { pieces: out, pauses: pauses };
-  }
-  // No pause at all between 12 and 20 seconds: the quietest quarter of a second there, never one short moment.
-  function quietestStretch(db, lo, hi) {
-    var F = VAD.FRAME, w = Math.round(0.24 / F), from = Math.floor(lo / F), to = Math.floor(hi / F) - w, best = from, bestSum = Infinity;
-    for (var k = from; k <= to; k++) {
-      var s = 0;
-      for (var j = k; j < k + w; j++) s += db[j];
-      if (s < bestSum) { bestSum = s; best = k; }
-    }
-    return [best * F, (best + w) * F];
-  }
-  // Splits the time from start to end between parts of text: first by length, then each border moves to the nearest
-  // real pause within `reach` seconds — the phrase ends where the voice stops and the next starts where it begins again.
-  function placeParts(start, end, parts, pauses, reach) {
-    var total = parts.reduce(function (a, p) { return a + p.length; }, 0) || 1;
-    var inside = pauses.filter(function (q) { return q[0] > start && q[1] < end; });
-    var out = [], from = start, used = -1, acc = 0;
-    for (var i = 0; i < parts.length; i++) {
-      if (i === parts.length - 1) { out.push([from, end]); break; }
-      acc += parts[i].length;
-      var guess = start + (end - start) * acc / total, pick = -1;
-      for (var k = used + 1; k < inside.length; k++) {
-        var mid = (inside[k][0] + inside[k][1]) / 2;
-        if (Math.abs(mid - guess) <= reach && (pick < 0 || Math.abs(mid - guess) < Math.abs((inside[pick][0] + inside[pick][1]) / 2 - guess))) pick = k;
-      }
-      if (pick >= 0) { out.push([from, inside[pick][0]]); from = inside[pick][1]; used = pick; }
-      else { out.push([from, guess]); from = guess; }
-    }
-    return out;
-  }
-  function splitSentences(text) { return String(text || "").trim().split(/(?<=[.!?…])\s+/).filter(Boolean); }
-  // Pieces → phrases. A long piece may be cut in a pause in the middle of a sentence: the halves are glued back.
-  // A piece with a speaker gives phrases with it; halves are glued only when it is the same person.
-  function sentencesOf(segments, pauses) {
-    var out = [];
-    segments.forEach(function (s) {
-      var parts = splitSentences(s.text);
-      placeParts(s.start, s.end, parts, pauses, 3).forEach(function (t, i) {
-        var prev = out[out.length - 1];
-        if (i === 0 && prev && prev.speaker === s.speaker && !/[.!?…]["»)]?$/.test(prev.text) && t[0] - prev.end < 1.5) { prev.text += " " + parts[0]; prev.end = t[1]; }
-        else { var c = { start: t[0], end: t[1], text: parts[i] }; if (s.speaker) c.speaker = s.speaker; out.push(c); }
-      });
-    });
-    return out;
-  }
-  // Two halves where it reads best: at a comma, dash, colon or semicolon near the middle, else at the space nearest it.
-  function halves(text, max) {
-    var mid = text.length / 2, best = -1, re = /[,;:]\s|\s[—–-]\s/g, m;
-    while ((m = re.exec(text))) { var at = m[0][0] === " " ? m.index : m.index + 1; if (best < 0 || Math.abs(at - mid) < Math.abs(best - mid)) best = at; }
-    if (best < text.length * 0.25 || best > text.length * 0.75 || (max && Math.max(best, text.length - best) > max)) {
-      best = -1;
-      for (var i = 0; i < text.length; i++) if (text[i] === " " && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
-    }
-    return best <= 0 ? [text] : [text.slice(0, best).trim(), text.slice(best).trim()];
-  }
-  function chunksOf(text, max) {
-    if (text.length <= max) return [text];
-    var hv = halves(text);
-    return hv.length < 2 ? [text] : chunksOf(hv[0], max).concat(chunksOf(hv[1], max));
-  }
-  // Subtitles: at most two lines of about 42 letters; a longer phrase becomes several, split at commas and dashes,
-  // with their borders on the pauses too.
-  function subtitlesOf(t) {
-    var out = [];
-    t.cues.forEach(function (c) {
-      var parts = chunksOf(cueText(c), 84);
-      placeParts(c.start, c.end, parts, t.pauses || [], 1.5).forEach(function (x, i) {
-        out.push({ start: x[0], end: x[1], text: (parts[i].length > 42 ? halves(parts[i], 44) : [parts[i]]).join("\n") });
-      });
-    });
-    return out;
-  }
-  function srtOf(t) {
-    return subtitlesOf(t).map(function (s, i) { return (i + 1) + "\n" + trTime(s.start, true) + " --> " + trTime(s.end, true) + "\n" + s.text + "\n"; }).join("\n");
-  }
-  function timingsOf(t, fmt) {
-    return t.cues.map(function (c) {
-      return fmt === "prompt" ? "[" + trShort(c.start) + "–" + trShort(c.end) + "] " + cueText(c) : trTime(c.start) + " – " + trTime(c.end) + "  " + cueText(c);
-    }).join("\n");
-  }
-  // With several voices every phrase says who it is: «Собеседник 1: …».
-  function cueText(c) { return c.speaker ? c.speaker + ": " + c.text : c.text; }
-  // Phrases of the same person in a row make one paragraph «Собеседник 1: …»; paragraphs are split by an empty line.
-  function speakerGroups(cues) {
-    var out = [];
-    cues.forEach(function (c) {
-      var g = out[out.length - 1];
-      if (g && g.speaker === c.speaker) { g.cues.push(c); g.end = c.end; } else out.push({ speaker: c.speaker, start: c.start, end: c.end, cues: [c] });
-    });
-    return out;
-  }
-  function speakerText(cues) {
-    return speakerGroups(cues).map(function (g) { return g.speaker + ": " + g.cues.map(function (c) { return c.text; }).join(" "); }).join("\n\n");
-  }
   function b64(buf) {
     var bytes = new Uint8Array(buf), out = "";
     for (var i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
@@ -5244,14 +5370,21 @@
       parts.push([a, cut]); a = cut;
     }
     parts.push([a, E]);
-    var refs = [], count = 0, segs = [], usd = 0;
+    var refs = [], count = 0, segs = [], usd = 0, sent = 0, done = 0, failure = "";
     for (var pi = 0; pi < parts.length; pi++) {
-      if (tr.stop) return null;
+      if (tr.stop) break;
       var p = parts[pi];
       trProgress(8 + 42 * pi / parts.length, "Различаю голоса: часть " + (pi + 1) + " из " + parts.length + "… Можно уйти в другую вкладку — расшифровка продолжится.");
-      var res = await api.transcribeDiarize(await pieceWav(audio, p[0], p[1]), refs, p[1] - p[0]);
-      if (!res || !res.ok) throw new Error((res && res.error) || "OpenAI не ответил.");
+      var res;
+      try {
+        var wav = await pieceWav(audio, p[0], p[1]);
+        if (tr.stop) break;
+        res = await api.transcribeDiarize(wav, refs, p[1] - p[0]);
+      } catch (e) { if (!tr.stop) failure = "Не удалось обработать часть записи."; break; }
+      if (!res || !res.ok) { if (!tr.stop) failure = (res && res.error) || "OpenAI не ответил."; break; }
       usd += res.usd || 0;
+      sent += p[1] - p[0];
+      done++;
       // A label is a known name (from the voice samples) or a letter: letters become «Собеседник N» in order of appearance.
       var names = {}, fresh = [];
       res.segments.forEach(function (x) {
@@ -5261,11 +5394,16 @@
         else { name = "Собеседник " + (++count); names[label] = name; fresh.push(name); }
         segs.push({ start: p[0] + x.start, end: p[0] + x.end, text: x.text, speaker: name });
       });
+      if (tr.stop) break;
       for (var fi = 0; fi < fresh.length && refs.length < DIAR.REFS; fi++) {
         var who = fresh[fi];
         var own = segs.filter(function (x) { return x.speaker === who && x.end - x.start >= DIAR.REF_MIN; }).sort(function (x, y) { return (y.end - y.start) - (x.end - x.start); })[0];
-        if (own) refs.push({ name: who, data: "data:audio/wav;base64," + b64(await pieceWav(audio, own.start, Math.min(own.end, own.start + DIAR.REF_MAX))) });
+        if (own) {
+          try { refs.push({ name: who, data: "data:audio/wav;base64," + b64(await pieceWav(audio, own.start, Math.min(own.end, own.start + DIAR.REF_MAX))) }); }
+          catch (e) { if (!tr.stop) failure = "Не удалось подготовить образец голоса."; break; }
+        }
       }
+      if (failure || tr.stop) break;
     }
     var cues = [];
     segs.forEach(function (x) {
@@ -5276,7 +5414,7 @@
         else cues.push({ start: t[0], end: t[1], text: ps[i], speaker: x.speaker });
       });
     });
-    return { cues: cues, text: speakerText(cues), usd: usd, sent: E - S, parts: parts.length };
+    return { cues: cues, text: speakerText(cues), usd: usd, sent: sent, parts: done, stopped: tr.stop, error: failure };
   }
   // Where the voice changes (by the diarize model), moved to the nearest pause within a second: the pieces for the text
   // model are cut there, so every piece is one person and gets that person's name.
@@ -5310,6 +5448,7 @@
   }
   // A piece as WAV, 16 kHz mono: small, and OpenAI takes it as it is.
   function pieceWav(audio, a, b) {
+    if (audio.wav) return audio.wav(a, b, function () { return tr.stop; });
     var rate = 16000, len = Math.max(1, Math.ceil((b - a) * rate));
     var off = new OfflineAudioContext(1, len, rate), src = off.createBufferSource();
     src.buffer = audio; src.connect(off.destination); src.start(0, a, b - a);
@@ -5324,11 +5463,14 @@
     });
   }
 
+  function trReleaseFile(file) { if (file && file.token) api.mediaRelease(file.token).catch(function () {}); }
   function trSetFile(info) {
     if (!info || info.canceled) return;
     if (!info.ok) { toast(info.error || "Этот файл не подходит.", true); return; }
-    if (tr.busy) { toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
-    tr.file = info; tr.open = null; tr.error = ""; tr.subs = null;
+    if (tr.draft) { trReleaseFile(info); toast("Сначала сохраните или скопируйте правку открытой расшифровки.", true); return; }
+    if (tr.busy) { trReleaseFile(info); toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
+    trReleaseFile(tr.file);
+    tr.file = info; tr.open = null; tr.error = ""; tr.subs = null; tr.retryFlat = false;
     trDuration(info);
     if (state.page !== "transcribe") setPage("transcribe"); else render();
   }
@@ -5355,81 +5497,172 @@
   }
   function trFail(text) { tr.busy = false; tr.error = text; render(); }
 
-  async function trRun() {
-    // A model no longer in the list (remembered from an older version) becomes the main one.
-    var f = tr.file, model = trModel(tr.model).id;
-    if (!f || tr.busy) return;
-    tr.modelMenu = false;
-    if (!assistantState().keys.openai) { tr.error = "Для расшифровки нужен ключ ChatGPT."; render(); return; }
-    tr.busy = true; tr.stop = false; tr.error = ""; trProgress(2, "Читаю файл и достаю звук…");
-    render();
-    var r, audio;
-    try { r = await api.mediaRead(f.file); } catch (e) { r = null; }
-    if (!r || !r.ok) { trFail((r && r.error) || "Файл не прочитался."); return; }
+  // Prefer bounded reads; keep Chromium's previous decoder for formats its streaming codecs cannot handle.
+  async function trPrepare(f, allowFlat) {
+    var stream, levels, found;
+    try {
+      stream = await window.transcriptionStream.open(f, api);
+      var lastScanUpdate = 0;
+      levels = await stream.scan(function (progress) {
+        var now = performance.now();
+        if (now - lastScanUpdate < 250 && progress < 1) return;
+        lastScanUpdate = now;
+        trProgress(2 + 5 * progress, "Читаю файл и ищу речь…");
+      }, function () { return tr.stop; });
+      if (tr.stop) { stream.close(); return null; }
+      found = findSpeechLevels(levels, { flatFallback: allowFlat === true });
+      if (!found.pieces.length) tr.retryFlat = allowFlat !== true && findSpeechLevels(levels, { flatFallback: true }).pieces.length > 0;
+      return { audio: stream, stream: stream, found: found };
+    } catch (streamError) {
+      if (stream) stream.close();
+      if (tr.stop) return null;
+    }
+    var r;
+    try { r = await api.mediaRead(f.file, f.token); } catch (e) { r = null; }
+    if (!r || !r.ok) throw new Error((r && r.error) || "Файл не прочитался.");
+    if (tr.stop) return null;
+    var audio;
     try { audio = await new OfflineAudioContext(1, 1, 16000).decodeAudioData(r.data); }
-    catch (e) { trFail("Не получилось достать звук из этого файла: возможно, в нём нет звуковой дорожки или такой формат не открывается."); return; }
+    catch (e) {
+      if (tr.stop) return null;
+      throw new Error("Не получилось достать звук из этого файла: возможно, в нём нет звуковой дорожки или такой формат не открывается.");
+    }
     r = null;
+    if (tr.stop) return null;
     var mono = audio.getChannelData(0);
     if (audio.numberOfChannels > 1) {
       mono = new Float32Array(audio.length);
       for (var c = 0; c < audio.numberOfChannels; c++) { var ch = audio.getChannelData(c); for (var i = 0; i < ch.length; i++) mono[i] += ch[i] / audio.numberOfChannels; }
     }
-    var found = findSpeech(mono, audio.sampleRate), pieces = found.pieces, n = pieces.length;
-    mono = null;
-    if (!n) { trFail("В файле не нашлось речи: звук есть, но он слишком тихий или это только музыка."); return; }
+    found = findSpeech(mono, audio.sampleRate, { flatFallback: allowFlat === true });
+    if (!found.pieces.length) tr.retryFlat = allowFlat !== true && findSpeech(mono, audio.sampleRate, { flatFallback: true }).pieces.length > 0;
+    return { audio: audio, stream: null, found: found };
+  }
+
+  async function trRun(allowFlat) {
+    // A model no longer in the list (remembered from an older version) becomes the main one.
+    var f = tr.file, model = trModel(tr.model).id;
+    if (!f || tr.busy) return;
+    if (tr.pending) { toast("Сначала сохраните готовую расшифровку ниже: повторная обработка не нужна.", true); return; }
+    tr.modelMenu = false;
+    if (!assistantState().keys.openai) { tr.error = "Для расшифровки нужен ключ ChatGPT."; render(); return; }
+    tr.busy = true; tr.stop = false; tr.error = ""; tr.retryFlat = false; trProgress(2, "Читаю файл и достаю звук…");
+    render();
+    var prepared;
+    try { prepared = await trPrepare(f, allowFlat); } catch (e) { trFail(e.message); return; }
+    if (!prepared) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+    var audio = prepared.audio, stream = prepared.stream, found = prepared.found, pieces = found.pieces, n = pieces.length;
+    try {
+    if (!n) {
+      trFail(tr.retryFlat ? "Речь не найдена: возможно, в записи почти нет тишины. Можно попробовать ещё раз с другим порогом." : "В файле не нашлось речи: звук есть, но он слишком тихий или это только музыка.");
+      return;
+    }
     // Several voices: first the diarize model says who speaks when, then the strongest model writes the text of the
     // same pieces, cut where the voice changes. Its text with the names of the diarize model is the result.
     var textModel = model, d = null, from = 8;
     if (trModel(model).speakers) {
-      try { d = await trDiarize(audio, found); } catch (e) { trFail(e.message); return; }
+      try { d = await trDiarize(audio, found); } catch (e) {
+        if (tr.stop) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); }
+        else trFail(e.message);
+        return;
+      }
       if (!d) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+      if (d.stopped || d.error) {
+        if (!d.cues.length) {
+          if (d.stopped) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); }
+          else trFail(d.error);
+          return;
+        }
+        var savedVoices = await trSaveResult(f, audio, model, found, d.text, d.cues, d.usd, d.sent, d.parts, "", true);
+        if (savedVoices) showBanner((d.stopped ? "Расшифровка остановлена." : "Не удалось различить голоса во всей записи: " + d.error) + " Готовые фрагменты сохранены в истории как неполная расшифровка; между ними могут быть пропуски.");
+        return;
+      }
       if (!d.cues.length) { trFail("В записи не нашлось речи, которую получилось расшифровать."); return; }
       textModel = trModel(model).text; pieces = turnPieces(pieces, d.cues, found.pauses); n = pieces.length; from = 50;
     }
     trProgress(from, (d ? "Голоса различены. Пишу текст: кусков " : "Нашёл кусков с речью: ") + n + ". Расшифровываю…");
     var texts = new Array(n), next = 0, done = 0, sent = 0, usd = 0, failed = null;
-    var before = function (k) { var s = ""; for (var j = 0; j < k; j++) if (texts[j]) s += " " + texts[j]; return s.slice(-600).trim(); };
+    var before = function (k) { var s = ""; for (var j = k - 1; j >= 0 && s.length < 600; j--) if (texts[j]) s = " " + texts[j] + s; return s.slice(-600).trim(); };
     var worker = async function () {
       while (next < n && !failed && !tr.stop) {
         var k = next++, p = pieces[k];
-        var res = await api.transcribePiece(await pieceWav(audio, p.a, p.b), before(k), textModel, p.b - p.a);
+        var res;
+        try {
+          var wav = await pieceWav(audio, p.a, p.b);
+          if (tr.stop) return;
+          res = await api.transcribePiece(wav, before(k), textModel, p.b - p.a);
+        } catch (e) { if (!tr.stop) failed = "Не удалось обработать кусок записи."; return; }
         if (!res || !res.ok) { failed = (res && res.error) || "OpenAI не ответил."; return; }
         texts[k] = res.text; sent += p.b - p.a; usd += res.usd || 0;
         trProgress(from + (96 - from) * (++done) / n, (d ? "Пишу текст: готово кусков " : "Расшифровано кусков: ") + done + " из " + n + "… Можно уйти в другую вкладку — расшифровка продолжится.");
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    if (tr.stop) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+    if (tr.stop) {
+      var stoppedSegments = pieces.map(function (p, k) { return { start: p.sa, end: p.sb, text: texts[k] || "" }; }).filter(function (s) { return s.text; });
+      var stoppedText = d ? d.text : stoppedSegments.map(function (s) { return s.text; }).join(" ");
+      var stoppedCues = d ? d.cues : sentencesOf(stoppedSegments, found.pauses);
+      if (!stoppedCues.length) { tr.busy = false; tr.error = ""; render(); toast("Расшифровка остановлена."); return; }
+      var savedStopped = await trSaveResult(f, audio, model, found, stoppedText, stoppedCues, (d ? d.usd : 0) + usd, d ? d.sent : sent, d ? d.parts : done, "", true);
+      if (savedStopped) showBanner("Расшифровка остановлена. " + (d ? "Сохранён текст модели, которая различала голоса." : "Готовые фрагменты сохранены в истории; между ними могут быть пропуски."));
+      return;
+    }
     if (failed && d) {
       // The voices are already paid for: keep their own text rather than lose everything.
       await trSaveResult(f, audio, model, found, d.text, d.cues, d.usd + usd, d.sent, d.parts, "");
       toast("Текст написала модель, которая различала голоса: вторая не ответила (" + failed + ")", true);
       return;
     }
-    if (failed) { trFail(failed); return; }
     var segments = pieces.map(function (p, k) { var s = { start: p.sa, end: p.sb, text: texts[k] || "" }; if (p.speaker) s.speaker = p.speaker; return s; }).filter(function (s) { return s.text; });
+    if (failed) {
+      if (!segments.length) { trFail(failed); return; }
+      var partialCues = sentencesOf(segments, found.pauses);
+      var partialSaved = await trSaveResult(f, audio, model, found, segments.map(function (s) { return s.text; }).join(" "), partialCues, usd, sent, done, "", true);
+      if (partialSaved) showBanner("Не удалось расшифровать всю запись: " + failed + " Готовые фрагменты сохранены в истории как неполная расшифровка; между ними могут быть пропуски.");
+      return;
+    }
     var cues = sentencesOf(segments, found.pauses);
     if (d) await trSaveResult(f, audio, model, found, speakerText(cues), cues, d.usd + usd, sent, n, textModel);
     else await trSaveResult(f, audio, model, found, segments.map(function (s) { return s.text; }).join(" "), cues, usd, sent, n);
+    } finally {
+      if (stream) stream.close();
+      if (!tr.file || tr.file.token !== f.token) trReleaseFile(f);
+    }
   }
-  async function trSaveResult(f, audio, model, found, text, cues, usd, sent, n, textModel) {
-    var saved = await call(api.transcriptSave({
-      id: trId(), name: f.name, source: f.file, kind: f.kind, size: f.size, duration: audio.duration, model: model, textModel: textModel || "",
+  async function trSaveResult(f, audio, model, found, text, cues, usd, sent, n, textModel, partial) {
+    tr.pending = { file: f, data: {
+      id: trId(), name: partial ? "Неполная — " + f.name : f.name, source: f.file, kind: f.kind, size: f.size, duration: audio.duration, model: model, textModel: textModel || "",
       text: text, cues: cues,
       pauses: found.pauses.map(function (q) { return [Math.round(q[0] * 1000) / 1000, Math.round(q[1] * 1000) / 1000]; }),
       usd: usd, sent: sent, pieces: n
-    }));
+    }, partial: partial };
+    var saved = await trCommitPending();
     tr.busy = false;
-    if (!saved) { tr.error = "Расшифровка готова, но не сохранилась. Попробуйте ещё раз."; render(); return; }
-    tr.list = saved.transcripts; tr.open = saved.transcript; tr.file = null; tr.view = "text"; tr.subs = null;
-    render();
+    if (!saved) { render(); return false; }
     var people = trSpeakers(cues).length;
-    toast("Готово: «" + f.name + "» — " + cues.length + " " + plural(cues.length, "фраза", "фразы", "фраз") + (people ? ", " + people + " " + plural(people, "собеседник", "собеседника", "собеседников") : "") + (usd ? ", около $" + usd.toFixed(4) : "") + ".");
+    if (!partial) toast("Готово: «" + f.name + "» — " + cues.length + " " + plural(cues.length, "фраза", "фразы", "фраз") + (people ? ", " + people + " " + plural(people, "собеседник", "собеседника", "собеседников") : "") + (usd ? ", около $" + usd.toFixed(4) : "") + ".");
+    render();
+    return true;
+  }
+  async function trCommitPending() {
+    if (!tr.pending || tr.pendingBusy) return false;
+    var pending = tr.pending;
+    tr.pendingBusy = true;
+    var saved = await call(api.transcriptSave(pending.data));
+    tr.pendingBusy = false;
+    if (!saved) { tr.error = "Расшифровка готова, но не сохранилась. Текст пока хранится в программе: повторите сохранение или скопируйте его до закрытия программы."; render(); return false; }
+    tr.pending = null;
+    tr.error = "";
+    tr.list = saved.transcripts; tr.open = saved.transcript; tr.view = "text"; tr.subs = null;
+    if (tr.file && pending.file && tr.file.token === pending.file.token) { trReleaseFile(tr.file); tr.file = null; }
+    render();
+    return true;
   }
   function trSpeakers(cues) { var seen = []; cues.forEach(function (c) { if (c.speaker && seen.indexOf(c.speaker) === -1) seen.push(c.speaker); }); return seen; }
 
   function trOpen(id) {
     if (tr.open && tr.open.id === id) return;
+    if (tr.draft) { toast("Сначала сохраните или скопируйте правку открытой расшифровки.", true); return; }
     api.transcriptGet(id).then(function (r) {
       if (!r || !r.ok) { toast((r && r.error) || "Не открылось.", true); return; }
       tr.open = r.transcript; tr.subs = null; tr.view = "text";
@@ -5446,37 +5679,47 @@
     }, function () {});
   }
   function trRemove(item) {
-    api.transcriptGet(item.id).then(function (r) {
-      var copy = r && r.ok ? r.transcript : null;
-      call(api.transcriptDelete(item.id)).then(function (d) {
-        if (!d) return;
-        tr.list = d.transcripts;
-        if (tr.open && tr.open.id === item.id) tr.open = null;
-        render();
-        if (copy) undoToast("Расшифровка «" + item.name + "» удалена", function () {
-          call(api.transcriptRestore(copy)).then(function (x) { if (x) { tr.list = x.transcripts; render(); } });
-        });
+    if (tr.draft && tr.draft.id === item.id) { toast("Сначала сохраните или отмените правку этой расшифровки.", true); return; }
+    call(api.transcriptDelete(item.id)).then(function (d) {
+      if (!d) return;
+      tr.list = d.transcripts;
+      if (tr.open && tr.open.id === item.id) tr.open = null;
+      render();
+      if (d.removed) undoToast("Расшифровка «" + item.name + "» удалена", function () {
+        call(api.transcriptRestore(d.removed)).then(function (x) { if (x) { tr.list = x.transcripts; render(); } });
       });
     });
   }
   // The text was corrected: the same number of sentences keeps their times; otherwise the new sentences are spread over
   // the whole length again and put on the pauses.
   function trEditText(value) {
-    var t = tr.open, text = String(value || "").trim();
-    if (!t || text === t.text) return;
+    var t = tr.draft ? tr.draft.base : tr.open, text = String(value || "").trim();
+    if (!t || (tr.draft && tr.draft.deleted)) return;
+    if (text === t.text) { tr.draft = null; render(); return; }
     if (trSpeakers(t.cues).length) { trEditSpeakers(t, text); return; }
     var parts = splitSentences(text), cues;
-    if (!parts.length) return;
+    if (!parts.length) { if (tr.draft) tr.draft.error = "Текст расшифровки не может быть пустым."; render(); return; }
     if (parts.length === t.cues.length) cues = t.cues.map(function (c, i) { return { start: c.start, end: c.end, text: parts[i] }; });
     else {
       var a = t.cues.length ? t.cues[0].start : 0, b = t.cues.length ? t.cues[t.cues.length - 1].end : t.duration;
       cues = placeParts(a, b, parts, t.pauses || [], 3).map(function (x, i) { return { start: x[0], end: x[1], text: parts[i] }; });
     }
-    call(api.transcriptSave({ id: t.id, text: text, cues: cues })).then(function (r) {
-      if (!r) return;
+    trSaveEdit(t, text, cues);
+  }
+  function trSaveEdit(t, text, cues) {
+    var draft = tr.draft;
+    if (!draft || draft.saving) return;
+    var submitted = draft.value;
+    draft.saving = true; draft.error = "";
+    call(api.transcriptSave({ id: t.id, text: text, cues: cues,
+      expectedFields: { text: JSON.stringify(t.text), cues: JSON.stringify(t.cues) } })).then(function (r) {
+      draft.saving = false;
+      if (!r) { draft.error = "Правка не сохранилась. Текст остался здесь: можно повторить сохранение или скопировать его."; render(); return; }
       tr.open = r.transcript; tr.list = r.transcripts; tr.subs = null;
+      if (tr.draft === draft && draft.value === submitted) tr.draft = null;
+      else if (tr.draft === draft) draft.base = r.transcript;
       toast("Правка сохранена, тайминги и субтитры обновились.");
-      if (tr.view !== "text") render();
+      render();
     });
   }
   // With several voices the text is paragraphs «Имя: …». Each paragraph keeps its time; the name before the colon can be
@@ -5486,7 +5729,7 @@
     var groups = speakerGroups(t.cues), paras = text.split(/\n\s*\n/).map(function (x) { return x.trim(); }).filter(Boolean);
     var parsed = paras.map(function (x) { var m = x.match(/^([^:\n]{1,40}):\s*([\s\S]+)$/); return m ? { speaker: m[1].trim(), text: m[2].replace(/\s+/g, " ").trim() } : null; });
     if (parsed.length !== groups.length || parsed.some(function (x) { return !x; })) {
-      toast("Правка не сохранилась: в записи с несколькими собеседниками правьте текст внутри абзацев и оставляйте «Имя:» в начале каждого.", true);
+      if (tr.draft) tr.draft.error = "В записи с несколькими собеседниками оставляйте «Имя:» в начале каждого абзаца.";
       render();
       return;
     }
@@ -5495,22 +5738,21 @@
       var ps = splitSentences(parsed[i].text);
       placeParts(g.start, g.end, ps, t.pauses || [], 3).forEach(function (x, k) { cues.push({ start: x[0], end: x[1], text: ps[k], speaker: parsed[i].speaker }); });
     });
-    call(api.transcriptSave({ id: t.id, text: speakerText(cues), cues: cues })).then(function (r) {
-      if (!r) return;
-      tr.open = r.transcript; tr.list = r.transcripts; tr.subs = null;
-      toast("Правка сохранена, тайминги и субтитры обновились.");
-      render();
-    });
+    trSaveEdit(t, speakerText(cues), cues);
   }
   function trSummary() {
     var t = tr.open;
     if (!t || tr.sumBusy) return;
+    if (tr.pendingSummary) { toast("Сначала сохраните или скопируйте готовое краткое содержание.", true); return; }
     tr.sumBusy = true; render();
-    call(api.transcriptSummary(t.id)).then(function (r) {
+    api.transcriptSummary(t.id).then(function (r) {
       tr.sumBusy = false;
-      if (r && tr.open && tr.open.id === t.id) { tr.open = r.transcript; tr.list = r.transcripts; if (r.info) state.info = r.info; }
+      if (!r || !r.ok) {
+        if (r && r.recovery) tr.pendingSummary = r.recovery;
+        toast((r && r.error) || "Краткое содержание не получилось. Попробуйте ещё раз.", true);
+      } else if (tr.open && tr.open.id === t.id) { applyData(r); tr.open = r.transcript; tr.list = r.transcripts; if (r.info) state.info = r.info; }
       render();
-    });
+    }, function () { tr.sumBusy = false; toast("Краткое содержание не получилось. Попробуйте ещё раз.", true); render(); });
   }
   function trCopy(text, done) { call(api.transcriptCopy(text)).then(function (r) { if (r) toast(done); }); }
   function summaryText(s) { return s.brief + (s.points.length ? "\n\n" + s.points.map(function (x) { return "— " + x; }).join("\n") : ""); }
@@ -5541,14 +5783,16 @@
     return h("div", { class: "tr-drop" },
       h("span", { class: "big", html: ICONS.upload, "aria-hidden": "true" }),
       h("div", null, h("b", { text: "Перетащите аудио или видео сюда" }),
-        h("p", { text: "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама. Файл — до 2 ГБ, длина любая: на расшифровку уходят только куски с речью." })),
+        h("p", { text: "mp4, mov, mkv, webm, mp3, m4a, wav, ogg, flac. Звук из видео программа достанет сама. На расшифровку уходят только куски с речью." })),
       h("button", { type: "button", class: "btn btn-primary", onclick: trPick }, "Выбрать файл…"));
   }
   // «Новая транскрибация» above the history: back to the start screen (the file is chosen with «Выбрать файл…» or
   // dropped anywhere on the page); the open transcription stays in the history.
   function trNew() {
     if (tr.busy) { toast("Дождитесь, пока закончится расшифровка, или остановите её."); return; }
-    tr.open = null; tr.file = null; tr.error = ""; tr.subs = null;
+    if (tr.draft) { toast("Сначала сохраните или скопируйте правку открытой расшифровки.", true); return; }
+    trReleaseFile(tr.file);
+    tr.open = null; tr.file = null; tr.error = ""; tr.subs = null; tr.retryFlat = false;
     render();
   }
   // The model list: a button and a menu like «Модель» in LLM. Next to every model a «!»: hovering it (or focusing it with
@@ -5595,7 +5839,7 @@
     var card = h("section", { class: "card tr-file" },
       h("div", { class: "tr-file-h" }, h("span", { class: "tr-ic" + (f.kind === "audio" ? " audio" : ""), html: f.kind === "audio" ? ICONS.music : ICONS.film, "aria-hidden": "true" }),
         h("div", { class: "nm" }, h("b", { text: f.name }), h("span", { text: (f.kind === "audio" ? "Аудио" : "Видео") + " · " + (f.size / 1048576).toFixed(1).replace(".", ",") + " МБ" })),
-        tr.busy ? null : h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { tr.file = null; tr.error = ""; render(); } }, "Убрать")));
+        tr.busy ? null : h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { trReleaseFile(tr.file); tr.file = null; tr.error = ""; render(); } }, "Убрать")));
     if (tr.busy) {
       card.append(h("div", { class: "tr-prog" },
         h("div", { class: "tr-bar" }, h("b")), h("span", { class: "tr-soft", text: tr.progText }),
@@ -5604,9 +5848,12 @@
     } else {
       card.append(h("div", { class: "tr-opts" }, "Модель:", trModelPick(m),
         h("span", { class: "tr-soft", text: (f.duration ? "Этот файл (" + trShort(f.duration) + ") — " + trFilePrice(m, f) + " · " : "") + "$" + trPrice(m) + " за минуту речи" + (m.speakers ? " · голоса различит эта модель («Собеседник 1», «Собеседник 2»…, до 4), а текст напишет " + trModel(m.text).name : "") + " · ключ ChatGPT из «Настроек»" }), h("span", { class: "grow" }),
-        h("button", { type: "button", class: "btn btn-primary", onclick: trRun }, "Расшифровать")));
+        h("button", { type: "button", class: "btn btn-primary", onclick: function () { trRun(false); } }, "Расшифровать")));
     }
     if (tr.error) card.append(h("p", { class: "tr-err", text: tr.error }));
+    if (tr.retryFlat && !tr.busy) card.append(h("div", { class: "tr-opts" },
+      h("span", { class: "tr-soft", text: "Будут отправлены и громкие фоновые звуки. Это может стоить больше и дать лишний текст." }),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { trRun(true); } }, "Попробовать с другим порогом")));
     return card;
   }
   // The result: the file with subtitles over it, a strip of phrases, then «Текст / Тайминги / Кратко» and the buttons.
@@ -5649,23 +5896,45 @@
     if (trUi && trUi.media) { try { trUi.media.pause(); } catch (e) {} }
     trUi = null;
   }
+  function trDraftStatus(t) {
+    if (!tr.draft || tr.draft.id !== t.id) return null;
+    var draft = tr.draft;
+    var status = h("div", { class: "tr-draft-status" });
+    if (draft.deleted || draft.error) status.append(h("p", { class: "tr-err", text: draft.deleted
+      ? "Расшифровку удалили в другом окне. Скопируйте текст: сохранить эту правку больше нельзя." : draft.error }));
+    status.append(h("div", { class: "tr-opts" },
+      h("button", { type: "button", class: "btn btn-primary btn-sm", disabled: draft.deleted || draft.saving, onclick: function () { trEditText(draft.value); } }, draft.saving ? "Сохраняю…" : "Повторить сохранение"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { api.copyText(draft.value).then(function (r) { if (r && r.ok) toast("Текст скопирован."); }); } }, "Скопировать текст"),
+      h("button", { type: "button", class: "btn btn-ghost btn-sm", disabled: draft.saving, onclick: function () { tr.draft = null; if (draft.deleted) tr.open = null; render(); } }, "Отменить правку")));
+    return status;
+  }
   function trResult() {
     var t = tr.open, ui = trPlayerOf(t), seek = ui.seek;
     ui.cueEls = [];
 
     var seg = h("div", { class: "tr-seg", role: "group", "aria-label": "Что показать" }, [["text", "Текст"], ["cues", "Тайминги"], ["sum", "Кратко"]].map(function (v) {
-      return h("button", { type: "button", "aria-pressed": String(tr.view === v[0]), onclick: function () { tr.view = v[0]; render(); } }, v[1]);
+      return h("button", { type: "button", "aria-pressed": String(tr.view === v[0]), onclick: function () {
+        if (tr.draft && v[0] !== "text") { toast("Сначала сохраните или скопируйте правку расшифровки.", true); return; }
+        tr.view = v[0]; render();
+      } }, v[1]);
     }));
     var tabsRow = h("div", { class: "tr-tabs" }, seg, h("span", { class: "grow" }),
       h("span", { class: "tr-soft", text: trShort(t.duration) + " · " + t.cues.length + " " + plural(t.cues.length, "фраза", "фразы", "фраз") + (trSpeakers(t.cues).length ? " · " + trSpeakers(t.cues).length + " " + plural(trSpeakers(t.cues).length, "собеседник", "собеседника", "собеседников") : "") + " · " + (t.textModel ? "голоса: " + t.model + ", текст: " + t.textModel : t.model) + (t.usd ? " · ≈ $" + t.usd.toFixed(4) : "") }));
     var body = h("div", { class: "tr-body" });
     if (tr.view === "text") {
       var ta = h("textarea", { class: "tr-text", "aria-label": "Текст расшифровки", spellcheck: "true" });
-      ta.value = t.text;
+      ta.value = tr.draft && tr.draft.id === t.id ? tr.draft.value : t.text;
+      ta.addEventListener("input", function () {
+        if (!tr.draft) tr.draft = { id: t.id, base: t, value: ta.value, error: "", deleted: false, saving: false };
+        else if (tr.draft.id === t.id) tr.draft.value = ta.value;
+      });
       ta.addEventListener("change", function () { trEditText(ta.value); });
+      ta.addEventListener("blur", function () { setTimeout(function () { if (tr.draft && tr.draft.id === t.id) render(); }, 0); });
       body.append(ta, h("p", { class: "tr-hint", text: trSpeakers(t.cues).length
         ? "Каждый абзац — один собеседник. Чтобы подписать человека по имени, замените «Собеседник 2» на имя в его абзацах. Текст можно править внутри абзаца; правка сохранится, когда вы щёлкнете мимо поля, и попадёт в тайминги и субтитры."
         : "Текст можно поправить прямо здесь: например, имя или название, которое модель расслышала неверно. Правка сохранится, когда вы щёлкнете мимо поля, и попадёт в тайминги и субтитры." }));
+      var draftStatus = trDraftStatus(t);
+      if (draftStatus) body.append(draftStatus);
     } else if (tr.view === "cues") {
       var fmtSeg = h("div", { class: "tr-seg", role: "group", "aria-label": "Как копировать" }, [["plain", "00:12,4 – 00:15,8  текст"], ["prompt", "[0:12–0:15] текст"]].map(function (v) {
         return h("button", { type: "button", "aria-pressed": String(tr.fmt === v[0]), onclick: function () { tr.fmt = v[0]; try { localStorage.setItem("trFmt", tr.fmt); } catch (e) {} render(); } }, v[1]);
@@ -5729,15 +5998,48 @@
     els.trList.replaceChildren.apply(els.trList, kids);
   }
   function renderTranscribe() {
+    var keep = els.trMain.querySelector('.tr-text[aria-label="Текст расшифровки"]');
+    if (keep && document.activeElement === keep && (tr.open || tr.draft)) {
+      // Keep the player, text and cursor, but update the status of unsaved changes.
+      var oldStatus = els.trMain.querySelector('.tr-draft-status');
+      if (oldStatus) oldStatus.remove();
+      var nextStatus = tr.open && trDraftStatus(tr.open);
+      if (nextStatus) keep.parentNode.append(nextStatus);
+      trHistory(); return;
+    }
     var kids = [];
     if (!tr.open || (trUi && trUi.id !== tr.open.id)) trDropPlayer();
     if (!assistantState().keys.openai) kids.push(h("div", { class: "tr-nokey" }, h("span", { text: "Для расшифровки нужен ключ ChatGPT (OpenAI). Ключ Claude не подходит: звук в текст переводит только OpenAI." }),
       h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: function () { openSettings("keys"); } }, "Подключить ChatGPT")));
+    if (tr.pending) {
+      var pendingText = h("textarea", { class: "tr-text", readonly: true, "aria-label": "Несохранённая расшифровка" });
+      pendingText.value = tr.pending.data.text;
+      kids.push(h("section", { class: "card tr-file" }, h("h3", { text: "Расшифровка готова, но не сохранилась" }),
+        h("p", { class: "tr-err", text: "Текст пока хранится в программе. Повторите сохранение или скопируйте его до закрытия программы. Повторно расшифровывать запись не нужно." }), pendingText,
+        h("div", { class: "tr-opts" }, h("button", { type: "button", class: "btn btn-primary btn-sm", disabled: tr.pendingBusy, onclick: function () { trCommitPending().then(function (ok) { if (ok) toast("Расшифровка сохранена."); }); } }, tr.pendingBusy ? "Сохраняю…" : "Повторить сохранение"),
+          h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { var text = tr.pending && tr.pending.data.text; if (text) api.copyText(text).then(function (r) { if (r && r.ok) toast("Текст скопирован."); }); } }, "Скопировать текст"))));
+    }
+    if (tr.pendingSummary) {
+      var pendingSummary = tr.pendingSummary;
+      var summaryPreview = h("textarea", { class: "textarea", readonly: true, "aria-label": "Несохранённое краткое содержание" });
+      summaryPreview.value = summaryText({ brief: pendingSummary.summary.brief || "", points: Array.isArray(pendingSummary.summary.points) ? pendingSummary.summary.points : [] });
+      kids.push(h("section", { class: "card tr-file" }, h("h3", { text: "Краткое содержание готово, но не сохранилось" }),
+        h("p", { class: "tr-err", text: "Оно пока хранится в программе. Повторите сохранение или скопируйте текст до закрытия программы." }), summaryPreview,
+        h("div", { class: "tr-opts" }, h("button", { type: "button", class: "btn btn-primary btn-sm", disabled: tr.sumBusy, onclick: function () {
+          if (tr.sumBusy) return;
+          tr.sumBusy = true; render();
+          call(api.transcriptSave(pendingSummary)).then(function (r) {
+            tr.sumBusy = false;
+            if (r) { tr.pendingSummary = null; tr.list = r.transcripts; if (tr.open && tr.open.id === r.transcript.id) tr.open = r.transcript; toast("Краткое содержание сохранено."); }
+            render();
+          });
+        } }, tr.sumBusy ? "Сохраняю…" : "Повторить сохранение"),
+        h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { api.copyText(summaryPreview.value).then(function (r) { if (r && r.ok) toast("Текст скопирован."); }); } }, "Скопировать текст"),
+        h("button", { type: "button", class: "btn btn-ghost btn-sm", onclick: function () { tr.pendingSummary = null; render(); } }, "Отбросить"))));
+    }
     if (tr.file && (tr.busy || !tr.open)) kids.push(trFileCard());
     if (tr.open) kids.push(trResult());
     else if (!tr.file) kids.push(trDrop());
-    var keep = els.trMain.querySelector(".tr-text");
-    if (keep && document.activeElement === keep) { trHistory(); return; }   // typing in the text: do not throw it away
     els.trMain.replaceChildren.apply(els.trMain, kids);
     trHistory();
   }
@@ -5920,10 +6222,16 @@
   els.addBtn.addEventListener("click", function () { openEditor(null); });
   els.cancelBtn.addEventListener("click", function () { closeEditor(true); });
   els.bannerClose.addEventListener("click", function () {
+    var wasChatSave = !!els.banner.dataset.chatSave;
+    var wasRecapPending = !!els.banner.dataset.recapPending;
     els.banner.hidden = true;
+    delete els.banner.dataset.chatSave;
+    delete els.banner.dataset.recapPending;
     var fn = bannerOnClose;
     bannerOnClose = null;
     if (fn) fn();
+    if (!wasChatSave && els.banner.hidden) showFailedConversationSaves();
+    if (!wasRecapPending && els.banner.hidden) showPendingRecaps();
   });
   els.editor.addEventListener("submit", submitEditor);
   els.editor.addEventListener("keydown", function (e) {
@@ -5934,7 +6242,7 @@
     }
   });
   els.fTitle.addEventListener("input", function () { if (els.formMsg.textContent) setMsg(""); });
-  els.search.addEventListener("input", function () { state.query = els.search.value; render(); });
+  els.search.addEventListener("input", function () { state.query = els.search.value; state.promptPage = 0; render(); });
   document.addEventListener("keydown", function (e) {
     if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open || document.querySelector("dialog.guide-dlg[open]")) return;
     var mod = e.ctrlKey || e.metaKey;
@@ -5968,7 +6276,7 @@
       skEls.search.value = ""; sk.query = ""; render();
     }
     else if (e.key === "Escape" && document.activeElement === els.search && els.search.value) {
-      els.search.value = ""; state.query = ""; render();
+      els.search.value = ""; state.query = ""; state.promptPage = 0; render();
     }
   });
   var resizeTimer = null;
@@ -5986,10 +6294,17 @@
     if (d.transcripts) {
       tr.list = d.transcripts;
       // Deleted or corrected in another window: show it the same here.
-      if (tr.open && !tr.list.some(function (x) { return x.id === tr.open.id; })) tr.open = null;
+      if (tr.open && !tr.list.some(function (x) { return x.id === tr.open.id; })) {
+        if (tr.draft && tr.draft.id === tr.open.id) tr.draft.deleted = true;
+        else tr.open = null;
+      }
       else if (tr.open) trOpenFresh(tr.open.id);
     }
     render();
+  });
+  api.onSettingsWarning(function (message) {
+    if (state.info) state.info.settingsWarning = message;
+    showSettingsWarning(message, true);
   });
   api.onDataChanged(function (prompts) {
     setItems(prompts);
@@ -6002,12 +6317,13 @@
     if (!r) return;
     if (isMainWindow && state.profile && !state.profile.welcomed) openProfile(true);
     var n = r.notice;
-    if (!n) return;
-    if (n.kind === "created") toast("Создал папку «Snowball.ai» в Документах. Там хранятся все промты и файлы.", true);
-    else if (n.kind === "renamed") toast("Папка с данными теперь называется «Snowball.ai». Все промты и файлы на месте.", true);
-    else if (n.kind === "rename-later") showBanner("Промты на месте, но папку в Документах пока не получилось переименовать: она открыта в другой программе. Закройте Проводник и перезапустите программу, папка переименуется сама.");
-    else if (n.kind === "restored") showBanner("Файл с промтами оказался повреждён, поэтому я открыл последнюю сохранённую копию. Повреждённый файл лежит рядом, в той же папке.");
-    else if (n.kind === "reset") showBanner("Файл с промтами оказался повреждён, а резервной копии нет. Повреждённый файл лежит в той же папке с именем prompts.broken-….json.");
-    else if (n.kind === "missing") showBanner("Папка " + n.dir + " недоступна, поэтому я открыл папку в Документах. Если это был съёмный диск, подключите его и выберите папку снова через меню профиля внизу слева.");
+    if (n && n.kind === "created") toast("Создал папку «Snowball.ai» в Документах. Там хранятся все промты и файлы.", true);
+    else if (n && n.kind === "renamed") toast("Папка с данными теперь называется «Snowball.ai». Все промты и файлы на месте.", true);
+    else if (n && n.kind === "rename-later") showBanner("Промты на месте, но папку в Документах пока не получилось переименовать: она открыта в другой программе. Закройте Проводник и перезапустите программу, папка переименуется сама.");
+    else if (n && n.kind === "restored") showBanner("Файл с промтами оказался повреждён, поэтому я открыл последнюю сохранённую копию. Повреждённый файл лежит рядом, в той же папке.");
+    else if (n && n.kind === "reset") showBanner("Файл с промтами оказался повреждён, а резервной копии нет. Повреждённый файл лежит в той же папке с именем prompts.broken-….json.");
+    else if (n && n.kind === "missing") showBanner("Папка " + n.dir + " недоступна, поэтому я открыл папку в Документах. Если это был съёмный диск, подключите его и выберите папку снова через меню профиля внизу слева.");
+    showDataWarnings(r.info);
+    showSettingsWarning(r.info && r.info.settingsWarning, true);
   });
 })();

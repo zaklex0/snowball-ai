@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   captureSave: (id, token, value) => ipcRenderer.invoke('capture-save', id, token, value),
   captureCopy: (id, token, bytes) => ipcRenderer.invoke('capture-copy', id, token, bytes),
   captureExport: (id, token, bytes) => ipcRenderer.invoke('capture-export', id, token, bytes),
+  captureRecover: bytes => ipcRenderer.invoke('capture-recover', bytes),
   captureToLlm: (id, token, bytes) => ipcRenderer.invoke('capture-llm', id, token, bytes),
   captureStart: () => ipcRenderer.invoke('capture-start'),
   pathForFile: (file) => { try { return webUtils.getPathForFile(file) || ''; } catch (e) { return ''; } },

@@ -4,7 +4,7 @@
 //   <dir>/prompts.backup.json   — the previous version, refreshed on every save
 //   <dir>/Файлы/<promptId>/...  — files attached to each prompt
 //   <dir>/profile.json          — nickname and whether the welcome screen was shown
-//   <dir>/avatar.png            — the avatar, already cropped to a square
+//   <dir>/avatar-<id>.png      — the current avatar (legacy profiles use avatar.png)
 //   <dir>/activity.json         — actions per day for the statistics page
 //   <dir>/chats.json            — the assistant's conversations
 //   <dir>/Файлы чатов/<chatId>/ — pictures attached to messages in LLM conversations
@@ -18,6 +18,7 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
+const { pipeline } = require('stream/promises');
 const { readZipIndex } = require('./archive');
 
 const FORMAT = 'snowball';
@@ -28,6 +29,7 @@ const CHAT_FILES_DIR = 'Файлы чатов';
 const CHAT_IMAGES_MAX = 6;   // pictures in one message
 const PROFILE_FILE = 'profile.json';
 const AVATAR_FILE = 'avatar.png';
+const AVATAR_NAME_RE = /^avatar-[a-f0-9]{24}\.png$/;
 const ACTIVITY_FILE = 'activity.json';
 const CHATS_FILE = 'chats.json';
 const CALENDAR_FILE = 'calendar.json';
@@ -144,6 +146,25 @@ async function retry(fn) {
   throw last;
 }
 
+// Fixed attachment names in a backup may already exist in an orphaned folder. Never overwrite them.
+async function copyImportedFixed(from, to) {
+  try { await fsp.copyFile(from, to, fs.constants.COPYFILE_EXCL); return; }
+  catch (e) { if (e.code !== 'EEXIST') throw e; }
+  // Never follow an existing destination symlink while deciding whether it is safe to reuse.
+  const [a, b] = await Promise.all([fsp.stat(from), fsp.lstat(to)]);
+  if (a.isFile() && b.isFile() && a.size === b.size) {
+    const digest = async (file) => {
+      const hash = crypto.createHash('sha256');
+      for await (const chunk of fs.createReadStream(file)) hash.update(chunk);
+      return hash.digest('hex');
+    };
+    if ((await digest(from)) === (await digest(to))) return;
+  }
+  const e = new Error('import attachment already exists');
+  e.userMessage = 'Не удалось восстановить вложение: в папке данных уже есть другой файл с таким именем. Существующий файл сохранён. Обратитесь за помощью, чтобы восстановить копию.';
+  throw e;
+}
+
 // Local calendar day, so an action at 23:50 lands on the day the user saw it.
 function dayKey(t) {
   const d = new Date(t);
@@ -153,18 +174,95 @@ function dayKey(t) {
 async function readJson(file) {
   try { return JSON.parse(String(await fsp.readFile(file, 'utf8')).replace(/^﻿/, '')); } catch (e) { return null; }
 }
+async function readArchiveList(file, field) {
+  let raw;
+  try { raw = await fsp.readFile(file, 'utf8'); }
+  catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+  try {
+    const value = JSON.parse(raw.replace(/^\uFEFF/, ''));
+    if (value && Array.isArray(value[field])) return value;
+  } catch (e) { /* report a damaged section below */ }
+  const e = new Error('invalid archive list');
+  e.userMessage = 'Не удалось прочитать раздел «' + path.basename(file) + '» в архиве. Проверьте, что файл копии не повреждён.';
+  throw e;
+}
+async function readArchiveObject(file) {
+  let raw;
+  try { raw = await fsp.readFile(file, 'utf8'); }
+  catch (e) { if (e.code === 'ENOENT') return null; throw e; }
+  try {
+    const value = JSON.parse(raw.replace(/^\uFEFF/, ''));
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  } catch (e) { /* report a damaged section below */ }
+  const e = new Error('invalid archive profile');
+  e.userMessage = 'Не удалось прочитать профиль в архиве. Проверьте, что файл копии не повреждён.';
+  throw e;
+}
+function missingArchiveAttachment() {
+  const e = new Error('missing archive attachment');
+  e.userMessage = 'В архиве отсутствует один из файлов вложений. Проверьте, что файл копии не повреждён.';
+  return e;
+}
 async function writeJson(file, value) {
   const tmp = file + '.tmp';
-  await fsp.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8');
-  try { await retry(() => fsp.rename(tmp, file)); } catch (e) {
-    await retry(() => fsp.writeFile(file, JSON.stringify(value, null, 2), 'utf8'));
-    await fsp.rm(tmp, { force: true });
+  try {
+    await fsp.writeFile(tmp, JSON.stringify(value, null, 2), 'utf8');
+    await retry(() => fsp.rename(tmp, file));
+  } catch (e) {
+    await fsp.rm(tmp, { force: true }).catch(() => {});
+    throw e;
   }
+}
+
+// Keep a separately readable copy of the latest successful save for important lists.
+const extraBackupPath = (file) => file.replace(/\.json$/i, '.backup.json');
+async function copyBackup(file, backup) {
+  const tmp = backup + '.' + crypto.randomBytes(6).toString('hex') + '.tmp';
+  try {
+    await retry(() => fsp.copyFile(file, tmp));
+    await retry(() => fsp.rename(tmp, backup));
+  } finally { await fsp.rm(tmp, { force: true }).catch(() => {}); }
+}
+async function writeProtectedJson(file, value) {
+  await writeJson(file, value);
+  try { await copyBackup(file, extraBackupPath(file)); return true; }
+  catch (e) { console.error('Could not update data backup', path.basename(file), e.code); return false; }
+}
+async function readProtectedJson(file, valid, warnings) {
+  let raw;
+  try { raw = await fsp.readFile(file, 'utf8'); }
+  catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+    const backup = await readJson(extraBackupPath(file));
+    if (!valid(backup)) return null;
+    await writeJson(file, backup);
+    warnings.push({ file: path.basename(file), restored: true, missing: true });
+    return backup;
+  }
+  let value;
+  try { value = JSON.parse(raw.replace(/^\uFEFF/, '')); } catch (e) { value = null; }
+  if (valid(value)) {
+    const backup = extraBackupPath(file);
+    if (!(await exists(backup))) {
+      try { await copyBackup(file, backup); }
+      catch (e) { console.error('Could not create data backup', path.basename(file), e.code); }
+    }
+    return value;
+  }
+  // Preserve the original even when there is no usable backup. Never confuse an I/O error with damaged JSON.
+  const broken = file.replace(/\.json$/i, `.broken-${Date.now()}-${crypto.randomBytes(3).toString('hex')}.json`);
+  await retry(() => fsp.copyFile(file, broken));
+  const backup = await readJson(extraBackupPath(file));
+  const restored = valid(backup);
+  if (restored) await writeJson(file, backup);
+  warnings.push({ file: path.basename(file), restored, broken: path.basename(broken) });
+  return restored ? backup : null;
 }
 
 function normalizeProfile(p) {
   p = p && typeof p === 'object' ? p : {};
-  return { name: str(p.name, NAME_MAX).trim(), welcomed: !!p.welcomed, avatarAt: num(p.avatarAt) };
+  return { name: str(p.name, NAME_MAX).trim(), welcomed: !!p.welcomed, avatarAt: num(p.avatarAt),
+    avatarFile: AVATAR_NAME_RE.test(str(p.avatarFile)) ? p.avatarFile : '' };
 }
 function normalizeActivity(a) {
   const days = {};
@@ -208,6 +306,9 @@ function normalizeRecap(r) {
     cost: num(r.cost),
     madeAt: num(r.madeAt) || Date.now()
   };
+}
+function recapRevision(recap) {
+  return recap ? crypto.createHash('sha256').update(JSON.stringify(recap)).digest('hex') : 'none';
 }
 function normalizeEvent(e, fallbackTime) {
   if (!e || typeof e !== 'object' || !DATE_RE.test(str(e.date))) return null;
@@ -315,6 +416,12 @@ function normalizeAction(a) {
 }
 // A picture in a message: its file is "Файлы чатов/<chat id>/<stored>". Skill files are kept the same way.
 const STORED_RE = /^[A-Za-z0-9_-]{1,64}\.(jpg|png|md|zip|skill)$/;
+const eventActionSignature = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
+function staleAssistantAction() {
+  const e = new Error('assistant action is stale');
+  e.userMessage = 'Дело или задачу уже изменили. Попросите ассистента проверить её ещё раз.';
+  return e;
+}
 function normalizeChatImages(list) {
   return (Array.isArray(list) ? list : []).slice(0, CHAT_IMAGES_MAX).map((x) => {
     if (!x || typeof x !== 'object' || !STORED_RE.test(str(x.stored))) return null;
@@ -376,15 +483,25 @@ function normalizeTranscript(t) {
   };
 }
 
-// All transcriptions in the folder; a damaged file is skipped, not deleted.
-async function readTranscripts(dir) {
+// Keep damaged originals in place and tell the user instead of silently hiding a transcription.
+async function readTranscripts(dir, warnings) {
   let names = [];
-  try { names = await fsp.readdir(dir); } catch (e) { return []; }
+  try { names = await fsp.readdir(dir); } catch (e) { if (e.code === 'ENOENT') return []; throw e; }
   const out = [];
   for (const name of names) {
-    if (!/\.json$/i.test(name)) continue;
-    const t = normalizeTranscript(await readJson(path.join(dir, name)));
-    if (t && name === t.id + '.json') out.push(t);
+    if (!/\.json$/i.test(name) || /\.backup\.json$/i.test(name) || /\.broken-[^.]+\.json$/i.test(name)) continue;
+    let raw;
+    try { raw = await fsp.readFile(path.join(dir, name), 'utf8'); }
+    catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+    let t = null;
+    try { t = normalizeTranscript(JSON.parse(raw.replace(/^\uFEFF/, ''))); } catch (e) { /* reported below */ }
+    if (t && name === t.id + '.json') { out.push(t); continue; }
+    if (warnings) warnings.push({ file: path.join(TRANSCRIPTS_DIR, name), broken: path.join(TRANSCRIPTS_DIR, name), restored: false, transcript: true });
+    else {
+      const e = new Error('invalid archive transcript');
+      e.userMessage = 'В архиве есть повреждённая расшифровка. Проверьте файл резервной копии.';
+      throw e;
+    }
   }
   return out;
 }
@@ -465,6 +582,7 @@ class Store {
     this.data = null;
     this.mtimeMs = 0;
     this.notice = null;      // 'created' | 'restored' | 'reset'
+    this.dataWarnings = [];
     this.profile = normalizeProfile(null);
     this.activity = normalizeActivity(null);
     this.chats = [];
@@ -495,17 +613,21 @@ class Store {
     return path.join(this.chatFilesRoot, chatId, stored);
   }
   // A picture for a message (already made smaller by the window): bytes of a JPEG or PNG.
-  async saveChatImage(chatId, name, bytes, ext) {
+  saveChatImage(chatId, name, bytes, ext) {
+    return this.run(async () => {
     const dir = this.chatFilesDir(chatId);
     await fsp.mkdir(dir, { recursive: true });
     const id = newId('i');
     const stored = id + '.' + (ext === 'png' ? 'png' : 'jpg');
     await fsp.writeFile(path.join(dir, stored), Buffer.from(bytes));
     return { id, name: str(name, NAME_MAX * 4).trim() || 'картинка', stored };
+    });
   }
-  async removeChatImage(chatId, stored) {
+  removeChatImage(chatId, stored) {
+    return this.run(async () => {
     const file = this.chatImagePath(chatId, stored);
     if (file && await exists(file)) { try { await this.trash(file); } catch (e) { await fsp.rm(file, { force: true }); } }
+    });
   }
   get transcriptsRoot() { return path.join(this.dir, TRANSCRIPTS_DIR); }
   transcriptPath(id) {
@@ -513,7 +635,8 @@ class Store {
     return path.join(this.transcriptsRoot, id + '.json');
   }
   // A skill file sent with an LLM message (.md, .zip or .skill), beside the pictures of the conversation.
-  async saveChatFile(chatId, name, bytes) {
+  saveChatFile(chatId, name, bytes) {
+    return this.run(async () => {
     const kind = skillKind(name);
     if (!kind) throw new Error('bad kind');
     const dir = this.chatFilesDir(chatId);
@@ -522,6 +645,7 @@ class Store {
     const stored = id + '.' + kind;
     await fsp.writeFile(path.join(dir, stored), Buffer.from(bytes));
     return { id, name: str(name, NAME_MAX * 4).trim() || 'skill.' + kind, stored };
+    });
   }
   get skillsPath() { return path.join(this.dir, SKILLS_FILE); }
   get skillsRoot() { return path.join(this.dir, SKILLS_DIR); }
@@ -543,6 +667,17 @@ class Store {
     return next;
   }
 
+  // Publish the changed lists only after their files have been saved successfully.
+  runLists(keys, fn) {
+    return this.run(async () => {
+      const draft = Object.create(this);
+      keys.forEach((key) => { draft[key] = structuredClone(this[key]); });
+      const result = await fn.call(draft);
+      keys.forEach((key) => { this[key] = draft[key]; });
+      return result;
+    });
+  }
+
   async init(seed) {
     await this.initData(seed);
     await this.loadExtras();
@@ -551,17 +686,17 @@ class Store {
 
   // Profile and statistics live beside prompts.json and never block opening the prompts.
   async loadExtras() {
-    this.profile = normalizeProfile(await readJson(this.profilePath));
-    const chats = await readJson(this.chatsPath);
+    this.profile = normalizeProfile(await readProtectedJson(this.profilePath, (v) => !!v && typeof v === 'object' && !Array.isArray(v), this.dataWarnings));
+    const chats = await readProtectedJson(this.chatsPath, (v) => !!v && Array.isArray(v.chats), this.dataWarnings);
     this.chats = chats && Array.isArray(chats.chats) ? chats.chats.map(normalizeChat).filter(Boolean) : [];
-    const cal = await readJson(this.calendarPath);
+    const cal = await readProtectedJson(this.calendarPath, (v) => !!v && Array.isArray(v.events), this.dataWarnings);
     this.events = cal && Array.isArray(cal.events) ? cal.events.map((e) => normalizeEvent(e)).filter(Boolean) : [];
-    const tasks = await readJson(this.tasksPath);
+    const tasks = await readProtectedJson(this.tasksPath, (v) => !!v && Array.isArray(v.tasks), this.dataWarnings);
     this.columns = tasks && Array.isArray(tasks.columns) ? tasks.columns.map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX) : [];
     this.archiveMode = tasks && ARCHIVE_MODES.includes(tasks.archiveMode) ? tasks.archiveMode : 'day';
     this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean) : [];
-    this.transcripts = await readTranscripts(this.transcriptsRoot);
-    const skills = await readJson(this.skillsPath);
+    this.transcripts = await readTranscripts(this.transcriptsRoot, this.dataWarnings);
+    const skills = await readProtectedJson(this.skillsPath, (v) => !!v && Array.isArray(v.skills), this.dataWarnings);
     this.skills = skills && Array.isArray(skills.skills) ? skills.skills.map(normalizeSkill).filter(Boolean) : [];
     const raw = await readJson(this.activityPath);
     if (raw) { this.activity = normalizeActivity(raw); return; }
@@ -607,24 +742,66 @@ class Store {
 
   profileView() {
     const p = this.profile;
-    const avatar = p.avatarAt && fs.existsSync(this.avatarPath) ? pathToFileURL(this.avatarPath).href + '?v=' + p.avatarAt : null;
-    return { name: p.name, welcomed: p.welcomed, avatar };
+    const file = this.profileAvatarPath(p);
+    const avatar = p.avatarAt && fs.existsSync(file) ? pathToFileURL(file).href + '?v=' + p.avatarAt : null;
+    return { name: p.name, welcomed: p.welcomed, avatar, avatarVersion: JSON.stringify([p.avatarAt, p.avatarFile]) };
+  }
+
+  profileAvatarPath(profile) { return path.join(this.dir, profile.avatarFile || AVATAR_FILE); }
+  async createProfileAvatar(source) {
+    let file, name, handle;
+    for (;;) {
+      name = 'avatar-' + crypto.randomBytes(12).toString('hex') + '.png';
+      file = path.join(this.dir, name);
+      try { handle = await fsp.open(file, 'wx'); break; }
+      catch (e) { if (e.code !== 'EEXIST') throw e; }
+    }
+    try {
+      if (Buffer.isBuffer(source)) await handle.writeFile(source);
+      else await pipeline(fs.createReadStream(source), handle.createWriteStream());
+      await handle.close();
+      return name;
+    } catch (e) {
+      await handle.close().catch(() => {});
+      await fsp.rm(file, { force: true }).catch(() => {});
+      throw e;
+    }
   }
 
   // input: { name?, avatar?: PNG Buffer | null (remove) | undefined (keep) }
   saveProfile(input) {
     return this.run(async () => {
-      const p = this.profile;
+      const prev = this.profile;
+      const expected = input && input.expected;
+      if (expected && ((typeof expected.name === 'string' && expected.name !== prev.name) ||
+        (typeof expected.avatar === 'string' && expected.avatar !== JSON.stringify([prev.avatarAt, prev.avatarFile])))) {
+        const e = new Error('profile changed while editing');
+        e.userMessage = 'Профиль изменили в другом окне. Ваши изменения остались в форме: скопируйте ник и откройте профиль заново.';
+        throw e;
+      }
+      const p = Object.assign({}, prev);
+      let created = '';
       if (input && typeof input.name === 'string') p.name = str(input.name, NAME_MAX).trim();
-      if (input && input.avatar === null && p.avatarAt) {
-        if (await exists(this.avatarPath)) { try { await this.trash(this.avatarPath); } catch (e) { await fsp.rm(this.avatarPath, { force: true }); } }
-        p.avatarAt = 0;
+      if (input && input.avatar === null) {
+        p.avatarAt = 0; p.avatarFile = '';
       } else if (input && Buffer.isBuffer(input.avatar)) {
-        await retry(() => fsp.writeFile(this.avatarPath, input.avatar));
+        created = await this.createProfileAvatar(input.avatar);
+        p.avatarFile = created;
         p.avatarAt = Date.now();
       }
       p.welcomed = true;
-      await writeJson(this.profilePath, p);
+      let backupUpdated;
+      try { backupUpdated = await writeProtectedJson(this.profilePath, p); }
+      catch (e) { if (created) await fsp.rm(path.join(this.dir, created), { force: true }).catch(() => {}); throw e; }
+      this.profile = p;
+      const oldFile = prev.avatarAt && this.profileAvatarPath(prev);
+      const replaced = oldFile && (p.avatarAt === 0 || oldFile !== this.profileAvatarPath(p));
+      let oldAvatarLeft = false;
+      if (replaced && await exists(oldFile)) {
+        if (!backupUpdated) oldAvatarLeft = true;
+        else { try { await this.trash(oldFile); } catch (e) { oldAvatarLeft = true; } }
+      }
+      return { oldAvatarLeft, backupUpdated };
     });
   }
 
@@ -633,13 +810,20 @@ class Store {
   // The window gets the summary without the long source text (recapText gives it when it is opened).
   calendarView() {
     return this.events.slice().sort((a, b) => (a.date + a.from).localeCompare(b.date + b.from))
-      .map((e) => (e.recap ? Object.assign({}, e, { recap: Object.assign({}, e.recap, { text: '', hasText: !!e.recap.text }) }) : e));
+      .map((e) => Object.assign({}, e, { recapRevision: recapRevision(e.recap) },
+        e.recap ? { recap: Object.assign({}, e.recap, { text: '', hasText: !!e.recap.text }) } : {}));
   }
   recapText(id) { const e = this.findEvent(id); return e && e.recap ? e.recap.text : ''; }
+  recapRevision(id) { const e = this.findEvent(id); return e ? recapRevision(e.recap) : null; }
   // Puts a summary on an event (null takes it off) without touching the event's other fields or the statistics.
-  setRecap(id, recap) {
-    return this.run(async () => {
+  setRecap(id, recap, expected) {
+    return this.runLists(['events'], async function () {
       const prev = this.findEvent(id);
+      if (typeof expected === 'string' && (!prev || recapRevision(prev.recap) !== expected)) {
+        const e = new Error('recap changed while editing');
+        e.userMessage = 'Итоги изменили или дело удалили в другом окне. Откройте дело заново и повторите действие.';
+        throw e;
+      }
       if (!prev) return null;
       const next = recap ? normalizeRecap(Object.assign({}, recap, !recap.text && prev.recap ? { text: prev.recap.text } : {})) : null;
       const ev = Object.assign({}, prev, { recap: next, updatedAt: Date.now() });
@@ -649,18 +833,24 @@ class Store {
     });
   }
   findEvent(id) { return this.events.find((e) => e.id === id) || null; }
-  writeCalendar() { return writeJson(this.calendarPath, { format: 'snowball-calendar', version: 1, events: this.events }); }
+  writeCalendar() { return writeProtectedJson(this.calendarPath, { format: 'snowball-calendar', version: 1, events: this.events }); }
 
   // A new event (no id or an unknown one) or a change to an existing one.
   saveEvent(input) {
-    return this.run(async () => {
+    return this.runLists(['events'], async function () {
       const prev = input && input.id ? this.findEvent(input.id) : null;
       const now = Date.now();
+      const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
+      if (input && typeof input.expectedAction === 'string' && (!prev || sig(prev) !== input.expectedAction)) throw staleAssistantAction();
+      if (input && typeof input.expected === 'string' && (!prev || sig(prev) !== input.expected)) {
+        const e = new Error('event changed while editing');
+        e.userMessage = 'Дело изменили в другом окне. Ваш текст остался в форме: скопируйте его и откройте дело заново.';
+        throw e;
+      }
       // A change from the form or an assistant does not carry the summary: it stays as it was (setRecap changes it).
       const keepRecap = prev && !(input && input.recap && typeof input.recap === 'object') ? { recap: prev.recap } : {};
       const ev = normalizeEvent(Object.assign({}, input, keepRecap, { createdAt: prev ? prev.createdAt : now, updatedAt: now }));
       if (!ev) throw Object.assign(new Error('bad event'), { userMessage: 'Не получилось сохранить дело: проверьте день и время.' });
-      const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
       // "Сохранить" without real changes is not an action on the statistics page.
       const changed = !prev || sig(prev) !== sig(ev);
       if (prev && !changed) return prev;
@@ -674,7 +864,7 @@ class Store {
 
   // An event exactly as it was (for «Отменить»): replaces the one with this id or puts it back; no statistics.
   putEvent(input) {
-    return this.run(async () => {
+    return this.runLists(['events'], async function () {
       const ev = normalizeEvent(input);
       if (!ev) return null;
       const prev = this.findEvent(ev.id);
@@ -684,9 +874,10 @@ class Store {
     });
   }
 
-  deleteEvent(id) {
-    return this.run(async () => {
+  deleteEvent(id, expectedAction) {
+    return this.runLists(['events'], async function () {
       const ev = this.findEvent(id);
+      if (typeof expectedAction === 'string' && (!ev || eventActionSignature(ev) !== expectedAction)) throw staleAssistantAction();
       if (!ev) return null;
       this.events = this.events.filter((e) => e.id !== id);
       await this.writeCalendar();
@@ -715,11 +906,11 @@ class Store {
   }
   findTask(id) { return this.tasks.find((t) => t.id === id) || null; }
   tasksFile() { return { format: 'snowball-tasks', version: 1, columns: this.columns, archiveMode: this.archiveMode, tasks: this.tasks }; }
-  writeTasks() { return writeJson(this.tasksPath, this.tasksFile()); }
+  writeTasks() { return writeProtectedJson(this.tasksPath, this.tasksFile()); }
 
   // The user's own columns: add, rename, move left (-1) or right (+1) among them, delete and bring back.
   addColumn(name) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       if (this.columns.length >= COLUMN_MAX) throw Object.assign(new Error('too many columns'), { userMessage: 'Своих столбцов может быть не больше ' + COLUMN_MAX + '.' });
       const used = this.columns.map((c) => c.color);
       const color = [0, 1, 2, 3, 4, 5].find((n) => !used.includes(n));
@@ -731,7 +922,7 @@ class Store {
     });
   }
   renameColumn(id, name) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const col = this.columns.find((c) => c.id === id);
       const v = str(name, 40).trim();
       if (!col || !v) return null;
@@ -741,7 +932,7 @@ class Store {
     });
   }
   moveColumn(id, dir) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const i = this.columns.findIndex((c) => c.id === id), j = i + (dir < 0 ? -1 : 1);
       if (i === -1 || j < 0 || j >= this.columns.length) return;
       const [col] = this.columns.splice(i, 1);
@@ -751,7 +942,7 @@ class Store {
   }
   // Its tasks go to the bottom of «Предстоит». Returns what is needed to bring it all back.
   deleteColumn(id) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const index = this.columns.findIndex((c) => c.id === id);
       if (index === -1) return null;
       const [column] = this.columns.splice(index, 1);
@@ -767,7 +958,7 @@ class Store {
     });
   }
   restoreColumn(r) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const column = normalizeColumn(r && r.column);
       if (!column || this.columns.some((c) => c.id === column.id) || this.columns.length >= COLUMN_MAX) return;
       this.columns.splice(Math.max(0, Math.min(this.columns.length, num(r.index))), 0, column);
@@ -782,9 +973,18 @@ class Store {
   // Statistics: a new task, a move to another column, every new subtask and every subtask ticked off count as actions.
   // Edits, deleting, a move inside the column and taking a tick back (out of «Готово» too) do not.
   saveTask(input) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       if (input && input.status && !this.hasColumn(input.status)) input = Object.assign({}, input, { status: 'todo' });
       const prev = input && input.id ? this.findTask(input.id) : null;
+      if (input && typeof input.expectedAction === 'string' && (!prev || JSON.stringify(prev) !== input.expectedAction)) throw staleAssistantAction();
+      if (input && input.expectedFields && typeof input.expectedFields === 'object') {
+        const fields = Object.keys(input.expectedFields);
+        if (!prev || fields.some((key) => JSON.stringify(prev[key]) !== input.expectedFields[key])) {
+          const e = new Error('task changed while editing');
+          e.userMessage = 'Эту часть задачи изменили в другом окне. Ваш текст остался в панели: скопируйте его, затем откройте задачу заново.';
+          throw e;
+        }
+      }
       const now = Date.now();
       const merged = Object.assign({}, prev || {}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now });
       const moved = prev && input.status && input.status !== prev.status;
@@ -817,7 +1017,7 @@ class Store {
   // (archiveMode 'day' — everything done before today; 'week' — done more than 7 days ago; 'manual' — never by itself).
   // They stay in tasks.json with archivedAt. Not an action on the statistics page. Returns the ids that moved.
   archiveDone(ids) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const now = Date.now(), moved = [];
       this.tasks.forEach((t) => {
         if (t.status !== 'done' || t.archivedAt || (ids && !ids.includes(t.id))) return;
@@ -830,7 +1030,7 @@ class Store {
   }
   // Back to «Готово» on the board («Отменить» after archiving, «Вернуть на доску»).
   unarchive(ids) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       let n = 0;
       this.tasks.forEach((t) => { if (t.archivedAt && ids.includes(t.id)) { t.archivedAt = 0; n++; } });
       if (n) await this.writeTasks();
@@ -852,7 +1052,7 @@ class Store {
     return ids.length ? this.archiveDone(ids) : Promise.resolve([]);
   }
   setArchiveMode(mode) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       if (!ARCHIVE_MODES.includes(mode) || mode === this.archiveMode) return;
       this.archiveMode = mode;
       await this.writeTasks();
@@ -861,7 +1061,7 @@ class Store {
 
   // Puts a task back exactly as it was (undo after deleting or after the assistant's changes). Not an action.
   putTask(input) {
-    return this.run(async () => {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const task = this.fitColumn(normalizeTask(input));
       if (!task) return null;
       const prev = this.findTask(task.id);
@@ -871,9 +1071,10 @@ class Store {
     });
   }
 
-  deleteTask(id) {
-    return this.run(async () => {
+  deleteTask(id, expectedAction) {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const task = this.findTask(id);
+      if (typeof expectedAction === 'string' && (!task || JSON.stringify(task) !== expectedAction)) throw staleAssistantAction();
       if (!task) return null;
       this.tasks = this.tasks.filter((t) => t.id !== id);
       await this.writeTasks();
@@ -888,13 +1089,19 @@ class Store {
       .map((c) => ({ id: c.id, title: c.title, createdAt: c.createdAt, updatedAt: c.updatedAt }));
   }
   getChat(id) { return this.chats.find((c) => c.id === id) || null; }
-  writeChats() { return writeJson(this.chatsPath, { format: 'snowball-chats', version: 1, chats: this.chats }); }
+  writeChats() { return writeProtectedJson(this.chatsPath, { format: 'snowball-chats', version: 1, chats: this.chats }); }
 
   // Replaces the whole conversation: the window holds it and sends it after every finished message.
   saveChat(input) {
-    return this.run(async () => {
+    return this.runLists(['chats'], async function () {
       const prev = this.getChat(input && input.id);
-      const chat = normalizeChat(Object.assign({}, input, { createdAt: prev ? prev.createdAt : Date.now(), updatedAt: Date.now() }));
+      if (input && Object.prototype.hasOwnProperty.call(input, 'expectedUpdatedAt') &&
+          (prev ? prev.updatedAt !== input.expectedUpdatedAt : input.expectedUpdatedAt !== null)) {
+        const e = new Error('conversation changed in another window');
+        e.code = 'CHAT_CONFLICT';
+        throw e;
+      }
+      const chat = normalizeChat(Object.assign({}, input, { createdAt: prev ? prev.createdAt : Date.now(), updatedAt: Math.max(Date.now(), prev ? prev.updatedAt + 1 : 0) }));
       if (!chat) return null;
       if (prev) this.chats[this.chats.indexOf(prev)] = chat; else this.chats.push(chat);
       await this.writeChats();
@@ -903,10 +1110,11 @@ class Store {
   }
 
   deleteChat(id) {
-    return this.run(async () => {
+    return this.runLists(['chats'], async function () {
       const before = this.chats.length;
       this.chats = this.chats.filter((c) => c.id !== id);
-      if (this.chats.length !== before) await this.writeChats();
+      if (this.chats.length === before) return;
+      await this.writeChats();
       // Its pictures go to the Recycle Bin with it.
       if (ID_RE.test(str(id)) && await exists(this.chatFilesDir(id))) { try { await this.trash(this.chatFilesDir(id)); } catch (e) { /* leftover files are harmless */ } }
     });
@@ -921,13 +1129,30 @@ class Store {
     }));
   }
   getTranscript(id) { return this.transcripts.find((t) => t.id === id) || null; }
+  async checkTranscriptPathFree(id) {
+    try { await fsp.stat(this.transcriptPath(id)); }
+    catch (e) { if (e.code === 'ENOENT') return; throw e; }
+    const e = new Error('transcript file already exists');
+    e.userMessage = 'В папке с данными уже есть файл этой расшифровки. Он оставлен без изменений; проверьте его перед восстановлением.';
+    throw e;
+  }
   // A new transcription (counted in the statistics) or the same one with corrected text, timings or a summary.
   saveTranscript(input) {
     return this.run(async () => {
       const prev = this.getTranscript(input && input.id);
-      const t = normalizeTranscript(Object.assign({}, prev || {}, input, prev ? { createdAt: prev.createdAt } : {}, { updatedAt: Date.now() }));
+      if (input && input.expectedFields && typeof input.expectedFields === 'object') {
+        const fields = Object.keys(input.expectedFields);
+        if (!prev || fields.some((key) => JSON.stringify(prev[key]) !== input.expectedFields[key])) {
+          const e = new Error('transcript changed while editing');
+          e.userMessage = 'Расшифровку изменили или удалили в другом окне. Ваш текст остался на экране: скопируйте его и откройте запись заново.';
+          throw e;
+        }
+      }
+      const updatedAt = Math.max(Date.now(), prev ? prev.updatedAt + 1 : 0);
+      const t = normalizeTranscript(Object.assign({}, prev || {}, input, prev ? { createdAt: prev.createdAt } : {}, { updatedAt }));
       if (!t) return null;
       await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+      if (!prev) await this.checkTranscriptPathFree(t.id);
       await writeJson(this.transcriptPath(t.id), Object.assign({ format: 'snowball-transcript', version: 1 }, t));
       if (prev) this.transcripts[this.transcripts.indexOf(prev)] = t;
       else { this.transcripts.push(t); await this.bump('transcribe', 1); }
@@ -939,8 +1164,14 @@ class Store {
     return this.run(async () => {
       const t = this.getTranscript(id);
       if (!t) return null;
+      const file = this.transcriptPath(id);
+      let present = true;
+      try { await fsp.stat(file); } catch (e) { if (e.code !== 'ENOENT') throw e; present = false; }
+      if (present) {
+        try { await this.trash(file); }
+        catch (e) { if (!e.userMessage) e.userMessage = 'Не удалось переместить расшифровку в корзину. Запись осталась в истории.'; throw e; }
+      }
       this.transcripts = this.transcripts.filter((x) => x !== t);
-      try { await this.trash(this.transcriptPath(id)); } catch (e) { await fsp.rm(this.transcriptPath(id), { force: true }); }
       return t;
     });
   }
@@ -949,6 +1180,7 @@ class Store {
       const t = normalizeTranscript(input);
       if (!t || this.getTranscript(t.id)) return null;
       await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+      await this.checkTranscriptPathFree(t.id);
       await writeJson(this.transcriptPath(t.id), Object.assign({ format: 'snowball-transcript', version: 1 }, t));
       this.transcripts.push(t);
       return t;
@@ -956,7 +1188,7 @@ class Store {
   }
 
   /* ---------- «Скиллы» ---------- */
-  writeSkills() { return writeJson(this.skillsPath, { format: 'snowball-skills', version: 1, skills: this.skills }); }
+  writeSkills() { return writeProtectedJson(this.skillsPath, { format: 'snowball-skills', version: 1, skills: this.skills }); }
   findSkill(id) { return this.skills.find((s) => s.id === id) || null; }
   skillFilePath(id) {
     const s = this.findSkill(id);
@@ -974,15 +1206,22 @@ class Store {
       const o = input || {};
       const name = sanitizeName(str(o.name, 300) || (o.path ? path.basename(String(o.path)) : ''));
       if (!skillKind(name)) { const e = new Error('bad skill'); e.userMessage = 'Скилл — это файл .md или архив .zip либо .skill.'; throw e; }
-      let id = newId('k');
-      while (this.findSkill(id)) id = newId('k');
-      const dir = this.skillDir(id);
-      await fsp.mkdir(dir, { recursive: true });
+      await fsp.mkdir(this.skillsRoot, { recursive: true });
+      let id, dir;
+      for (;;) {
+        id = newId('k');
+        if (this.findSkill(id)) continue;
+        dir = this.skillDir(id);
+        try { await fsp.mkdir(dir); break; }
+        catch (e) { if (e.code !== 'EEXIST') throw e; }
+      }
       const target = path.join(dir, name);
+      let copied = false, committed = false;
       try {
-        if (o.path) await fsp.copyFile(String(o.path), target);
-        else if (o.bytes) await fsp.writeFile(target, Buffer.from(o.bytes));
+        if (o.path) await fsp.copyFile(String(o.path), target, fs.constants.COPYFILE_EXCL);
+        else if (o.bytes) await fsp.writeFile(target, Buffer.from(o.bytes), { flag: 'wx' });
         else throw new Error('empty source');
+        copied = true;
         const r = await readSkillFile(target, name);
         const now = Date.now();
         const desc = str(o.desc, 6000).trim();
@@ -991,12 +1230,16 @@ class Store {
           desc, descBy: desc ? str(o.descBy, 60) || 'manual' : '', descAt: desc ? now : 0, descCost: o.descCost,
           file: { name, stored: name, size: r.size }, main: r.main, inside: r.inside, files: r.files, text: r.text, createdAt: now, updatedAt: now
         });
-        this.skills.push(skill);
-        await this.writeSkills();
+        const draft = Object.create(this);
+        draft.skills = this.skills.concat(skill);
+        await draft.writeSkills();
+        this.skills = draft.skills;
+        committed = true;
         await this.bump('skills', 1);
         return skill;
       } catch (e) {
-        await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+        if (!committed && copied) await fsp.rm(target, { force: true }).catch(() => {});
+        if (!committed) await fsp.rmdir(dir).catch(() => {});
         throw e;
       }
     });
@@ -1005,14 +1248,25 @@ class Store {
   saveSkill(input) {
     return this.run(async () => {
       const s = this.findSkill(input && input.id);
+      if (input && input.expectedFields && typeof input.expectedFields === 'object') {
+        const fields = Object.keys(input.expectedFields);
+        if (!s || fields.some((key) => JSON.stringify(s[key]) !== input.expectedFields[key])) {
+          const e = new Error('skill changed while editing');
+          e.userMessage = 'Скилл изменили или удалили в другом окне. Если вы правили текст, он остался в редакторе: скопируйте его и откройте скилл заново.';
+          throw e;
+        }
+      }
       if (!s) return null;
       const next = normalizeSkill(Object.assign({}, s, ['title', 'type', 'desc', 'descBy', 'descCost', 'descAt'].reduce((o, k) => {
         if (input[k] !== undefined) o[k] = input[k];
         return o;
       }, {}), { updatedAt: Date.now() }));
       if (!next.title) next.title = s.title;
-      this.skills[this.skills.indexOf(s)] = next;
-      await this.writeSkills();
+      const draft = Object.create(this);
+      draft.skills = this.skills.slice();
+      draft.skills[this.skills.indexOf(s)] = next;
+      await draft.writeSkills();
+      this.skills = draft.skills;
       return next;
     });
   }
@@ -1021,11 +1275,17 @@ class Store {
     return this.run(async () => {
       const s = this.findSkill(id);
       if (!s) return null;
-      this.skills = this.skills.filter((x) => x !== s);
-      await this.writeSkills();
+      const draft = Object.create(this);
+      draft.skills = this.skills.filter((x) => x !== s);
+      await draft.writeSkills();
+      this.skills = draft.skills;
       const dir = this.skillDir(s.id);
-      if (await exists(dir)) { try { await this.trash(dir); } catch (e) { /* the record is gone; leftover files are harmless */ } }
-      return s;
+      let fileStatus = 'missing';
+      if (await exists(dir)) {
+        try { await this.trash(dir); fileStatus = 'trash'; }
+        catch (e) { fileStatus = 'left'; }
+      }
+      return { skill: s, fileStatus };
     });
   }
 
@@ -1062,18 +1322,19 @@ class Store {
   }
 
   async write(opts) {
-    this.data.updatedAt = Date.now();
-    const json = JSON.stringify(this.data, null, 2);
+    const data = opts && opts.data ? opts.data : this.data;
+    data.updatedAt = Date.now();
+    const json = JSON.stringify(data, null, 2);
     const tmp = this.dataPath + '.tmp';
     await fsp.writeFile(tmp, json, 'utf8');
-    if (!(opts && opts.skipBackup)) {
-      try { await retry(() => fsp.copyFile(this.dataPath, this.backupPath)); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-    }
     try {
+      if (!(opts && opts.skipBackup)) {
+        try { await copyBackup(this.dataPath, this.backupPath); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      }
       await retry(() => fsp.rename(tmp, this.dataPath));
     } catch (e) {
-      await retry(() => fsp.writeFile(this.dataPath, json, 'utf8'));
-      await fsp.rm(tmp, { force: true });
+      await fsp.rm(tmp, { force: true }).catch(() => {});
+      throw e;
     }
     await this.stat();
   }
@@ -1126,14 +1387,14 @@ class Store {
           if (!st.isFile()) throw new Error('not a file');
           name = sanitizeName(src.name || path.basename(src.path));
           const stored = await uniqueTarget(dir, name);
-          await fsp.copyFile(src.path, path.join(dir, stored));
+          await fsp.copyFile(src.path, path.join(dir, stored), fs.constants.COPYFILE_EXCL);
           size = st.size;
           name = stored;
         } else if (src && src.data) {
           const buf = Buffer.from(src.data.buffer ? new Uint8Array(src.data.buffer, src.data.byteOffset || 0, src.data.byteLength) : src.data);
           name = sanitizeName(src.name || 'картинка.png');
           const stored = await uniqueTarget(dir, name);
-          await fsp.writeFile(path.join(dir, stored), buf);
+          await fsp.writeFile(path.join(dir, stored), buf, { flag: 'wx' });
           size = buf.length;
           name = stored;
         } else {
@@ -1144,6 +1405,24 @@ class Store {
         errors.push((src && (src.name || (src.path && path.basename(src.path)))) || 'файл');
       }
     }
+  }
+
+  // Write the new record before discarding old attachments. Failed saves restore the in-memory record and
+  // remove only the new files copied by this attempt, so another window cannot see an unsaved edit.
+  async commitPrompt(previous, next, created) {
+    const index = previous ? this.data.prompts.indexOf(previous) : this.data.prompts.length;
+    const data = Object.assign({}, this.data, { prompts: this.data.prompts.slice() });
+    if (previous) data.prompts[index] = next; else data.prompts.push(next);
+    try { await this.write({ data }); }
+    catch (e) {
+      for (const file of created || []) await fsp.rm(path.join(this.promptDir(next.id), file.stored), { force: true }).catch(() => {});
+      throw e;
+    }
+    this.data = data;
+  }
+  async removeCommittedFiles(prompt, ids) {
+    try { await this.removeFiles(prompt, ids); }
+    catch (e) { console.error('Could not remove an old prompt attachment', e.code); }
   }
 
   async removeFiles(prompt, fileIds) {
@@ -1162,13 +1441,22 @@ class Store {
     return this.run(async () => {
       const item = (input && input.item) || {};
       const errors = [];
-      let prompt = item.id ? this.find(item.id) : null;
+      const previous = item.id ? this.find(item.id) : null;
+      if (input && typeof input.expected === 'string') {
+        const current = previous && JSON.stringify([previous.title, previous.type, previous.text, previous.comment, previous.files.map((f) => f.id)]);
+        if (current !== input.expected) {
+          const e = new Error('prompt changed while editing');
+          e.userMessage = 'Промт изменили в другом окне. Ваш текст остался в редакторе: скопируйте его, затем откройте промт заново.';
+          throw e;
+        }
+      }
       const now = Date.now();
-      const isNew = !prompt;
-      if (!prompt) {
+      const isNew = !previous;
+      let prompt;
+      if (previous) prompt = Object.assign({}, previous, { files: previous.files.slice() });
+      else {
         prompt = normalizePrompt({ id: item.id, createdAt: now, updatedAt: now });
         if (this.find(prompt.id)) prompt.id = newId('p');
-        this.data.prompts.push(prompt);
       }
       const sig = () => JSON.stringify([prompt.title, prompt.type, prompt.text, prompt.comment, prompt.files.map((f) => f.id)]);
       const before = sig();
@@ -1176,14 +1464,17 @@ class Store {
       prompt.type = str(item.type, 60).trim();
       prompt.text = str(item.text, 2000000);
       prompt.comment = str(item.comment, 100000);
-      await this.removeFiles(prompt, input && input.removeFileIds);
+      const removed = Array.isArray(input && input.removeFileIds) ? input.removeFileIds : [];
+      const removedIds = new Set(removed);
+      prompt.files = prompt.files.filter((f) => !removedIds.has(f.id));
       const kept = prompt.files.length;
       await this.copyIn(prompt, input && input.addFiles, errors);
       // "Сохранить" without real changes keeps the date and does not count as an edit.
       const changed = isNew || before !== sig();
       if (!changed) return { id: prompt.id, errors };
       prompt.updatedAt = now;
-      await this.write();
+      await this.commitPrompt(previous, prompt, prompt.files.slice(kept));
+      if (previous && removed.length) await this.removeCommittedFiles(Object.assign({}, previous, { files: previous.files.slice() }), removed);
       await this.bump(isNew ? 'created' : 'edited', 1);
       await this.bump('files', prompt.files.length - kept);
       return { id: prompt.id, errors };
@@ -1192,14 +1483,15 @@ class Store {
 
   addFiles(promptId, sources) {
     return this.run(async () => {
-      const prompt = this.find(promptId);
-      if (!prompt) throw new Error('Промт не найден');
+      const previous = this.find(promptId);
+      if (!previous) throw new Error('Промт не найден');
+      const prompt = Object.assign({}, previous, { files: previous.files.slice() });
       const errors = [];
       const before = prompt.files.length;
       await this.copyIn(prompt, sources, errors);
       if (prompt.files.length !== before) {
         prompt.updatedAt = Date.now();
-        await this.write();
+        await this.commitPrompt(previous, prompt, prompt.files.slice(before));
         await this.bump('files', prompt.files.length - before);
       }
       return { added: prompt.files.length - before, errors };
@@ -1208,11 +1500,12 @@ class Store {
 
   removeFile(promptId, fileId) {
     return this.run(async () => {
-      const prompt = this.find(promptId);
-      if (!prompt) return;
-      await this.removeFiles(prompt, [fileId]);
+      const previous = this.find(promptId);
+      if (!previous) return;
+      const prompt = Object.assign({}, previous, { files: previous.files.filter((f) => f.id !== fileId) });
       prompt.updatedAt = Date.now();
-      await this.write();
+      await this.commitPrompt(previous, prompt, []);
+      await this.removeCommittedFiles(Object.assign({}, previous, { files: previous.files.slice() }), [fileId]);
     });
   }
 
@@ -1220,8 +1513,9 @@ class Store {
     return this.run(async () => {
       const prompt = this.find(id);
       if (!prompt) return;
-      this.data.prompts = this.data.prompts.filter((p) => p.id !== id);
-      await this.write();
+      const data = Object.assign({}, this.data, { prompts: this.data.prompts.filter((p) => p.id !== id) });
+      await this.write({ data });
+      this.data = data;
       const dir = this.promptDir(id);
       if (await exists(dir)) { try { await this.trash(dir); } catch (e) { /* the record is gone; leftover files are harmless */ } }
     });
@@ -1236,16 +1530,17 @@ class Store {
       const sig = (p) => p.title.trim().toLowerCase() + '\u0000' + p.text.trim();
       const known = new Set(this.data.prompts.map(sig));
       const ids = new Set(this.data.prompts.map((p) => p.id));
+      const data = Object.assign({}, this.data, { prompts: this.data.prompts.slice() });
       for (const p of incoming) {
         if (!p.title && !p.text) { skipped++; continue; }
         if (ids.has(p.id) || known.has(sig(p))) { skipped++; continue; }
         p.files = []; // attachments are not part of an export file
-        this.data.prompts.push(p);
+        data.prompts.push(p);
         ids.add(p.id);
         known.add(sig(p));
         added++;
       }
-      if (added) await this.write();
+      if (added) { await this.write({ data }); this.data = data; }
       return { added, skipped };
     });
   }
@@ -1255,9 +1550,13 @@ class Store {
   // chats.json, calendar.json, tasks.json, activity.json, profile.json and avatar.png. ids: the prompts to share, or null for all.
   packEntries(kind, ids) {
     const chosen = ids ? this.data.prompts.filter((p) => ids.includes(p.id)) : this.data.prompts;
-    const entries = [];
+    const entries = [], missing = [];
     const prompts = chosen.map((p) => {
-      const files = p.files.filter((f) => fs.existsSync(path.join(this.promptDir(p.id), f.stored)));
+      const files = p.files.filter((f) => {
+        const present = fs.existsSync(path.join(this.promptDir(p.id), f.stored));
+        if (!present) missing.push('Промт «' + (p.title || 'Без названия') + '»: ' + f.name);
+        return present;
+      });
       files.forEach((f) => entries.push({ name: 'files/' + p.id + '/' + f.stored, file: path.join(this.promptDir(p.id), f.stored) }));
       return Object.assign({}, p, { files });
     });
@@ -1268,12 +1567,15 @@ class Store {
       this.chats.forEach((c) => c.messages.forEach((m) => (m.images || []).forEach((im) => {
         const file = this.chatImagePath(c.id, im.stored);
         if (file && fs.existsSync(file)) entries.push({ name: 'chatfiles/' + c.id + '/' + im.stored, file });
+        else missing.push('Разговор «' + c.title + '»: ' + im.name);
       })));
       entries.push({ name: CALENDAR_FILE, data: JSON.stringify({ format: 'snowball-calendar', version: 1, events: this.events }, null, 2) });
       entries.push({ name: TASKS_FILE, data: JSON.stringify(this.tasksFile(), null, 2) });
       entries.push({ name: ACTIVITY_FILE, data: JSON.stringify(this.activity, null, 2) });
       entries.push({ name: PROFILE_FILE, data: JSON.stringify(this.profile, null, 2) });
-      if (this.profile.avatarAt && fs.existsSync(this.avatarPath)) entries.push({ name: AVATAR_FILE, file: this.avatarPath });
+      const avatar = this.profileAvatarPath(this.profile);
+      if (this.profile.avatarAt && fs.existsSync(avatar)) entries.push({ name: AVATAR_FILE, file: avatar });
+      else if (this.profile.avatarAt) missing.push('Аватар профиля');
       this.transcripts.forEach((t) => entries.push({ name: 'transcripts/' + t.id + '.json', data: JSON.stringify(Object.assign({ format: 'snowball-transcript', version: 1 }, t)) }));
       counts.chats = this.chats.length;
       counts.events = this.events.length;
@@ -1284,10 +1586,11 @@ class Store {
       this.skills.forEach((s) => {
         const file = path.join(this.skillDir(s.id), s.file.stored);
         if (fs.existsSync(file)) entries.push({ name: 'skills/' + s.id + '/' + s.file.stored, file });
+        else missing.push('Скилл «' + s.title + '»: ' + s.file.name);
       });
       counts.skills = this.skills.length;
     }
-    return { entries, counts };
+    return { entries, counts, missing };
   }
 
   // Brings in what an unpacked archive (dir) holds without changing or removing anything already here.
@@ -1296,92 +1599,110 @@ class Store {
   mergeFrom(dir, kind) {
     return this.run(async () => {
       const res = { prompts: 0, files: 0, skipped: 0, chats: 0, events: 0, tasks: 0, transcripts: 0 };
-      let incoming = [];
-      try { incoming = parseData(await fsp.readFile(path.join(dir, 'prompts.json'), 'utf8')).prompts; } catch (e) { incoming = []; }
+      let incoming;
+      try { incoming = parseData(await fsp.readFile(path.join(dir, 'prompts.json'), 'utf8')).prompts; }
+      catch (e) { throw Object.assign(new Error('invalid archive prompts'), { userMessage: 'Не удалось прочитать список промтов в архиве. Проверьте, что файл копии не повреждён.' }); }
       const sig = (p) => p.title.trim().toLowerCase() + '\u0000' + p.text.trim();
       const known = new Set(this.data.prompts.map(sig));
       const ids = new Set(this.data.prompts.map((p) => p.id));
+      const data = Object.assign({}, this.data, { prompts: this.data.prompts.slice() });
+      const copied = [];
       const now = Date.now();
-      for (const p of incoming) {
-        if (!p.title && !p.text) { res.skipped++; continue; }
-        if (kind === 'backup' ? ids.has(p.id) : known.has(sig(p))) { res.skipped++; continue; }
-        const src = path.join(dir, 'files', p.id);   // the folder the files were packed under
-        const prompt = Object.assign({}, p, { files: [] });
-        if (kind === 'share' || ids.has(prompt.id)) prompt.id = newId('p');
-        if (kind === 'share') { prompt.createdAt = now; prompt.updatedAt = now; }
-        for (const f of p.files) {
-          const from = path.join(src, f.stored);
-          if (!(await exists(from))) continue;
-          const target = this.promptDir(prompt.id);
-          await fsp.mkdir(target, { recursive: true });
-          const stored = await uniqueTarget(target, sanitizeName(f.stored));
-          await fsp.copyFile(from, path.join(target, stored));
-          prompt.files.push({ id: f.id, name: f.name, stored, size: f.size, kind: kindOf(stored), addedAt: f.addedAt || now });
-          res.files++;
+      try {
+        for (const p of incoming) {
+          if (!p.title && !p.text) { res.skipped++; continue; }
+          if (kind === 'backup' ? ids.has(p.id) : known.has(sig(p))) { res.skipped++; continue; }
+          const src = path.join(dir, 'files', p.id);   // the folder the files were packed under
+          const prompt = Object.assign({}, p, { files: [] });
+          if (kind === 'share' || ids.has(prompt.id)) prompt.id = newId('p');
+          if (kind === 'share') { prompt.createdAt = now; prompt.updatedAt = now; }
+          for (const f of p.files) {
+            const from = path.join(src, f.stored);
+            if (!(await exists(from))) throw missingArchiveAttachment();
+            const target = this.promptDir(prompt.id);
+            await fsp.mkdir(target, { recursive: true });
+            const stored = await uniqueTarget(target, sanitizeName(f.stored));
+            const destination = path.join(target, stored);
+            await fsp.copyFile(from, destination, fs.constants.COPYFILE_EXCL);
+            copied.push(destination);
+            prompt.files.push({ id: f.id, name: f.name, stored, size: f.size, kind: kindOf(stored), addedAt: f.addedAt || now });
+            res.files++;
+          }
+          data.prompts.push(prompt);
+          ids.add(prompt.id);
+          known.add(sig(prompt));
+          res.prompts++;
         }
-        this.data.prompts.push(prompt);
-        ids.add(prompt.id);
-        known.add(sig(prompt));
-        res.prompts++;
+        if (res.prompts) { await this.write({ data }); this.data = data; }
+      } catch (e) {
+        for (const file of copied) await fsp.rm(file, { force: true }).catch(() => {});
+        throw e;
       }
-      if (res.prompts) await this.write();
       if (kind !== 'backup') return res;
 
-      const chats = await readJson(path.join(dir, CHATS_FILE));
+      // Each imported list becomes visible only after its own file is saved.
+      const draft = Object.create(this);
+      draft.chats = this.chats.slice();
+      const chats = await readArchiveList(path.join(dir, CHATS_FILE), 'chats');
       for (const c of (chats && Array.isArray(chats.chats) ? chats.chats : []).map(normalizeChat).filter(Boolean)) {
-        if (this.getChat(c.id)) continue;
-        this.chats.push(c);
+        if (draft.getChat(c.id)) continue;
+        draft.chats.push(c);
         res.chats++;
         for (const m of c.messages) {
           for (const im of m.images || []) {
             const from = path.join(dir, 'chatfiles', c.id, im.stored);
-            if (!(await exists(from))) continue;
+            if (!(await exists(from))) throw missingArchiveAttachment();
             await fsp.mkdir(this.chatFilesDir(c.id), { recursive: true });
-            await fsp.copyFile(from, this.chatImagePath(c.id, im.stored));
+            await copyImportedFixed(from, this.chatImagePath(c.id, im.stored));
           }
         }
       }
-      if (res.chats) await this.writeChats();
-      const cal = await readJson(path.join(dir, CALENDAR_FILE));
+      if (res.chats) { await draft.writeChats(); this.chats = draft.chats; }
+      draft.events = this.events.slice();
+      const cal = await readArchiveList(path.join(dir, CALENDAR_FILE), 'events');
       (cal && Array.isArray(cal.events) ? cal.events : []).map((e) => normalizeEvent(e)).filter(Boolean).forEach((e) => {
-        if (this.findEvent(e.id)) return;
-        this.events.push(e);
+        if (draft.findEvent(e.id)) return;
+        draft.events.push(e);
         res.events++;
       });
-      if (res.events) await this.writeCalendar();
-      const tasks = await readJson(path.join(dir, TASKS_FILE));
+      if (res.events) { await draft.writeCalendar(); this.events = draft.events; }
+      draft.columns = this.columns.slice();
+      draft.tasks = this.tasks.slice();
+      const tasks = await readArchiveList(path.join(dir, TASKS_FILE), 'tasks');
       // The backup's own columns come along when there is room for them.
       let newColumns = 0;
       (tasks && Array.isArray(tasks.columns) ? tasks.columns : []).map(normalizeColumn).filter(Boolean).forEach((c) => {
-        if (!this.columns.some((x) => x.id === c.id) && this.columns.length < COLUMN_MAX) { this.columns.push(c); newColumns++; }
+        if (!draft.columns.some((x) => x.id === c.id) && draft.columns.length < COLUMN_MAX) { draft.columns.push(c); newColumns++; }
       });
-      (tasks && Array.isArray(tasks.tasks) ? tasks.tasks : []).map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean).forEach((t) => {
-        if (this.findTask(t.id)) return;
-        this.tasks.push(t);
+      (tasks && Array.isArray(tasks.tasks) ? tasks.tasks : []).map((t) => draft.fitColumn(normalizeTask(t))).filter(Boolean).forEach((t) => {
+        if (draft.findTask(t.id)) return;
+        draft.tasks.push(t);
         res.tasks++;
       });
-      if (res.tasks || newColumns) await this.writeTasks();
+      if (res.tasks || newColumns) { await draft.writeTasks(); this.columns = draft.columns; this.tasks = draft.tasks; }
       // Transcriptions come by id, like chats; the ones already here stay as they are.
       for (const t of await readTranscripts(path.join(dir, 'transcripts'))) {
         if (this.getTranscript(t.id)) continue;
         await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+        await this.checkTranscriptPathFree(t.id);
         await writeJson(this.transcriptPath(t.id), Object.assign({ format: 'snowball-transcript', version: 1 }, t));
         this.transcripts.push(t);
         res.transcripts++;
       }
-      // Skills come by id too, each with its file; one whose file is missing from the backup is skipped.
-      const skills = await readJson(path.join(dir, SKILLS_FILE));
+      // Skills come by id too, each with its file. A missing file means the archive is incomplete.
+      const skills = await readArchiveList(path.join(dir, SKILLS_FILE), 'skills');
+      draft.skills = this.skills.slice();
       res.skills = 0;
       for (const s of (skills && Array.isArray(skills.skills) ? skills.skills : []).map(normalizeSkill).filter(Boolean)) {
-        if (this.findSkill(s.id)) continue;
+        if (draft.findSkill(s.id)) continue;
         const from = path.join(dir, 'skills', s.id, s.file.stored);
-        if (!(await exists(from))) continue;
+        if (!(await exists(from))) throw missingArchiveAttachment();
         await fsp.mkdir(this.skillDir(s.id), { recursive: true });
-        await fsp.copyFile(from, path.join(this.skillDir(s.id), s.file.stored));
-        this.skills.push(s);
+        await copyImportedFixed(from, path.join(this.skillDir(s.id), s.file.stored));
+        draft.skills.push(s);
         res.skills++;
       }
-      if (res.skills) await this.writeSkills();
+      if (res.skills) { await draft.writeSkills(); this.skills = draft.skills; }
       // Statistics: for each day and kind the larger number, so restoring the same backup twice does not double it.
       const act = await readJson(path.join(dir, ACTIVITY_FILE));
       if (act) {
@@ -1394,39 +1715,117 @@ class Store {
         try { await writeJson(this.activityPath, this.activity); } catch (e) { /* statistics are a convenience */ }
       }
       // Profile: only fills what is empty here (a fresh install has no nickname and no avatar).
-      const prof = await readJson(path.join(dir, PROFILE_FILE));
-      const pr = this.profile;
+      const prof = await readArchiveObject(path.join(dir, PROFILE_FILE));
+      const pr = Object.assign({}, this.profile);
       let profChanged = false;
       if (prof && !pr.name && normalizeProfile(prof).name) { pr.name = normalizeProfile(prof).name; pr.welcomed = true; profChanged = true; }
-      if (!pr.avatarAt && await exists(path.join(dir, AVATAR_FILE))) {
-        await retry(() => fsp.copyFile(path.join(dir, AVATAR_FILE), this.avatarPath));
+      let createdAvatar = '';
+      const sourceAvatar = path.join(dir, AVATAR_FILE);
+      const hasAvatar = await exists(sourceAvatar);
+      if (!pr.avatarAt && prof && normalizeProfile(prof).avatarAt && !hasAvatar) throw missingArchiveAttachment();
+      if (!pr.avatarAt && hasAvatar) {
+        createdAvatar = await this.createProfileAvatar(sourceAvatar);
+        pr.avatarFile = createdAvatar;
         pr.avatarAt = Date.now();
         pr.welcomed = true;
         profChanged = true;
       }
-      if (profChanged) await writeJson(this.profilePath, pr);
+      if (profChanged) {
+        let backupUpdated;
+        try { backupUpdated = await writeProtectedJson(this.profilePath, pr); }
+        catch (e) { if (createdAvatar) await fsp.rm(path.join(this.dir, createdAvatar), { force: true }).catch(() => {}); throw e; }
+        this.profile = pr;
+        res.profile = true;
+        if (!backupUpdated) res.profileBackupWarning = true;
+      }
       return res;
     });
   }
 }
 
-// Copies the data (prompts.json, profile, statistics, chats, calendar, tasks, transcriptions and the files folders) into another folder.
+async function copyDataFile(from, to) {
+  try { await copyImportedFixed(from, to); }
+  catch (e) {
+    if (e.message === 'import attachment already exists') e.userMessage = 'В выбранной папке уже есть другой файл «' + path.basename(to) + '». Он оставлен без изменений; выберите пустую папку или уберите конфликтующий файл.';
+    throw e;
+  }
+}
+async function dataPathExists(file) {
+  try { await fsp.lstat(file); return true; }
+  catch (e) { if (e.code === 'ENOENT') return false; throw e; }
+}
+function dataFolderConflict(name) {
+  const e = new Error('data folder conflict');
+  e.userMessage = 'В выбранной папке уже есть другой файл или ссылка «' + name + '». Ничего не перезаписано; выберите другую папку.';
+  return e;
+}
+async function copyDataTree(from, to) {
+  const source = await fsp.lstat(from);
+  if (source.isDirectory()) {
+    try { await fsp.mkdir(to); }
+    catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      const destination = await fsp.lstat(to);
+      if (!destination.isDirectory()) throw dataFolderConflict(path.basename(to));
+    }
+    for (const name of await fsp.readdir(from)) await copyDataTree(path.join(from, name), path.join(to, name));
+    return;
+  }
+  if (source.isFile()) { await copyDataFile(from, to); return; }
+  if (source.isSymbolicLink()) {
+    let destination = null;
+    try { destination = await fsp.lstat(to); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+    if (destination) {
+      if (destination.isSymbolicLink() && await fsp.readlink(from) === await fsp.readlink(to)) return;
+      throw dataFolderConflict(path.basename(to));
+    }
+    await fsp.cp(from, to, { recursive: true, dereference: false, verbatimSymlinks: true, force: false, errorOnExist: true });
+    return;
+  }
+  throw dataFolderConflict(path.basename(to));
+}
+function pathIsInside(parent, child) {
+  const relative = path.relative(parent, child);
+  return !relative || (relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative));
+}
+
+// Copies the data into another folder without overwriting files already there.
 async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
-  await fsp.copyFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
-  for (const name of [PROFILE_FILE, AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE, CALENDAR_FILE, TASKS_FILE, SKILLS_FILE]) {
-    if (await exists(path.join(fromDir, name))) await fsp.copyFile(path.join(fromDir, name), path.join(toDir, name));
+  const sourceRoot = await fsp.realpath(fromDir), targetRoot = await fsp.realpath(toDir);
+  if (!path.relative(sourceRoot, targetRoot)) throw dataFolderConflict(path.basename(toDir));
+  const folders = [FILES_DIR, CHAT_FILES_DIR, TRANSCRIPTS_DIR, SKILLS_DIR, 'Снимки'];
+  for (const name of folders) {
+    let source;
+    try { source = await fsp.realpath(path.join(fromDir, name)); }
+    catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+    if (pathIsInside(source, targetRoot)) {
+      const e = new Error('destination inside data folder');
+      e.userMessage = 'Нельзя выбрать папку внутри файлов самой программы. Выберите другую папку.';
+      throw e;
+    }
   }
-  const files = path.join(fromDir, FILES_DIR);
-  if (await exists(files)) await fsp.cp(files, path.join(toDir, FILES_DIR), { recursive: true, force: false, errorOnExist: false });
-  const chatFiles = path.join(fromDir, CHAT_FILES_DIR);
-  if (await exists(chatFiles)) await fsp.cp(chatFiles, path.join(toDir, CHAT_FILES_DIR), { recursive: true, force: false, errorOnExist: false });
-  const transcripts = path.join(fromDir, TRANSCRIPTS_DIR);
-  if (await exists(transcripts)) await fsp.cp(transcripts, path.join(toDir, TRANSCRIPTS_DIR), { recursive: true, force: false, errorOnExist: false });
-  const skills = path.join(fromDir, SKILLS_DIR);
-  if (await exists(skills)) await fsp.cp(skills, path.join(toDir, SKILLS_DIR), { recursive: true, force: false, errorOnExist: false });
-  const shots = path.join(fromDir, 'Снимки');
-  if (await exists(shots)) await fsp.cp(shots, path.join(toDir, 'Снимки'), { recursive: true, force: false, errorOnExist: false });
+  for (const name of [BACKUP_FILE, PROFILE_FILE, extraBackupPath(PROFILE_FILE), AVATAR_FILE, ACTIVITY_FILE, CHATS_FILE, CALENDAR_FILE, TASKS_FILE, SKILLS_FILE,
+    ...[CHATS_FILE, CALENDAR_FILE, TASKS_FILE, SKILLS_FILE].map(extraBackupPath)]) {
+    if (await dataPathExists(path.join(fromDir, name))) await copyDataFile(path.join(fromDir, name), path.join(toDir, name));
+  }
+  const avatarNames = new Set();
+  for (const name of [PROFILE_FILE, extraBackupPath(PROFILE_FILE)]) {
+    const raw = await readJson(path.join(fromDir, name));
+    const profile = normalizeProfile(raw);
+    if (profile.avatarAt && profile.avatarFile) avatarNames.add(profile.avatarFile);
+  }
+  for (const name of avatarNames) {
+    const source = path.join(fromDir, name);
+    if (!(await dataPathExists(source))) throw Object.assign(new Error('missing profile avatar'), { userMessage: 'Не удалось перенести профиль: файл аватарки недоступен. Исходная папка не изменена.' });
+    await copyDataFile(source, path.join(toDir, name));
+  }
+  for (const name of folders) {
+    const source = path.join(fromDir, name);
+    if (await dataPathExists(source)) await copyDataTree(source, path.join(toDir, name));
+  }
+  // The presence of prompts.json marks the destination as a usable data folder: publish it last.
+  await copyDataFile(path.join(fromDir, DATA_FILE), path.join(toDir, DATA_FILE));
 }
 
 async function hasData(dir) { return exists(path.join(dir, DATA_FILE)); }
