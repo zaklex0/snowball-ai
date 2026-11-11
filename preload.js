@@ -3,6 +3,11 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('vsApi', {
+  cloudState: () => ipcRenderer.invoke('cloud-state'),
+  cloudAuth: (command, email, password) => ipcRenderer.invoke('cloud-auth', command, email, password),
+  cloudSync: () => ipcRenderer.invoke('cloud-sync'),
+  cloudResolve: (key, choice) => ipcRenderer.invoke('cloud-resolve', key, choice),
+  onCloudState: fn => { const f = (_e, state) => fn(state); ipcRenderer.on('cloud-state', f); return () => ipcRenderer.removeListener('cloud-state', f); },
   captureList: () => ipcRenderer.invoke('capture-list'),
   captureDelete: (id, token) => ipcRenderer.invoke('capture-delete', id, token),
   captureRestore: (undo, token) => ipcRenderer.invoke('capture-restore', undo, token),

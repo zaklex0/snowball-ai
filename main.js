@@ -13,6 +13,7 @@ const { writeZip, extractZip, readZipIndex } = require('./archive');
 const { exportBytes, exportFile } = require('./safe-export');
 const { loadSettingsFile, writeSettings } = require('./settings-store');
 const setupScreenshots = require('./screenshots');
+const { CloudAccount } = require('./cloud-account');
 
 const APP_TITLE = 'Snowball.ai';
 // Names used by earlier versions (newest first). Their data folder and settings are moved over on first start.
@@ -40,6 +41,7 @@ let win = null;   // the main window: its size, place and tabs are remembered; o
 let store = null;
 let settings = {};
 let captures = null;
+let cloud = null;
 let firstRunNotice = null;
 let settingsRecoveryWarning = '';
 let settingsWriteWarning = '';
@@ -535,6 +537,57 @@ function syncOthers(r, except) {
 }
 function info() {
   return { dataDir: store.dir, dataWarnings: store.dataWarnings, settingsWarning: settingsWarning(), platform: process.platform, version: app.getVersion(), theme: currentTheme(), macAccent: macAccent(), macLook: macLook(), glass: glassOn(), captureShortcut: settings.captureShortcut || 'Alt+Z', captureNotice: captures ? captures.state().shortcutNotice : '', tabs: tabsSetting(), assistant: assistantInfo() };
+}
+
+// Account sessions stay encrypted on this device. Only publishable project credentials are shipped.
+handle('cloud-state', async () => ({ ok: true, state: cloud ? cloud.status : {} }));
+handle('cloud-auth', async (_command, email, password) => {
+  if (!cloud) return { ok: false, error: 'Аккаунт ещё запускается. Повторите через несколько секунд.' };
+  try { return await cloud.auth(_command, email, password); }
+  catch (e) { return { ok: false, error: 'Не удалось выполнить вход. Попробуйте ещё раз.' }; }
+});
+handle('cloud-sync', async () => cloud ? cloud.sync() : { ok: false, error: 'Синхронизация ещё запускается.' });
+handle('cloud-resolve', async (key, choice) => cloud ? cloud.sync({ key, choice }) : { ok: false });
+for (const name of ['cloud-state', 'cloud-auth', 'cloud-sync', 'cloud-resolve']) NO_SYNC.add(name);
+
+async function transcriptPoster(source) {
+  if (!source || !fs.existsSync(source)) return '';
+  try { const image = await nativeImage.createThumbnailFromPath(source, { width: 640, height: 360 }); return 'data:image/jpeg;base64,' + image.toJPEG(72).toString('base64'); }
+  catch (e) { return ''; }
+}
+function transcriptView(t) { return { ...t, sourceAvailable: !!t.source && fs.existsSync(t.source) }; }
+
+function setupCloud() {
+  cloud = new CloudAccount({ userData: app.getPath('userData'), safeStorage, getStore: () => store,
+    lock: (expectedStore, fn, key) => withMaintenance(async () => {
+      if (store !== expectedStore) throw Object.assign(Error(), { userMessage: 'Папка данных сменилась. Повторим синхронизацию.' });
+      if (!key?.startsWith('shot:')) return fn();
+      if (captures.hasAuxiliary()) throw Object.assign(Error(), { userMessage: 'Закройте редактор снимка, чтобы получить изменения снимков с другого устройства.' });
+      await captures.pause(); try { return await fn(); } finally { captures.resume(); }
+    }),
+    changed: () => { syncOthers(ok({ chats: store.chatList(), transcripts: store.transcriptList() })); },
+    emit: state => broadcast('cloud-state', state),
+    backup: expectedStore => withMaintenance(async () => {
+      if (store !== expectedStore) throw Error('Папка данных сменилась.');
+      await captures.pause();
+      try {
+        return await store.run(async () => {
+          const pack = store.packEntries('backup', null), shots = await captures.backup();
+          if (pack.missing.length) throw Object.assign(Error(), { userMessage: 'Не найдены некоторые вложения. Сначала восстановите их или уберите из записей, затем подключите синхронизацию.' });
+          const folder = path.join(store.dir, '.cloud-sync', 'backups'); await fsp.mkdir(folder, { recursive: true });
+          const file = path.join(folder, 'before-cloud-' + Date.now() + '.snowball');
+          await writeZip(file, [manifest('backup', { ...pack.counts, screenshots: shots.count }), ...pack.entries, ...shots.entries]);
+          // Backfill small covers for old videos after the independent backup has been written.
+          for (const t of store.transcripts) if (!t.poster && t.kind === 'video' && t.source) {
+            const poster = await transcriptPoster(t.source);
+            if (poster && poster.length < 250000) { const next = { ...t, poster }; await store.applyCloudRecord('transcript:' + t.id, next); }
+          }
+          return file;
+        });
+      } finally { captures.resume(); }
+    })
+  });
+  cloud.start().catch(() => {});
 }
 
 handle('load', async () => {
@@ -2022,12 +2075,13 @@ handle('transcribe-diarize', async (wav, refs, seconds) => {
 handle('transcript-list', async () => ({ ok: true, transcripts: store.transcriptList() }));
 handle('transcript-get', async (id) => {
   const t = store.getTranscript(id);
-  return t ? { ok: true, transcript: t } : { ok: false, error: 'Этой расшифровки уже нет.' };
+  return t ? { ok: true, transcript: transcriptView(t) } : { ok: false, error: 'Этой расшифровки уже нет.' };
 });
 handle('transcript-save', async (t) => {
+  if (t && !store.getTranscript(t.id) && t.kind !== 'audio' && !t.poster) t = { ...t, poster: await transcriptPoster(t.source) };
   const saved = await store.saveTranscript(t);
   if (!saved) return { ok: false, error: 'Не получилось сохранить расшифровку.' };
-  return ok({ transcript: saved, transcripts: store.transcriptList() });
+  return ok({ transcript: transcriptView(saved), transcripts: store.transcriptList() });
 });
 handle('transcript-delete', async (id) => {
   const gone = await store.deleteTranscript(id);
@@ -3234,6 +3288,7 @@ if (!app.requestSingleInstanceLock()) {
       saveKey: key => { settings.captureShortcut = key; settings.captureShortcutInitialized = true; saveSettings(true); },
       record: async () => { await store.recordScreenshot(); broadcast('sync', { activity: store.activityView() }); } });
     createWindow();
+    setupCloud();
     setupUpdates();
     setTimeout(autoArchiveTasks, 5000);
     setInterval(autoArchiveTasks, 5 * 60 * 1000);

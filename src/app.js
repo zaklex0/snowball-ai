@@ -479,6 +479,7 @@
     var idx = item.files.findIndex(function (f) { return f.id === fileId; });
     if (idx === -1) return;
     var file = item.files[idx];
+    if (file.available === false) { toast("Этот файл остался на другом компьютере. Вложения больше 20 МБ пока не передаются.", true); return; }
     if (file.kind !== "image" && file.kind !== "video" && file.kind !== "audio") {
       call(api.openFile(promptId, fileId));
       return;
@@ -5860,12 +5861,13 @@
   // The player is made once per transcription and kept across redraws, so playing does not stop when the window redraws.
   var trUi = null;
   function trPlayerOf(t) {
-    if (trUi && trUi.id === t.id && trUi.text === t.text) return trUi;
+    if (trUi && trUi.id === t.id && trUi.text === t.text && trUi.source === t.source && trUi.available === t.sourceAvailable) return trUi;
     trDropPlayer();
     if (!tr.subs) tr.subs = subtitlesOf(t);
-    var ui = { id: t.id, text: t.text, cueEls: [] };
+    var ui = { id: t.id, text: t.text, source: t.source, available: t.sourceAvailable, cueEls: [] };
     var subLine = h("div", { class: "tr-sub", "aria-live": "off" });
-    var media = h(t.kind === "audio" ? "audio" : "video", { controls: "controls", preload: "metadata", src: fileUrl(t.source) });
+    var available = !!t.source && t.sourceAvailable !== false;
+    var media = h(t.kind === "audio" ? "audio" : "video", { controls: "controls", preload: "metadata", src: available ? fileUrl(t.source) : null });
     var player = h("div", { class: "tr-player" + (t.kind === "audio" ? " audio" : "") });
     if (t.kind === "audio") player.append(subLine, media); else player.append(media, subLine);
     var strip = h("div", { class: "tr-tl", title: "Фразы на полоске времени: клик перематывает" });
@@ -5877,7 +5879,10 @@
       strip.append(i);
     });
     strip.addEventListener("click", function (e) { var r = strip.getBoundingClientRect(); seek((e.clientX - r.left) / r.width * len); });
-    var gone = h("div", { class: "tr-gone", hidden: true }, "Исходного файла на прежнем месте нет, поэтому смотреть нельзя. Текст, тайминги и субтитры сохранились.");
+    var gone = h("div", { class: "tr-gone", hidden: available },
+      t.poster ? h("img", { class: "tr-cover", src: t.poster, alt: "Обложка видео" }) : h("span", { class: "pill", text: t.kind === "audio" ? "Аудиозапись" : "Видеозапись" }),
+      h("p", { text: "Исходный файл недоступен на этом устройстве. Текст, тайминги и субтитры доступны для работы и копирования." }));
+    player.hidden = !available;
     media.addEventListener("error", function () { player.hidden = true; gone.hidden = false; });
     // Only the subtitle line, the strip and the current phrase change while it plays — no full redraw.
     function paint(time) {
@@ -6009,7 +6014,7 @@
     }
     var kids = [];
     if (!tr.open || (trUi && trUi.id !== tr.open.id)) trDropPlayer();
-    if (!assistantState().keys.openai) kids.push(h("div", { class: "tr-nokey" }, h("span", { text: "Для расшифровки нужен ключ ChatGPT (OpenAI). Ключ Claude не подходит: звук в текст переводит только OpenAI." }),
+    if (!assistantState().keys.openai && !tr.open) kids.push(h("div", { class: "tr-nokey" }, h("span", { text: "Для расшифровки нужен ключ ChatGPT (OpenAI). Ключ Claude не подходит: звук в текст переводит только OpenAI." }),
       h("button", { type: "button", class: "btn btn-primary btn-sm", onclick: function () { openSettings("keys"); } }, "Подключить ChatGPT")));
     if (tr.pending) {
       var pendingText = h("textarea", { class: "tr-text", readonly: true, "aria-label": "Несохранённая расшифровка" });
@@ -6155,7 +6160,7 @@
         // the guide of the folded sidebar just closes; «Скиллы» open on the «Промты» page.
         last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () {
           gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close();
-          if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section === "skills") openSkills(); else if (g.section !== "sidebar") setPage(g.section);
+          if (g.section === "cloud") openSettings("cloud"); else if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section === "skills") openSkills(); else if (g.section !== "sidebar") setPage(g.section);
         } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : g.section === "skills" ? "Открыть «Скиллы»" : g.section === "assistant" ? "Открыть LLM" : "Открыть раздел «" + g.title + "»")
           : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
   }

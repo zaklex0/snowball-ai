@@ -1,14 +1,14 @@
 {
   "name": "snowball",
   "productName": "Snowball.ai",
-  "version": "1.20.9",
+  "version": "1.21.0",
   "description": "Snowball.ai — система хранения информации",
   "main": "main.js",
   "author": "Snowball.ai",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "test": "node --test tools/storage-recovery.test.cjs tools/screenshot-store.test.cjs tools/transcription-core.test.cjs tools/export-recovery.test.cjs tools/settings-store.test.cjs tools/profile-recovery.test.cjs tools/data-copy.test.cjs",
+    "test": "node --test tools/storage-recovery.test.cjs tools/screenshot-store.test.cjs tools/transcription-core.test.cjs tools/export-recovery.test.cjs tools/settings-store.test.cjs tools/profile-recovery.test.cjs tools/data-copy.test.cjs tools/cloud-sync.test.cjs tools/cloud-account.test.cjs",
     "build:win": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
@@ -40,6 +40,10 @@
       "main.js",
       "preload.js",
       "storage.js",
+      "cloud-config.js",
+      "cloud-sync.js",
+      "cloud-local.js",
+      "cloud-account.js",
       "archive.js",
       "safe-export.js",
       "settings-store.js",
@@ -98,6 +102,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.1.0",
+    "@supabase/supabase-js": "^2.119.0",
     "electron-updater": "^6.8.9",
     "mediabunny": "1.65.2",
     "openai": "^7.42.0",

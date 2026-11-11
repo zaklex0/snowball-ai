@@ -1,5 +1,11 @@
 # Third-party components
 
+## Supabase
+
+Snowball.ai uses the official @supabase/supabase-js library and its dependencies for account authentication and synchronization.
+Supabase JavaScript libraries are licensed under the MIT license. Their licenses are included with the installed packages.
+Upstream source: https://github.com/supabase/supabase-js
+
 ## Mediabunny
 
 Snowball.ai uses Mediabunny 1.65.2 for reading audio and video files in small parts.

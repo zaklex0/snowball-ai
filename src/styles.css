@@ -1988,3 +1988,11 @@ h1 .brand { color: var(--accent-strong); }
 .bubble-doc span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bubble-doc:hover { border-color: var(--ink-soft); }
 .sk-act-text { font-family: var(--font-body); white-space: pre-wrap; }
+/* Account settings share the same theme surfaces as the rest of Settings. */
+.cloud-card .input { display: block; width: min(100%, 420px); margin: 6px 0 16px; }
+.cloud-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.cloud-card details { margin: 12px 0; }
+.cloud-card summary { cursor: pointer; }
+.cloud-conflict { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 16px 0; }
+.cloud-conflict pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.tr-cover { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; margin-bottom: 12px; }

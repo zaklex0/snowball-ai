@@ -474,6 +474,7 @@ function normalizeTranscript(t) {
   const now = Date.now();
   return {
     id: t.id, name: str(t.name, 300).trim() || 'файл', source: str(t.source, 2000), kind: t.kind === 'audio' ? 'audio' : 'video',
+    poster: /^data:image\/jpeg;base64,[a-z0-9+/=]+$/i.test(str(t.poster)) && str(t.poster).length < 250000 ? t.poster : '',
     size: Math.max(0, Math.round(num(t.size))), duration: sec(t.duration), model: str(t.model, 60),
     // With several voices: the model that wrote the text (the voices and times are from `model`, the diarize one).
     textModel: str(t.textModel, 60),
@@ -1321,6 +1322,71 @@ class Store {
     try { this.mtimeMs = (await fsp.stat(this.dataPath)).mtimeMs; } catch (e) { this.mtimeMs = 0; }
   }
 
+  // Cloud records are independent: editing one task never replaces the whole other device's board.
+  cloudRecords() {
+    const records = {};
+    for (const [kind, list] of Object.entries({ prompt: this.data.prompts, task: this.tasks, event: this.events, chat: this.chats, transcript: this.transcripts, skill: this.skills })) {
+      for (const item of list) {
+        const value = structuredClone(item);
+        if (kind === 'transcript') value.source = ''; // The source path is local to this computer, never uploaded.
+        records[kind + ':' + item.id] = value;
+      }
+    }
+    if (this.columns.length || this.archiveMode !== 'day') records['config:tasks'] = { columns: this.columns, archiveMode: this.archiveMode };
+    if (this.profile.name || this.profile.avatarAt) records['config:profile'] = this.profile;
+    for (const [day, counts] of Object.entries(this.activity.days)) records['activity:' + day] = counts;
+    return structuredClone(records);
+  }
+
+  // Called under run() by the cloud adapter. Publish only after the atomic disk write succeeded.
+  async applyCloudRecord(key, input) {
+    const [kind, id] = key.split(':');
+    const definitions = {
+      prompt: ['data', normalizePrompt],
+      task: ['tasks', normalizeTask], event: ['events', normalizeEvent], chat: ['chats', normalizeChat],
+      transcript: ['transcripts', normalizeTranscript], skill: ['skills', normalizeSkill]
+    };
+    if (kind === 'config' && id === 'tasks') {
+      const columns = (input?.columns || []).map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX);
+      const archiveMode = ARCHIVE_MODES.includes(input?.archiveMode) ? input.archiveMode : 'day';
+      await writeProtectedJson(this.tasksPath, { ...this.tasksFile(), columns, archiveMode });
+      this.columns = columns; this.archiveMode = archiveMode; return;
+    }
+    if (kind === 'config' && id === 'profile') {
+      const profile = normalizeProfile(input);
+      await writeProtectedJson(this.profilePath, profile); this.profile = profile; return;
+    }
+    if (kind === 'activity' && /^\d{4}-\d{2}-\d{2}$/.test(id)) {
+      const activity = structuredClone(this.activity);
+      if (input) activity.days[id] = input; else delete activity.days[id];
+      const normalized = normalizeActivity(activity);
+      await writeJson(this.activityPath, normalized); this.activity = normalized; return;
+    }
+    if (!definitions[kind] || !ID_RE.test(id)) throw Error('Неизвестная облачная запись.');
+    const [prop, normalize] = definitions[kind];
+    if (input && input.id !== id) throw Error('Повреждена облачная запись.');
+    const list = kind === 'prompt' ? this.data.prompts : this[prop];
+    const old = list.find(x => x.id === id);
+    const next = input ? normalize(input) : null;
+    if (input && !next) throw Error('Повреждена облачная запись.');
+    if (next && kind === 'transcript') next.source = old?.source || '';
+    const updated = list.filter(x => x.id !== id);
+    if (next) updated.push(next);
+    if (kind === 'prompt') {
+      const data = { ...this.data, prompts: updated }; await this.write({ data }); this.data = data;
+    } else if (kind === 'transcript') {
+      await fsp.mkdir(this.transcriptsRoot, { recursive: true });
+      if (next) await writeJson(this.transcriptPath(id), { format: 'snowball-transcript', version: 1, ...next });
+      else if (old) await this.trash(this.transcriptPath(id));
+      this.transcripts = updated;
+    } else {
+      const spec = { task: [this.tasksPath, { ...this.tasksFile(), tasks: updated }], event: [this.calendarPath, { format: 'snowball-calendar', version: 1, events: updated }],
+        chat: [this.chatsPath, { format: 'snowball-chats', version: 1, chats: updated }], skill: [this.skillsPath, { format: 'snowball-skills', version: 1, skills: updated }] }[kind];
+      await writeProtectedJson(spec[0], spec[1]); this[prop] = updated;
+    }
+    // Attachments survive cloud deletion on this device for recovery; no recursive file removal here.
+  }
+
   async write(opts) {
     const data = opts && opts.data ? opts.data : this.data;
     data.updatedAt = Date.now();
@@ -1369,7 +1435,7 @@ class Store {
       id: p.id, title: p.title, type: p.type, text: p.text, comment: p.comment, createdAt: p.createdAt, updatedAt: p.updatedAt,
       files: p.files.map((f) => {
         const abs = path.join(this.promptDir(p.id), f.stored);
-        return { id: f.id, name: f.name, size: f.size, kind: f.kind, addedAt: f.addedAt, url: pathToFileURL(abs).href };
+        return { id: f.id, name: f.name, size: f.size, kind: f.kind, addedAt: f.addedAt, available: fs.existsSync(abs), url: pathToFileURL(abs).href };
       })
     }));
   }
@@ -1794,7 +1860,7 @@ async function copyDataTo(fromDir, toDir) {
   await fsp.mkdir(toDir, { recursive: true });
   const sourceRoot = await fsp.realpath(fromDir), targetRoot = await fsp.realpath(toDir);
   if (!path.relative(sourceRoot, targetRoot)) throw dataFolderConflict(path.basename(toDir));
-  const folders = [FILES_DIR, CHAT_FILES_DIR, TRANSCRIPTS_DIR, SKILLS_DIR, 'Снимки'];
+  const folders = [FILES_DIR, CHAT_FILES_DIR, TRANSCRIPTS_DIR, SKILLS_DIR, 'Снимки', '.cloud-sync'];
   for (const name of folders) {
     let source;
     try { source = await fsp.realpath(path.join(fromDir, name)); }
