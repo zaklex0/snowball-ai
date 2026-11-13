@@ -1,5 +1,5 @@
 'use strict';
-const { taskReferences, taskColumnReferences } = require('./task-reference');
+const { taskReferences, taskReferenceSelection, taskColumnReferences, taskTargetGroup, resolveTaskSelection } = require('./task-reference');
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage, Notification, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -2225,6 +2225,7 @@ async function autoArchiveTasks() {
 // every message is a separate request (no conversation), changes apply at once without cards,
 // and «Отменить» under the answer puts back everything this one message changed. Without keys simple word rules answer.
 const TASKS_PROMPT = [
+  'Диапазон «с 6-й по 9-ю» включает задачи 6, 7, 8, 9. Для переноса диапазона или списка сначала найди ВСЕ id по одному снимку tasks_list, затем вызови tasks_move сразу со всеми id. Не ищи следующий номер после изменения предыдущей задачи: нумерация меняется. Если весь набор номеров есть только в одном столбце, используй его; если в нескольких — уточни исходный столбец. Подгруппа и столбец — разные вещи: перенос в подгруппу меняет только groupId, status оставь null, если смену столбца не просили. Не создавай новую задачу вместо непонятой команды переноса.',
   'Ты — ассистент раздела «Задачи» в программе Snowball.ai. Ты работаешь только с задачами пользователя: добавляешь, меняешь, переносишь, отмечаешь сделанными, разбиваешь на подзадачи, удаляешь и отвечаешь, что запланировано.',
   'Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). Новая задача — в todo, если не сказано иное.',
   'Каждое сообщение — отдельная просьба. Делай сразу и не переспрашивай, если смысл понятен: изменения применяются сразу, а у пользователя есть кнопка «Отменить».',
@@ -2237,6 +2238,7 @@ const TASKS_PROMPT = [
 ].join('\n\n');
 const sameTool = (name, description) => Object.assign({}, TOOLS.find((t) => t.name === name), description ? { description } : {});
 const TASK_TOOLS = [
+  { name: 'tasks_move', description: 'Переносит выбранные задачи одним действием. Все id заранее возьми из одного tasks_list. null сохраняет столбец или подгруппу; пустой groupId убирает подгруппу.', parameters: { type: 'object', additionalProperties: false, required: ['ids', 'status', 'groupId'], properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 500 }, status: { type: ['string', 'null'] }, groupId: { type: ['string', 'null'] } } } },
   sameTool('tasks_list'),
   sameTool('tasks_archive_search'),
   { name: 'tasks_archive_done', description: 'Убирает все задачи из «Готово» в архив.', parameters: { type: 'object', additionalProperties: false, required: [], properties: {} } },
@@ -2269,6 +2271,11 @@ async function loggedTask(log, id, fn) {
 }
 async function runTaskTool(name, input, log) {
   const a = input && typeof input === 'object' ? input : {};
+  if (name === 'tasks_move') {
+    const result = await store.moveTasks(a.ids, { status: a.status, groupId: a.groupId });
+    result.before.forEach(before => log.push({ id: before.id, before }));
+    return 'Перемещено задач: ' + result.tasks.length + '.';
+  }
   if (name === 'tasks_list') return tasksForModel();
   if (name === 'tasks_archive_search') return archiveForModel(a.query);
   if (name === 'tasks_archive_done') {
@@ -2475,6 +2482,19 @@ function numberedTaskEdit(text, task) {
   }
   return null;
 }
+// Explicit numeric moves work identically with or without a connected model.
+async function numericTaskMove(text, log) {
+  const selection = taskReferenceSelection(text);
+  if (selection.error) return selection.error;
+  if (!selection.numbers.length || !/перенес|перенос|перемест|перемещ|сдвинь|передвинь/iu.test(text)) return null;
+  const group = taskTargetGroup(text, store.groupsView());
+  if (group.error) return group.error;
+  const { source, target } = taskColumnReferences(group.text, store.columnsView());
+  if (!group.mentioned && !target) return null;
+  const resolved = resolveTaskSelection(selection.numbers, store.tasksView(), source);
+  if (resolved.error) return resolved.error;
+  return runTaskTool('tasks_move', { ids: resolved.ids, status: target, groupId: group.mentioned ? group.groupId : null }, log);
+}
 async function stubTasksAssistant(text, log) {
   const low = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
   let t;
@@ -2586,7 +2606,9 @@ handle('tasks-assistant', async function (text) {
   const controller = new AbortController();
   let reply = '', failed = false;
   try {
-    if (!model) reply = await stubTasksAssistant(msg, log);
+    const numeric = await numericTaskMove(msg, log);
+    if (numeric !== null) reply = numeric;
+    else if (!model) reply = await stubTasksAssistant(msg, log);
     else reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal);
   } catch (e) {
     if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('tasks assistant', e.status, e.code || e.type);

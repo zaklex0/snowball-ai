@@ -3,7 +3,38 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises'), os = require('node:os'), path = require('node:path');
 const { Store } = require('../storage');
-const { taskReferences, taskColumnReferences } = require('../task-reference');
+const { taskReferences, taskReferenceSelection, taskColumnReferences, taskTargetGroup, resolveTaskSelection } = require('../task-reference');
+test('ranges, ordinal endings, lists and exact subgroup targets', () => {
+  for (const text of ['Задачи с 6-й по 9-ю перемести', 'Перенеси задачи 6–9', 'задачи от 6 до 9']) assert.deepEqual(taskReferences(text), [6, 7, 8, 9]);
+  assert.deepEqual(taskReferences('Задачи 6, 7 и 9 перенеси'), [6, 7, 9]);
+  assert.ok(taskReferenceSelection('задачи с 9 по 6').error);
+  assert.ok(taskReferenceSelection('задачи 1-501').error);
+  const groups = [{ id: 'a', name: 'YouTube' }, { id: 'b', name: 'YouTube Reels' }, { id: 'c', name: 'Работа' }];
+  assert.equal(taskTargetGroup('Задачи с 6-й по 9-ю перемести в подгруппу YouTube Reels', groups).groupId, 'b');
+  const target = taskTargetGroup('Перемести задачи 1-2 в подгруппу «Работа» из Предстоит', groups);
+  assert.equal(target.groupId, 'c'); assert.deepEqual(taskColumnReferences(target.text, columns), { source: 'todo', target: null });
+  assert.ok(taskTargetGroup('Перемести задачи 1-2 в подгруппу Несуществующая', groups).error);
+});
+test('bulk moves freeze original numbers, preserve details, undo and reject partial selections', async t => {
+  const s = await setup(t), g = await s.addTaskGroup('YouTube Reels');
+  for (let i = 1; i <= 10; i++) await s.saveTask({ title: 'Задача ' + i, note: 'Заметка ' + i, subtasks: [{ title: 'Шаг' }] });
+  await s.saveTask({ title: 'Другая', status: 'doing' });
+  const original = structuredClone(s.tasksView()), ids = original.filter(t => [6,7,8,9].includes(t.number) && t.status === 'todo').map(t => t.id);
+  assert.deepEqual(resolveTaskSelection([6,7,8,9], original, null).ids, ids);
+  assert.ok(resolveTaskSelection([1], original, null).error);
+  assert.ok(resolveTaskSelection([9,10,11], original, 'todo').error);
+  const moved = await s.moveTasks(ids, { groupId: g.id });
+  assert.deepEqual(s.tasks.filter(t => t.groupId === g.id).map(t => t.id), ids);
+  for (const id of ids) { const task = s.findTask(id), prev = original.find(t => t.id === id); assert.equal(task.status, 'todo'); assert.equal(task.note, prev.note); assert.deepEqual(task.subtasks, prev.subtasks); }
+  for (const before of moved.before.slice().reverse()) await s.putTask(before);
+  assert.deepEqual(s.tasksView(), original);
+  await assert.rejects(s.moveTasks([ids[0], 'missing'], { groupId: g.id }));
+  assert.deepEqual(s.tasksView(), original);
+  const rename = fs.rename;
+  fs.rename = async (from, to) => { if (to === s.tasksPath) throw new Error('disk full'); return rename(from, to); };
+  try { await assert.rejects(s.moveTasks(ids, { groupId: g.id }), /disk full/); } finally { fs.rename = rename; }
+  assert.deepEqual(s.tasksView(), original);
+});
 async function setup(t) { const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-task-groups-')); t.after(() => fs.rm(dir, { recursive: true, force: true })); return new Store(dir).init(); }
 const columns = [{ id: 'todo', name: 'Предстоит' }, { id: 'doing', name: 'В процессе' }, { id: 'done', name: 'Готово' }, { id: 'colReview', name: 'На проверке' }];
 test('references distinguish source and destination and ignore dates', () => {

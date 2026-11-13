@@ -1089,6 +1089,33 @@ class Store {
     });
   }
 
+  // Resolve numbers before calling this method: moving a category can renumber the board.
+  moveTasks(ids, { status = null, groupId = null } = {}) {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
+      if (!Array.isArray(ids) || !ids.length || ids.length > 500 || ids.some(id => typeof id !== 'string' || !this.findTask(id))) throw Object.assign(new Error('missing tasks'), { userMessage: 'Некоторые задачи больше недоступны. Обновите доску.' });
+      if (status !== null && !this.hasColumn(status)) throw Object.assign(new Error('missing column'), { userMessage: 'Столбец не найден.' });
+      if (groupId !== null && groupId !== '' && !this.taskGroups.some(g => g.id === groupId)) throw Object.assign(new Error('missing group'), { userMessage: 'Подгруппа не найдена.' });
+      const before = structuredClone(this.tasks), now = Date.now(); let count = 0;
+      const tasks = [...new Set(ids)].map(id => {
+        const prev = this.findTask(id), merged = { ...prev, updatedAt: now };
+        if (groupId !== null) merged.groupId = groupId;
+        if (status !== null && status !== prev.status) {
+          merged.status = status; merged.archivedAt = 0;
+          merged.order = Math.max(now, ...this.tasks.filter(t => t.status === status).map(t => t.order)) + 1;
+          if (status === 'done') { merged.doneFrom = prev.status; merged.doneAt = now; }
+          if (!['todo', 'done'].includes(status) && !merged.startedAt) merged.startedAt = now;
+          if (prev.status !== 'done') count++;
+        }
+        const task = this.fitColumn(normalizeTask(merged));
+        this.tasks[this.tasks.indexOf(prev)] = task;
+        this.moveTaskChildrenGroup(task, prev, now);
+        return task;
+      });
+      await this.writeTasks(); await this.bump('tasks', count);
+      return { tasks, before: before.filter(t => JSON.stringify(t) !== JSON.stringify(this.findTask(t.id))) };
+    });
+  }
+
   /* ---------- the archive of done tasks ---------- */
   // Done tasks leave the board for the archive: by the «Убрать в архив» button, by the assistant, or by themselves
   // (archiveMode 'day' — everything done before today; 'week' — done more than 7 days ago; 'manual' — never by itself).
