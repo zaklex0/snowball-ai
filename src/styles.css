@@ -1398,6 +1398,30 @@ h1 .brand { color: var(--accent-strong); }
 .task.fresh { animation: task-fresh 1.6s ease-out; }
 @keyframes task-fresh { 0%, 40% { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); } }
 .task-t { overflow-wrap: anywhere; }
+.task-number { display: inline-block; margin-right: 7px; color: var(--ink-soft); font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; text-decoration: none; }
+.tp-head .task-number { font-size: 12px; }
+.tchk.numbered { position: relative; width: 18px; height: 18px; margin-top: 1px; border-width: 1px; color: var(--ink-soft); }
+.tchk.numbered.on { color: var(--surface); }
+.tchk.numbered.big { width: 24px; height: 24px; }
+.tchk.numbered canvas { display: block; }
+.task-group { margin-top: 12px; }
+.task-group > .task { margin-top: 7px; }
+.task-group-head { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-bottom: 5px; }
+.task-group-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.task-group-count { font-size: 11px; color: var(--ink-soft); }
+.task-group-fold, .task-group-plus, .task-group-rename { border: 0; background: transparent; color: var(--ink-soft); padding: 3px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; }
+.task-group-fold { font-size: 10px; width: 14px; }
+.task-group-rename { margin-left: auto; }
+.task-group-plus { margin-left: auto; color: var(--accent-strong); }
+.task-group-rename + .task-group-plus { margin-left: 0; }
+.task-group-plus .ico { width: 15px; height: 15px; }
+.task-group-plus svg, .task-group-add svg { width: 15px; height: 15px; flex: none; }
+.task-group-plus:hover, .task-group-rename:hover { background: var(--surface); }
+.task-group-add { display: flex; align-items: center; justify-content: flex-start; gap: 6px; width: 100%; margin: 6px 0 14px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--accent-strong); cursor: pointer; font: inherit; font-size: 12px; }
+.task-group-empty { font-size: 11px; color: var(--ink-soft); margin: 8px 20px; }
+.task-group-form { margin: 6px 0 14px; }
+.task-group-form > div { display: flex; gap: 6px; margin-top: 7px; }
+.task-group-input { width: 100%; min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--surface); font: inherit; font-size: 13px; }
 .task.is-done > .task-t { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ink-soft) 50%, transparent); }
 .task-marks { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 /* The tick circle: on a card, big in the panel, square for subtasks */

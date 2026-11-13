@@ -28,6 +28,7 @@ const { Store } = require('../storage');
   let page;
   try {
     page = await connect(port, t => /index\.html/.test(t.url));
+    if (process.env.SNOWBALL_TEST_TRACE) { const evaluate = page.ev; page.ev = text => { console.log('CHECK', text.slice(0, 120)); return evaluate(text); }; }
     await page.until('!!window.vsApi && document.querySelectorAll(".tab").length === 1');
     assert.match(await page.ev('document.querySelector(".tab").textContent'), /Главная/);
     await page.ev('document.querySelector("[data-page=tasks]").click(); true');
@@ -85,7 +86,7 @@ const { Store } = require('../storage');
     await page.until(`(async()=>{const r=await vsApi.load();return r.tasks.find(t=>t.id===${JSON.stringify(ids.child)}).parentId==='';})()`);
     assert.equal((await page.ev('vsApi.load()')).tasks.find(t=>t.id===ids.child).parentId, '');
     await page.ev('document.querySelector("#tview [data-v=board]").click();true');
-    await page.until(`!!document.querySelector('.tc-done > .task[data-id="${ids.child}"]')`);
+    await page.until(`!!document.querySelector('.tc-done .task[data-id="${ids.child}"]')`);
     assert.equal(await page.ev('document.querySelectorAll(".task .task").length'), 0);
     console.log('OK: compact parent cards; deep nesting kept inside; progress counter; descendant search; list; preserved details; detach');
   } catch (e) {

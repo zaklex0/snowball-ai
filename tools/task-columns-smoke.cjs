@@ -44,7 +44,7 @@ const { Store } = require('../storage');
     const scrollBeforeMove=await page.ev('document.querySelector("#board").scrollLeft');
     assert.equal(await page.ev('document.querySelectorAll(".task-ctx button[data-column]").length'), 6);
     await choose(columns[2].id);
-    await page.until(`document.querySelector('.tcol.tcc-2 > .task[data-id="${task.id}"]') !== null`);
+    await page.until(`document.querySelector('.tcol.tcc-2 .task[data-id="${task.id}"]') !== null`);
     assert.ok(Math.abs(await page.ev('document.querySelector("#board").scrollLeft')-scrollBeforeMove)<5, 'moving through the menu keeps board position');
     let saved = (await page.ev('vsApi.load()')).tasks.find(t => t.id === task.id);
     assert.equal(saved.note, task.note); assert.equal(saved.due, task.due); assert.deepEqual(saved.subtasks, task.subtasks);
@@ -52,7 +52,7 @@ const { Store } = require('../storage');
     await page.ev(`document.querySelector('.task[data-id="${parent.id}"]').click();true`);
     await page.ev(`(()=>{const row=document.querySelector('.tp-sub[data-task-id="${nested.id}"]'),r=row.getBoundingClientRect();row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+40,clientY:r.top+10}));document.querySelector('.task-ctx [data-task-action=move]').click();return true;})()`);
     await choose('todo');
-    await page.until(`document.querySelector('.tc-todo > .task[data-id="${nested.id}"]') !== null`);
+    await page.until(`document.querySelector('.tc-todo .task[data-id="${nested.id}"]') !== null`);
     // A stale menu must not overwrite a newer status from another window.
     await context(nested.id);
     await page.ev(`vsApi.taskSave({id:${JSON.stringify(nested.id)},status:'doing'})`);

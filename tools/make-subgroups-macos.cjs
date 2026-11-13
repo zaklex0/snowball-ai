@@ -1,0 +1,13 @@
+'use strict';
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '..');
+let html = fs.readFileSync(path.join(root, 'mockups/task-subgroups-column-numbers.html'), 'utf8');
+html = html.replace('<html lang="ru">', '<html lang="ru" data-theme="macos-blue">');
+html = html.replace('</head>', '<link rel="stylesheet" href="task-subgroups-macos-blue.css">\n</head>');
+html = html.replace('<title>Подгруппы задач — Snowball.ai · Макет</title>', '<title>Подгруппы задач — macOS · Синий</title>');
+html = html.replace('<select id="theme">', '<select id="theme"><option value="macos-blue" selected>macOS · Синий</option>');
+html = html.replace(' const columnTasks=', " document.documentElement.dataset.theme='macos-blue';$('#theme').value='macos-blue';\n const columnTasks=");
+html = html.replace('Макет · номера по столбцам · v2', 'macOS · Синий · Макет');
+fs.writeFileSync(path.join(root, 'mockups/task-subgroups-macos-blue.html'), html);
+console.log('Created macOS blue interactive mockup.');

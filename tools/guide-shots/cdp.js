@@ -9,6 +9,8 @@ async function freePort() {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const port = server.address().port;
   await new Promise((resolve, reject) => server.close((e) => e ? reject(e) : resolve()));
+  // fetch rejects these service ports even when our local debug server owns them.
+  if (port < 1024 || [1719,1720,1723,2049,3659,4045,5060,5061,6000,6566,6665,6666,6667,6668,6669,6697,10080].includes(port)) return freePort();
   return port;
 }
 

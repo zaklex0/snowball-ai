@@ -1,0 +1,86 @@
+/* macOS blue: glass at the window edges, solid workspace and quiet controls. */
+:root[data-theme="macos-blue"] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --side: #edf2f9;
+  --paper: #ffffff;
+  --soft: #f1f1f4;
+  --line: #e3e4e8;
+  --ink: #1d1d1f;
+  --muted: #777980;
+  --accent: #007aff;
+  --accent-bg: #007aff;
+  --todo: #9b80b5;
+  --doing: #d39c39;
+  --done: #56a568;
+  --todo-bg: #f6f6f9;
+  --doing-bg: #f6f6f9;
+  --done-bg: #f6f6f9;
+}
+html[data-theme="macos-blue"] body {
+  font-family: "SF Pro Text", "Golos Text", "Segoe UI Variable Text", system-ui, sans-serif;
+}
+html[data-theme="macos-blue"] .sidebar {
+  background: linear-gradient(155deg, #edf4fbe6, #e9edf6e0 60%, #eeedf6e6);
+  backdrop-filter: blur(24px) saturate(1.2);
+  border-right-color: #dfe3eb;
+}
+html[data-theme="macos-blue"] .titlebar {
+  background: linear-gradient(90deg, #f1f3f7ed, #f7f8faed);
+  backdrop-filter: blur(20px);
+}
+html[data-theme="macos-blue"] .brand b,
+html[data-theme="macos-blue"] .avatar {
+  background: #007aff;
+  color: #fff;
+}
+html[data-theme="macos-blue"] .nav button.active {
+  color: #007aff;
+  background: #dce9fc;
+}
+html[data-theme="macos-blue"] .heading h1 {
+  font-family: "SF Pro Display", "Golos Text", "Segoe UI Variable Display", system-ui, sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -1px;
+}
+html[data-theme="macos-blue"] button,
+html[data-theme="macos-blue"] input,
+html[data-theme="macos-blue"] select,
+html[data-theme="macos-blue"] textarea { border-radius: 6px; }
+html[data-theme="macos-blue"] .heading-actions button {
+  padding: 5px 11px;
+  min-height: 28px;
+  background: #f8f8fa;
+  border-color: #dedee3;
+}
+html[data-theme="macos-blue"] .tab { background: #fff; border-color: #e3e5eb; }
+html[data-theme="macos-blue"] .instruction { background: #f6f8fc; border-color: #e4e9f2; }
+html[data-theme="macos-blue"] .instruction .symbol { color: #007aff; background: #e6effd; }
+html[data-theme="macos-blue"] .search { background: #f5f5f7; border-color: #e4e4e8; }
+html[data-theme="macos-blue"] .column { border-color: #e5e5ea; border-radius: 12px; }
+html[data-theme="macos-blue"] .column-head { border-bottom-color: #e4e4e9; }
+html[data-theme="macos-blue"] .group-head .plus { color: #007aff; }
+html[data-theme="macos-blue"] .task {
+  background: #fff;
+  border-color: #e5e5ea;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px #00000005;
+}
+html[data-theme="macos-blue"] .task:hover { border-color: #b9d6fb; box-shadow: 0 2px 7px #0b356609; }
+html[data-theme="macos-blue"] .task-circle { border-radius: 50%; border-color: #97b9e7; color: #516f95; }
+html[data-theme="macos-blue"] .task.done .task-circle { background: #34a853; border-color: #34a853; color: #fff; }
+html[data-theme="macos-blue"] .tag { background: #f0f1f4; color: #74767d; border-radius: 4px; }
+html[data-theme="macos-blue"] .add-group {
+  background: #007aff;
+  color: #fff;
+  border: 1px solid #007aff;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+html[data-theme="macos-blue"] .add-group:hover { background: #086fe0; }
+html[data-theme="macos-blue"] .inline-form .save { color: #fff; }
+html[data-theme="macos-blue"] .profile { background: #ffffffa8; border-color: #ffffffba; }
+html[data-theme="macos-blue"] .task-panel { background: #fff; border-left-color: #e0e0e5; }
+html[data-theme="macos-blue"] .menu { background: #f9f9fbeF; backdrop-filter: blur(20px); }
+html[data-theme="macos-blue"] .menu button:hover { background: #007aff; color: #fff; }

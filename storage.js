@@ -17,6 +17,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
+const { numberedTasks } = require('./src/task-board-model');
 const { pathToFileURL } = require('url');
 const { pipeline } = require('stream/promises');
 const { readZipIndex } = require('./archive');
@@ -346,6 +347,16 @@ function normalizeColumn(c) {
   if (!name) return null;
   return { id: c.id, name, color: Math.max(0, Math.min(5, Math.round(num(c.color)))) };
 }
+function normalizeTaskGroups(list) {
+  const ids = new Set();
+  return (Array.isArray(list) ? list : []).slice(0, 200).flatMap(g => {
+    if (!g || !ID_RE.test(str(g.id)) || ids.has(g.id)) return [];
+    const name = str(g.name, 60).trim();
+    if (!name) return [];
+    ids.add(g.id);
+    return [{ id: g.id, name }];
+  });
+}
 const TASK_TAG_MAX = 30;
 const ARCHIVE_MODES = ['day', 'week', 'manual'];
 function normalizeTags(list) {
@@ -375,6 +386,7 @@ function normalizeTask(t, fallbackTime) {
     title,
     status,
     parentId: ID_RE.test(str(t.parentId)) && t.parentId !== t.id ? t.parentId : '',
+    groupId: ID_RE.test(str(t.groupId)) ? t.groupId : '',
     note: str(t.note, 5000).trim(),
     due,
     time: due && TIME_RE.test(str(t.time)) ? t.time : '',
@@ -590,6 +602,7 @@ class Store {
     this.chats = [];
     this.events = [];
     this.tasks = [];
+    this.taskGroups = [];
     this.columns = [];       // the user's own task columns, in their order
     this.archiveMode = 'day'; // done tasks go to the archive by themselves: 'day', 'week' or 'manual'
     this.transcripts = [];   // «Транскрибация»: one file per transcription in Транскрибации/
@@ -671,6 +684,7 @@ class Store {
 
   // Publish the changed lists only after their files have been saved successfully.
   runLists(keys, fn) {
+    if (keys.includes('tasks') && !keys.includes('taskGroups')) keys = keys.concat('taskGroups');
     return this.run(async () => {
       const draft = Object.create(this);
       keys.forEach((key) => { draft[key] = structuredClone(this[key]); });
@@ -697,6 +711,7 @@ class Store {
     this.columns = tasks && Array.isArray(tasks.columns) ? tasks.columns.map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX) : [];
     this.archiveMode = tasks && ARCHIVE_MODES.includes(tasks.archiveMode) ? tasks.archiveMode : 'day';
     this.tasks = tasks && Array.isArray(tasks.tasks) ? tasks.tasks.map((t) => this.fitColumn(normalizeTask(t))).filter(Boolean) : [];
+    this.taskGroups = normalizeTaskGroups(tasks?.groups);
     this.transcripts = await readTranscripts(this.transcriptsRoot, this.dataWarnings);
     const skills = await readProtectedJson(this.skillsPath, (v) => !!v && Array.isArray(v.skills), this.dataWarnings);
     this.skills = skills && Array.isArray(skills.skills) ? skills.skills.map(normalizeSkill).filter(Boolean) : [];
@@ -903,12 +918,43 @@ class Store {
   }
   // By column, then by place in the column.
   tasksView() {
-    const order = this.columnsView().map((c) => c.id);
-    return this.tasks.slice().sort((a, b) => order.indexOf(a.status) - order.indexOf(b.status) || a.order - b.order);
+    return numberedTasks(this.tasks, this.columnsView(), this.taskGroups);
+  }
+  groupsView() { return structuredClone(this.taskGroups); }
+  addTaskGroup(name) {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
+      name = str(name, 60).trim();
+      if (!name) throw Object.assign(new Error('bad task group'), { userMessage: 'Напишите название подгруппы.' });
+      const existing = this.taskGroups.find(g => g.name.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'));
+      if (existing) return existing;
+      if (this.taskGroups.length >= 200) throw Object.assign(new Error('too many groups'), { userMessage: 'На доске уже 200 подгрупп.' });
+      const group = { id: newId('grp'), name };
+      this.taskGroups.push(group); await this.writeTasks(); return group;
+    });
+  }
+  renameTaskGroup(id, name, expectedName) {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
+      const group = this.taskGroups.find(g => g.id === id);
+      if (!group || expectedName !== undefined && group.name !== expectedName) throw Object.assign(new Error('group changed'), { userMessage: 'Подгруппу изменили в другом окне. Обновите доску.' });
+      name = str(name, 60).trim();
+      if (!name || this.taskGroups.some(g => g.id !== id && g.name.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'))) throw Object.assign(new Error('bad task group name'), { userMessage: 'Укажите непустое название, отличающееся от других подгрупп.' });
+      group.name = name; await this.writeTasks(); return group;
+    });
+  }
+  taskNumber(id) { return this.tasksView().find(t => t.id === id)?.number ?? null; }
+  findTasksByNumber(number, status, archived = false) {
+    return this.tasksView().filter(t => String(t.number) === String(number) && !!t.archivedAt === archived && (!status || t.status === status));
+  }
+  findTaskByNumber(number, status, archived = false) {
+    const found = this.findTasksByNumber(number, status, archived);
+    return found.length === 1 ? this.findTask(found[0].id) : null;
   }
   findTask(id) { return this.tasks.find((t) => t.id === id) || null; }
-  tasksFile() { return { format: 'snowball-tasks', version: 1, columns: this.columns, archiveMode: this.archiveMode, tasks: this.tasks }; }
-  writeTasks() { return writeProtectedJson(this.tasksPath, this.tasksFile()); }
+  tasksFile(tasks = this.tasks) { return { format: 'snowball-tasks', version: 1, columns: this.columns, groups: this.taskGroups, archiveMode: this.archiveMode, tasks }; }
+  async writeTasks() {
+    const file = this.tasksFile();
+    await writeProtectedJson(this.tasksPath, file);
+  }
 
   // The user's own columns: add, rename, move left (-1) or right (+1) among them, delete and bring back.
   addColumn(name) {
@@ -989,6 +1035,7 @@ class Store {
       }
       const now = Date.now();
       const merged = Object.assign({}, prev || {}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now });
+      if (input.groupId && input.groupId !== prev?.groupId && !this.taskGroups.some(g => g.id === input.groupId)) throw Object.assign(new Error('missing task group'), { userMessage: 'Подгруппа больше недоступна. Обновите доску.' });
       // A moved card keeps all of its fields. Reject missing parents and loops inside the same write queue.
       if (input.parentId) {
         const seen = new Set([merged.id]);
@@ -1344,7 +1391,7 @@ class Store {
         records[kind + ':' + item.id] = value;
       }
     }
-    if (this.columns.length || this.archiveMode !== 'day') records['config:tasks'] = { columns: this.columns, archiveMode: this.archiveMode };
+    if (this.columns.length || this.taskGroups.length || this.archiveMode !== 'day') records['config:tasks'] = { columns: this.columns, groups: this.taskGroups, archiveMode: this.archiveMode };
     if (this.profile.name || this.profile.avatarAt) records['config:profile'] = this.profile;
     for (const [day, counts] of Object.entries(this.activity.days)) records['activity:' + day] = counts;
     return structuredClone(records);
@@ -1360,9 +1407,10 @@ class Store {
     };
     if (kind === 'config' && id === 'tasks') {
       const columns = (input?.columns || []).map(normalizeColumn).filter(Boolean).slice(0, COLUMN_MAX);
+      const taskGroups = input?.groups === undefined ? this.taskGroups : normalizeTaskGroups(input.groups);
       const archiveMode = ARCHIVE_MODES.includes(input?.archiveMode) ? input.archiveMode : 'day';
-      await writeProtectedJson(this.tasksPath, { ...this.tasksFile(), columns, archiveMode });
-      this.columns = columns; this.archiveMode = archiveMode; return;
+      await writeProtectedJson(this.tasksPath, { ...this.tasksFile(), columns, groups: taskGroups, archiveMode });
+      this.columns = columns; this.taskGroups = taskGroups; this.archiveMode = archiveMode; return;
     }
     if (kind === 'config' && id === 'profile') {
       const profile = normalizeProfile(input);
@@ -1392,7 +1440,7 @@ class Store {
       else if (old) await this.trash(this.transcriptPath(id));
       this.transcripts = updated;
     } else {
-      const spec = { task: [this.tasksPath, { ...this.tasksFile(), tasks: updated }], event: [this.calendarPath, { format: 'snowball-calendar', version: 1, events: updated }],
+      const spec = { task: [this.tasksPath, this.tasksFile(updated)], event: [this.calendarPath, { format: 'snowball-calendar', version: 1, events: updated }],
         chat: [this.chatsPath, { format: 'snowball-chats', version: 1, chats: updated }], skill: [this.skillsPath, { format: 'snowball-skills', version: 1, skills: updated }] }[kind];
       await writeProtectedJson(spec[0], spec[1]); this[prop] = updated;
     }
@@ -1746,7 +1794,12 @@ class Store {
       if (res.events) { await draft.writeCalendar(); this.events = draft.events; }
       draft.columns = this.columns.slice();
       draft.tasks = this.tasks.slice();
+      draft.taskGroups = structuredClone(this.taskGroups);
       const tasks = await readArchiveList(path.join(dir, TASKS_FILE), 'tasks');
+      let newGroups = 0;
+      for (const group of normalizeTaskGroups(tasks?.groups)) {
+        if (!draft.taskGroups.some(g => g.id === group.id)) { draft.taskGroups.push(group); newGroups++; }
+      }
       // The backup's own columns come along when there is room for them.
       let newColumns = 0;
       (tasks && Array.isArray(tasks.columns) ? tasks.columns : []).map(normalizeColumn).filter(Boolean).forEach((c) => {
@@ -1757,7 +1810,7 @@ class Store {
         draft.tasks.push(t);
         res.tasks++;
       });
-      if (res.tasks || newColumns) { await draft.writeTasks(); this.columns = draft.columns; this.tasks = draft.tasks; }
+      if (res.tasks || newColumns || newGroups) { await draft.writeTasks(); this.columns = draft.columns; this.taskGroups = draft.taskGroups; this.tasks = draft.tasks; }
       // Transcriptions come by id, like chats; the ones already here stay as they are.
       for (const t of await readTranscripts(path.join(dir, 'transcripts'))) {
         if (this.getTranscript(t.id)) continue;

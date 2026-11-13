@@ -10,6 +10,8 @@
    and wins only because this file comes later; more specific rules there still win over these. */
 
 /* ---------- colours ---------- */
+:where(html[data-theme="macos"]) .task-group-add { background: var(--mac-acc); border-color: var(--mac-acc); color: var(--mac-acc-ink); }
+:where(html[data-theme="macos"]) .task-group-head { color: var(--ink); }
 :root[data-theme="macos"] {
   --mac-acc: #F2793D; --mac-acc-ink: #FFFFFF;
   --mac-acc-text: color-mix(in srgb, var(--mac-acc) 78%, #000);
