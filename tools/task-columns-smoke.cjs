@@ -34,21 +34,24 @@ const { Store } = require('../storage');
     await page.until('document.querySelectorAll(".tcol").length===6 && !document.querySelector("#task-board-nav").hidden');
     await page.ev('document.querySelector("#task-board-next").click();true');
     await page.until('document.querySelector("#board").scrollLeft>150');
-    await page.ev('document.querySelector("#board").scrollLeft=0;true');
+    await page.ev('document.querySelector("#board").scrollTo({left:0,behavior:"instant"});true');
     await page.sleep(250);
     const context = async (id, row = false) => {
       await page.ev(`(()=>{const card=document.querySelector('${row ? '.trow' : '.task'}[data-id="${id}"]'),r=card.getBoundingClientRect();card.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+60,clientY:r.top+20}));document.querySelector('.task-ctx [data-task-action=move]').click();return true;})()`);
     };
     const choose = id => page.ev(`document.querySelector('.task-ctx [data-column="${id}"]').click();true`);
     await context(task.id);
+    const scrollBeforeMove=await page.ev('document.querySelector("#board").scrollLeft');
     assert.equal(await page.ev('document.querySelectorAll(".task-ctx button[data-column]").length'), 6);
     await choose(columns[2].id);
     await page.until(`document.querySelector('.tcol.tcc-2 > .task[data-id="${task.id}"]') !== null`);
-    assert.ok(await page.ev('document.querySelector("#board").scrollLeft<5'));
+    assert.ok(Math.abs(await page.ev('document.querySelector("#board").scrollLeft')-scrollBeforeMove)<5, 'moving through the menu keeps board position');
     let saved = (await page.ev('vsApi.load()')).tasks.find(t => t.id === task.id);
     assert.equal(saved.note, task.note); assert.equal(saved.due, task.due); assert.deepEqual(saved.subtasks, task.subtasks);
-    // Nested cards receive their own menu, and a menu move detaches them even within the same column.
-    await context(nested.id); await choose('todo');
+    // Hidden subtasks receive their menu inside the parent's panel.
+    await page.ev(`document.querySelector('.task[data-id="${parent.id}"]').click();true`);
+    await page.ev(`(()=>{const row=document.querySelector('.tp-sub[data-task-id="${nested.id}"]'),r=row.getBoundingClientRect();row.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:r.left+40,clientY:r.top+10}));document.querySelector('.task-ctx [data-task-action=move]').click();return true;})()`);
+    await choose('todo');
     await page.until(`document.querySelector('.tc-todo > .task[data-id="${nested.id}"]') !== null`);
     // A stale menu must not overwrite a newer status from another window.
     await context(nested.id);

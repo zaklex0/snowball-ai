@@ -26,8 +26,10 @@ module.exports = async function ({ main, page, shot }) {
   await shot('02-move',{menu:'.task-ctx'});
   await ev(`vsApi.taskSave({id:${JSON.stringify(ids.child)},parentId:${JSON.stringify(ids.parent)}})`);
   await reload();
-  await ev(`document.querySelector('.task[data-id="${ids.child}"]').click();true`);
+  await ev(`document.querySelector('.task[data-id="${ids.parent}"]').click();true`);
   await until('!document.querySelector("#tpanel").hidden');
-  await shot('03-nested',{nested:'.task .task',detach:{sel:'#tpanel button',text:'Сделать отдельной задачей'}});
+  await shot('03-nested',{counter:'.task .task-marks',children:'.tp-subs .tp-sub[data-task-id]'});
+  await ev('document.querySelector(".task-child-open").click();true');
+  await shot('04-details',{detach:{sel:'#tpanel button',text:'Сделать отдельной задачей'}});
   return shot.boxes;
 };

@@ -4196,6 +4196,12 @@
   function findTask(id) { return state.tasks.find(function (t) { return t.id === id; }) || null; }
   function taskChildren(t) { return state.tasks.filter(function (x) { return x.parentId === t.id; }); }
   function taskParent(t) { return t.parentId ? findTask(t.parentId) : null; }
+  function taskRoots(list) {
+    return list.filter(function (t) {
+      var parent = taskParent(t);
+      return !parent || list.indexOf(parent) === -1 || !taskCanNest(t.id, parent);
+    });
+  }
   function taskCanNest(id, parent) {
     var seen = new Set([id]);
     while (parent) {
@@ -4280,20 +4286,17 @@
     renderTbar();
     renderTaskFilters();
     var filtered = tf.q || tf.tag || tf.prio;
-    var shown = all.filter(function (t) { return taskVisible(t); });
+    var shown = taskRoots(all).filter(function (t) { return taskVisible(t); });
     els.board.hidden = tf.view !== "board";
     $("task-board-nav").hidden = tf.view !== "board";
     $("task-column-add").hidden = tf.view !== "board";
     $("task-column-add").disabled = taskCols().filter(function (c) { return !c.base; }).length >= 8;
     els.tlist.hidden = tf.view === "board";
     els.boardHint.hidden = tf.view !== "board";
-    if (tf.view === "archive") { renderTaskArchive(archived.filter(function (t) { return taskVisible(t, true); })); return; }
+    if (tf.view === "archive") { renderTaskArchive(taskRoots(archived).filter(function (t) { return taskVisible(t, true); })); return; }
     if (tf.view === "list") { renderTaskList(shown); return; }
     var cols = taskCols().map(function (c, ci) {
-      var list = shown.filter(function (t) {
-        var parent = taskParent(t);
-        return t.status === c.id && (!parent || shown.indexOf(parent) === -1 || !taskCanNest(t.id, parent));
-      });
+      var list = shown.filter(function (t) { return t.status === c.id; });
       var col = h("section", { class: "tcol " + colClass(c.id), "aria-label": c.name },
         columnHead(c, ci, list.length),
         list.map(taskItem),
@@ -4346,17 +4349,14 @@
     }
     saveTaskNow({ id: id, parentId: parentId, status: status, order: order, expectedFields: { parentId: JSON.stringify(task.parentId), status: JSON.stringify(task.status), order: JSON.stringify(task.order) } });
   }
-  function taskItem(t, ancestors) {
-    ancestors = Array.isArray(ancestors) ? ancestors : [];
+  // Child tasks stay inside the task panel; the board card shows their progress counter only.
+  function taskItem(t) {
     var cls = "task" + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
     var el = h("div", { class: cls, draggable: "true", "data-id": t.id, tabindex: "0", title: "Перетащите на середину другой задачи, чтобы вложить её; на верхний край — поставить перед ней",
       onclick: function (e) { e.stopPropagation(); openTask(t.id); },
       oncontextmenu: function (e) { e.preventDefault(); e.stopPropagation(); openTaskCtx(t, e.clientX, e.clientY); },
       onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); else taskContextKeys(e, t, el); } },
       taskCheck(t), h("span", { class: "task-t", text: t.title }), taskMarks(t));
-    var chain = ancestors.concat([t.id]);
-    var children = taskChildren(t).filter(function (x) { return !x.archivedAt && taskVisible(x) && chain.indexOf(x.id) === -1; });
-    if (children.length) el.append(h("div", { class: "task-children" }, children.map(function (x) { return taskItem(x, chain); })));
     el.addEventListener("dragstart", function (e) {
       e.stopPropagation();
       tb.dragId = t.id;
@@ -4768,15 +4768,22 @@
   skEls.search.addEventListener("input", function () { sk.query = skEls.search.value; render(); });
 
   /* ---------- search and filters ---------- */
+  function taskSearchMatches(t, q, seen) {
+    seen = seen || new Set();
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return norm(t.title).indexOf(q) !== -1 || norm(t.note).indexOf(q) !== -1 ||
+      (t.tags || []).some(function (g) { return norm(g).indexOf(q) !== -1; }) ||
+      (t.subtasks || []).some(function (s) { return norm(s.title).indexOf(q) !== -1; }) ||
+      taskChildren(t).some(function (child) { return taskSearchMatches(child, q, seen); });
+  }
   function taskVisible(t, inArchive) {
     if (tf.hideDone && t.status === "done" && !inArchive) return false;
     if (tf.tag && (t.tags || []).indexOf(tf.tag) === -1) return false;
     if (tf.prio && t.priority < tf.prio) return false;
     if (!tf.q) return true;
     var q = norm(tf.q);
-    return norm(t.title).indexOf(q) !== -1 || norm(t.note).indexOf(q) !== -1 ||
-      (t.tags || []).some(function (g) { return norm(g).indexOf(q) !== -1; }) ||
-      taskSubtasks(t).some(function (s) { return norm(s.title).indexOf(q) !== -1; });
+    return taskSearchMatches(t, q);
   }
   function renderTaskFilters() {
     els.tview.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.v === tf.view)); });
@@ -5211,8 +5218,10 @@
         h("div", { class: "tp-block" },
           h("div", { class: "tp-block-h" }, "Подзадачи", allSubs.length ? h("span", { class: "tmark" }, taskBar(subsDone, allSubs.length), subsDone + " из " + allSubs.length) : null),
           h("div", { class: "tp-subs" }, linked.map(function (child) {
-            return h("div", { class: "tp-sub" }, taskCheck(child),
-              h("button", { type: "button", class: "task-child-open", onclick: function () { openTask(child.id); } }, child.title),
+            return h("div", { class: "tp-sub", "data-task-id": child.id,
+              oncontextmenu: function (e) { e.preventDefault(); e.stopPropagation(); openTaskCtx(child, e.clientX, e.clientY); } }, taskCheck(child),
+              h("button", { type: "button", class: "task-child-open", onclick: function () { openTask(child.id); },
+                onkeydown: function (e) { taskContextKeys(e, child, e.currentTarget); } }, child.title),
               h("button", { type: "button", class: "tp-sub-del", title: "Сделать отдельной задачей", "aria-label": "Сделать отдельной задачей: " + child.title,
                 onclick: function () { saveTaskNow({ id: child.id, parentId: "", expectedFields: { parentId: JSON.stringify(child.parentId) } }); } }, "↗"));
           })),

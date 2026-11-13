@@ -1393,7 +1393,6 @@ h1 .brand { color: var(--accent-strong); }
 .task.nest-target { border-color: var(--accent-strong); box-shadow: 0 0 0 2px var(--accent-strong); }
 .task.nest-target::after { content: "Отпустите — станет подзадачей"; grid-column: 1 / -1; color: var(--accent-strong); font-size: 12px; }
 .task.before-target { border-top: 3px solid var(--accent-strong); }
-.task-children { grid-column: 1 / -1; display: grid; gap: 8px; margin-left: 10px; padding-left: 10px; border-left: 2px solid var(--line); }
 .task-child-open { border: 0; background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .task-child-open:hover { color: var(--accent-strong); }
 .task.fresh { animation: task-fresh 1.6s ease-out; }
