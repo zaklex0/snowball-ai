@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage, Notification, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -25,7 +25,7 @@ let sideWidth = SIDEBAR_WIDTH;   // where the main window's sidebar ends now (fo
 // "white" and "black" are a light and a dark theme with neutral colours instead of the warm ones.
 // "macos" (beta) is the macOS look with glass (src/theme-macos.css): its accent colour and light/dark come from
 // settings.macAccent and settings.macLook. "zaklex" was here until 1.17.1 (now in archive/theme-zaklex).
-const THEMES = ['system', 'light', 'dark', 'white', 'black', 'macos'];
+const THEMES = ['system', 'light', 'dark', 'white', 'black', 'macos', 'codex-absolutely', 'codex-everforest'];
 const MAC_ACCENTS = ['peach', 'blue', 'purple', 'pink', 'red', 'yellow', 'green', 'graphite'];
 const MAC_LOOKS = ['system', 'light', 'dark'];
 // Windows 11 22H2 and newer draw a blurred desktop behind the window (acrylic); older Windows get a painted background.
@@ -154,7 +154,7 @@ function migrateTheme(s) {
 }
 function applyTheme() {
   const t = currentTheme();
-  nativeTheme.themeSource = t === 'black' ? 'dark' : t === 'white' ? 'light' : t === 'macos' ? macLook() : t;
+  nativeTheme.themeSource = (t === 'black' || t.startsWith('codex-')) ? 'dark' : t === 'white' ? 'light' : t === 'macos' ? macLook() : t;
 }
 // The window shows the blurred desktop through the page (the macOS theme on Windows 11).
 function glassOn() { return GLASS_OK && currentTheme() === 'macos'; }
@@ -166,6 +166,8 @@ const WINDOW_COLORS = {
   dark: { bar: '#2C201B', symbol: '#F5E6DC', bg: '#251B17' },
   white: { bar: '#F7F7F8', symbol: '#1F1F23', bg: '#FFFFFF' },
   black: { bar: '#000000', symbol: '#F2F2F2', bg: '#000000' },
+  'codex-absolutely': { bar: '#292522', symbol: '#E6D3C3', bg: '#24211F' },
+  'codex-everforest': { bar: '#2D353B', symbol: '#D3C6AA', bg: '#2D353B' },
   'macos-light': { bar: '#00000000', symbol: '#1D1D1F', bg: '#EDEDF0' },
   'macos-dark': { bar: '#00000000', symbol: '#F5F5F7', bg: '#1E1E21' }
 };
@@ -559,6 +561,8 @@ function transcriptView(t) { return { ...t, sourceAvailable: !!t.source && fs.ex
 
 function setupCloud() {
   cloud = new CloudAccount({ userData: app.getPath('userData'), safeStorage, getStore: () => store,
+    // Chromium follows Windows proxy/VPN settings, unlike the default Node transport.
+    fetch: (url, options) => net.fetch(url, options),
     lock: (expectedStore, fn, key) => withMaintenance(async () => {
       if (store !== expectedStore) throw Object.assign(Error(), { userMessage: 'Папка данных сменилась. Повторим синхронизацию.' });
       if (!key?.startsWith('shot:')) return fn();
@@ -712,7 +716,7 @@ handle('set-mac-style', async (style) => {
   return { ok: true, info: info() };
 });
 
-// The tabs on top of the window, so they come back after a restart: [{ kind, chatId? }] and which one is open.
+// Legacy tab settings: [{ kind, chatId? }] and the active index. Startup opens Home instead of restoring them.
 function tabsSetting() {
   const t = settings.tabs;
   if (!t || !Array.isArray(t.list)) return null;

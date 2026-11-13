@@ -1081,6 +1081,7 @@
   function activateTab(i) {
     var t = tabs.list[i];
     if (!t) return;
+    if (taskCtx) closeTaskCtx();
     setMenu(false);
     setTabMenu(false);
     tabs.active = i;
@@ -1113,17 +1114,17 @@
       active: tabs.active
     });
   }
-  // The tabs saved last time; an LLM tab loads its conversation when it is first opened.
-  function restoreTabs(saved) {
-    if (startTabs) saved = { list: startTabs, active: 0 };
+  // Each launch starts on Home; only a detached window receives its transferred tabs.
+  function initTabs() {
+    var saved = { list: startTabs || [{ kind: "home" }], active: 0 };
     tabs.list = [];
-    (saved && saved.list && saved.list.length ? saved.list : [{ kind: "prompts" }]).forEach(function (x) {
+    (saved.list.length ? saved.list : [{ kind: "home" }]).forEach(function (x) {
       if (!TABS[x.kind]) return;
       var t = makeTab(x.kind);
       if (t.session && x.chatId) t.session.loadId = x.chatId;
       tabs.list.push(t);
     });
-    if (!tabs.list.length) tabs.list.push(makeTab("prompts"));
+    if (!tabs.list.length) tabs.list.push(makeTab("home"));
     activateTab(Math.max(0, Math.min(tabs.list.length - 1, (saved && saved.active) || 0)));
   }
   function renderTabs() {
@@ -1744,7 +1745,7 @@
     else if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); openSub(document.activeElement.dataset.sub, true); }
     else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); var w = sub.closest(".sub-wrap"); openSub(parentSub(w)); w.querySelector(".has-sub").focus(); }
   });
-  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная", macos: "macOS" };
+  var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная", macos: "macOS", "codex-absolutely": "Codex · Absolutely", "codex-everforest": "Codex · Everforest" };
   // info: theme, and for "macos" its accent colour (macAccent), light/dark (macLook) and whether the window is glass.
   function markTheme(info) {
     var t = (info && info.theme) || "system", root = document.documentElement;
@@ -1760,7 +1761,7 @@
     els.themeValue.textContent = THEME_NAMES[t] || "";
     // "Белая" and "Чёрная" are colour sets on top of the light and dark ones (styles.css, :root[data-theme]);
     // "macOS" changes surfaces, shapes and the accent (theme-macos.css); with glass the desktop shows through the window.
-    if (t === "white" || t === "black" || t === "macos") root.dataset.theme = t;
+    if (t === "white" || t === "black" || t === "macos" || t.indexOf("codex-") === 0) root.dataset.theme = t;
     else delete root.dataset.theme;
     if (t === "macos") root.dataset.accent = info.macAccent || "peach";
     else delete root.dataset.accent;
@@ -4098,6 +4099,94 @@
   // open: the task in the panel; fresh: tasks the assistant just changed (they flash once); focusSub: back to the subtask field;
   // colMenu: the column whose «⋯» menu is open; renaming: the column being renamed; newCol: the «+ Столбец» field is open.
   var tb = { adding: null, dragId: null, focus: false, open: null, fresh: [], focusSub: false, colMenu: null, renaming: null, newCol: false, pending: new Set() };
+  var taskBoardEdge = 0, taskBoardFrame = null;
+  function stopTaskBoardScroll() { taskBoardEdge = 0; cancelAnimationFrame(taskBoardFrame); taskBoardFrame = null; }
+  function tickTaskBoardScroll() {
+    if (!tb.dragId || !taskBoardEdge) { taskBoardFrame = null; return; }
+    els.board.scrollLeft += taskBoardEdge;
+    taskBoardFrame = requestAnimationFrame(tickTaskBoardScroll);
+  }
+  els.board.addEventListener("dragover", function (e) {
+    if (!tb.dragId) return;
+    var r = els.board.getBoundingClientRect();
+    taskBoardEdge = e.clientX < r.left + 40 ? -8 : e.clientX > r.right - 40 ? 8 : 0;
+    if (taskBoardEdge && taskBoardFrame === null) taskBoardFrame = requestAnimationFrame(tickTaskBoardScroll);
+  }, true);
+  els.board.addEventListener("dragleave", function (e) { if (!els.board.contains(e.relatedTarget)) stopTaskBoardScroll(); });
+  els.board.addEventListener("drop", stopTaskBoardScroll, true);
+  // Horizontal navigation stays outside the scrolling board. Menus can reach offscreen columns directly.
+  function updateTaskBoardNav() {
+    var nav = $("task-board-nav"), board = els.board;
+    nav.hidden = tf.view !== "board" || board.scrollWidth <= board.clientWidth + 2;
+    if (nav.hidden) return;
+    var r = board.getBoundingClientRect(), visible = [];
+    board.querySelectorAll(":scope > .tcol:not(.tcol-new)").forEach(function (c, i) {
+      var box = c.getBoundingClientRect();
+      if (box.right > r.left + 10 && box.left < r.right - 10) visible.push(i + 1);
+    });
+    $("task-board-range").textContent = visible.length ? visible[0] + "–" + visible[visible.length - 1] + " из " + taskCols().length + " столбцов" : "Добавить столбец";
+    $("task-board-prev").disabled = board.scrollLeft <= 2;
+    $("task-board-next").disabled = board.scrollLeft >= board.scrollWidth - board.clientWidth - 2;
+  }
+  function scrollTaskBoard(direction) {
+    var first = els.board.querySelector(".tcol");
+    els.board.scrollBy({ left: direction * (first ? first.getBoundingClientRect().width + 14 : 264), behavior: reducedMotion ? "instant" : "smooth" });
+  }
+  $("task-board-prev").addEventListener("click", function () { scrollTaskBoard(-1); });
+  $("task-board-next").addEventListener("click", function () { scrollTaskBoard(1); });
+  els.board.addEventListener("scroll", function () { updateTaskBoardNav(); closeTaskCtx(); });
+  if (window.ResizeObserver) new ResizeObserver(updateTaskBoardNav).observe(els.board);
+  $("task-column-add").addEventListener("click", function () {
+    if (tf.view !== "board") setTaskView("board");
+    tb.newCol = true; renderTasks();
+    var field = els.board.querySelector(".tcol-new");
+    if (field) field.scrollIntoView({ block: "nearest", inline: "nearest" });
+  });
+  var taskCtx = h("div", { class: "menu task-ctx", role: "menu", "aria-label": "Действия с задачей", hidden: true });
+  document.body.append(taskCtx);
+  var taskCtxId = null;
+  function closeTaskCtx() { taskCtx.hidden = true; taskCtxId = null; }
+  function openTaskCtx(t, x, y, targets) {
+    ctxMenu.hidden = true; setMenu(false); setTabMenu(false);
+    taskCtxId = t.id;
+    var items = [h("p", { class: "menu-label", text: targets ? "Переместить в столбец" : t.title })];
+    if (targets) {
+      items.push(h("button", { type: "button", role: "menuitem", text: "← Назад", onclick: function () { openTaskCtx(t, x, y, false); } }));
+      taskCols().forEach(function (c) {
+        var current = t.status === c.id && !t.parentId && !t.archivedAt;
+        items.push(h("button", { type: "button", role: "menuitem", "data-column": c.id, disabled: current,
+          onclick: function () {
+            closeTaskCtx();
+            if (!taskCols().some(function (col) { return col.id === c.id; })) { toast("Этот столбец уже удалили. Откройте меню заново."); return; }
+            saveTaskNow({ id: t.id, status: c.id, parentId: "", archivedAt: 0,
+              expectedFields: { status: JSON.stringify(t.status), parentId: JSON.stringify(t.parentId), archivedAt: JSON.stringify(t.archivedAt) } }).then(function (r) { if (r) toast("Задача перемещена: " + c.name); });
+          } }, h("span", { text: c.name }), current ? h("small", { text: "Сейчас здесь" }) : null));
+      });
+    } else {
+      items.push(h("button", { type: "button", role: "menuitem", "data-task-action": "move", "aria-haspopup": "menu",
+        onclick: function () { openTaskCtx(t, x, y, true); },
+        onkeydown: function (e) { if (e.key === "ArrowRight") { e.preventDefault(); openTaskCtx(t, x, y, true); } } },
+        icon("right"), h("span", { text: "Переместить в столбец" })));
+      items.push(h("button", { type: "button", role: "menuitem", text: "Открыть задачу", onclick: function () { closeTaskCtx(); openTask(t.id); } }));
+    }
+    taskCtx.replaceChildren.apply(taskCtx, items); taskCtx.hidden = false;
+    taskCtx.style.left = Math.max(8, Math.min(x, window.innerWidth - taskCtx.offsetWidth - 8)) + "px";
+    taskCtx.style.top = Math.max(8, Math.min(y, window.innerHeight - taskCtx.offsetHeight - 8)) + "px";
+    var first = taskCtx.querySelector("button:not(:disabled)"); if (first) first.focus();
+  }
+  function taskContextKeys(e, t, element) {
+    if (e.key === "ContextMenu" || e.key === "F10" && e.shiftKey) {
+      e.preventDefault(); e.stopPropagation(); var r = element.getBoundingClientRect(); openTaskCtx(t, r.left, r.top + 20);
+    }
+  }
+  taskCtx.addEventListener("keydown", function (e) {
+    e.stopPropagation();
+    var buttons = Array.from(taskCtx.querySelectorAll("button:not(:disabled)")), i = buttons.indexOf(document.activeElement);
+    if (e.key === "Escape") { e.preventDefault(); var id = taskCtxId; closeTaskCtx(); var card = Array.from(document.querySelectorAll(".task[data-id], .trow[data-id]")).find(function (n) { return n.dataset.id === id; }); if (card) card.focus(); }
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); buttons[(i + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus(); }
+  });
+  document.addEventListener("mousedown", function (e) { if (!taskCtx.hidden && !taskCtx.contains(e.target)) closeTaskCtx(); });
+  window.addEventListener("blur", closeTaskCtx);
   // What is shown: board or list, search, tag, importance (1 — important and urgent, 2 — urgent only), done tasks hidden.
   var tf = { view: "board", q: "", tag: "", prio: 0, hideDone: false, doneOpen: false };
   try {
@@ -4105,6 +4194,20 @@
     tf.hideDone = localStorage.getItem("tasksHideDone") === "1";
   } catch (e) {}
   function findTask(id) { return state.tasks.find(function (t) { return t.id === id; }) || null; }
+  function taskChildren(t) { return state.tasks.filter(function (x) { return x.parentId === t.id; }); }
+  function taskParent(t) { return t.parentId ? findTask(t.parentId) : null; }
+  function taskCanNest(id, parent) {
+    var seen = new Set([id]);
+    while (parent) {
+      if (seen.has(parent.id)) return false;
+      seen.add(parent.id);
+      parent = taskParent(parent);
+    }
+    return true;
+  }
+  function taskSubtasks(t) {
+    return (t.subtasks || []).concat(taskChildren(t).map(function (x) { return { title: x.title, done: x.status === "done" }; }));
+  }
   // All columns in their order: «Предстоит», «В процессе», the user's own, «Готово».
   function taskCols() { return state.taskColumns && state.taskColumns.length ? state.taskColumns : BASE_COLS; }
   function sortTasks() {
@@ -4147,7 +4250,7 @@
       var d = dueInfo(t);
       marks.push(h("span", { class: "tmark due" + (d.late ? " late" : d.today ? " today" : ""), title: d.late ? "Срок прошёл" : "Срок" }, icon("calendar"), d.text));
     }
-    var subs = t.subtasks || [];
+    var subs = taskSubtasks(t);
     if (subs.length) {
       var done = subs.filter(function (s) { return s.done; }).length;
       marks.push(h("span", { class: "tmark", title: "Подзадачи: сделано " + done + " из " + subs.length }, taskBar(done, subs.length), done + "/" + subs.length));
@@ -4179,12 +4282,18 @@
     var filtered = tf.q || tf.tag || tf.prio;
     var shown = all.filter(function (t) { return taskVisible(t); });
     els.board.hidden = tf.view !== "board";
+    $("task-board-nav").hidden = tf.view !== "board";
+    $("task-column-add").hidden = tf.view !== "board";
+    $("task-column-add").disabled = taskCols().filter(function (c) { return !c.base; }).length >= 8;
     els.tlist.hidden = tf.view === "board";
     els.boardHint.hidden = tf.view !== "board";
     if (tf.view === "archive") { renderTaskArchive(archived.filter(function (t) { return taskVisible(t, true); })); return; }
     if (tf.view === "list") { renderTaskList(shown); return; }
     var cols = taskCols().map(function (c, ci) {
-      var list = shown.filter(function (t) { return t.status === c.id; });
+      var list = shown.filter(function (t) {
+        var parent = taskParent(t);
+        return t.status === c.id && (!parent || shown.indexOf(parent) === -1 || !taskCanNest(t.id, parent));
+      });
       var col = h("section", { class: "tcol " + colClass(c.id), "aria-label": c.name },
         columnHead(c, ci, list.length),
         list.map(taskItem),
@@ -4196,11 +4305,12 @@
         if (!tb.dragId) return;
         e.preventDefault();
         col.classList.remove("drop");
-        dropTask(c.id, e.target.closest(".task[data-id]"), list);
+        dropTask(c.id, null, list);
       });
       return col;
     });
     els.board.replaceChildren.apply(els.board, cols.concat([newColumnBox()]));
+    requestAnimationFrame(updateTaskBoardNav);
     var ren = els.board.querySelector(".tcol-in");
     if (ren && document.activeElement !== ren) { ren.focus(); ren.select(); }
     if (tb.focus) {
@@ -4209,40 +4319,77 @@
       if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
     }
   }
-  // Dropped on a card: goes right above it; on the empty part of a column: to its bottom.
-  function dropTask(status, targetEl, list) {
+  // The card centre nests a task; its top edge reorders; empty column space detaches to its bottom.
+  function dropTask(status, targetEl, list, nest) {
     var id = tb.dragId;
     tb.dragId = null;
     var task = findTask(id);
     if (!task) return;
+    if (targetEl && nest) {
+      var parent = findTask(targetEl.dataset.id);
+      if (!parent || !taskCanNest(id, parent)) return;
+      saveTaskNow({ id: id, parentId: parent.id, expectedFields: { parentId: JSON.stringify(task.parentId) } }).then(function (r) {
+        if (r) { openTask(parent.id); toast("Задача перемещена в подзадачи"); }
+      });
+      return;
+    }
     var rest = list.filter(function (t) { return t.id !== id; });
-    var order;
+    var order, parentId = "";
     if (targetEl) {
       if (targetEl.dataset.id === id) return;
       var target = findTask(targetEl.dataset.id), at = rest.indexOf(target), before = rest[at - 1];
+      parentId = target.parentId || "";
       order = before ? (before.order + target.order) / 2 : target.order - 1;
     } else {
-      if (task.status === status && rest.length && rest[rest.length - 1].order < task.order) return;
+      if (!task.parentId && task.status === status && rest.length && rest[rest.length - 1].order < task.order) return;
       order = rest.length ? rest[rest.length - 1].order + 1 : Date.now();
     }
-    saveTaskNow({ id: id, status: status, order: order, expectedFields: { status: JSON.stringify(task.status), order: JSON.stringify(task.order) } });
+    saveTaskNow({ id: id, parentId: parentId, status: status, order: order, expectedFields: { parentId: JSON.stringify(task.parentId), status: JSON.stringify(task.status), order: JSON.stringify(task.order) } });
   }
-  function taskItem(t) {
+  function taskItem(t, ancestors) {
+    ancestors = Array.isArray(ancestors) ? ancestors : [];
     var cls = "task" + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
-    var el = h("div", { class: cls, draggable: "true", "data-id": t.id, tabindex: "0", title: "Нажмите, чтобы открыть задачу. Перетащите в другой столбец",
-      onclick: function () { openTask(t.id); },
-      onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); } },
+    var el = h("div", { class: cls, draggable: "true", "data-id": t.id, tabindex: "0", title: "Перетащите на середину другой задачи, чтобы вложить её; на верхний край — поставить перед ней",
+      onclick: function (e) { e.stopPropagation(); openTask(t.id); },
+      oncontextmenu: function (e) { e.preventDefault(); e.stopPropagation(); openTaskCtx(t, e.clientX, e.clientY); },
+      onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); else taskContextKeys(e, t, el); } },
       taskCheck(t), h("span", { class: "task-t", text: t.title }), taskMarks(t));
+    var chain = ancestors.concat([t.id]);
+    var children = taskChildren(t).filter(function (x) { return !x.archivedAt && taskVisible(x) && chain.indexOf(x.id) === -1; });
+    if (children.length) el.append(h("div", { class: "task-children" }, children.map(function (x) { return taskItem(x, chain); })));
     el.addEventListener("dragstart", function (e) {
+      e.stopPropagation();
       tb.dragId = t.id;
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", t.title);
       el.classList.add("dragging");
     });
+    el.addEventListener("dragover", function (e) {
+      if (!tb.dragId) return;
+      e.stopPropagation();
+      els.board.querySelectorAll(".nest-target, .before-target").forEach(function (c) { if (c !== el) c.classList.remove("nest-target", "before-target"); });
+      var nest = e.clientY - el.getBoundingClientRect().top > 10;
+      var allowed = tb.dragId !== t.id && (!nest || taskCanNest(tb.dragId, t));
+      el.classList.toggle("nest-target", allowed && nest);
+      el.classList.toggle("before-target", allowed && !nest);
+      if (allowed) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
+    });
+    el.addEventListener("dragleave", function (e) {
+      if (!el.contains(e.relatedTarget)) el.classList.remove("nest-target", "before-target");
+    });
+    el.addEventListener("drop", function (e) {
+      if (!tb.dragId) return;
+      e.preventDefault(); e.stopPropagation();
+      var nest = e.clientY - el.getBoundingClientRect().top > 10;
+      el.classList.remove("nest-target", "before-target");
+      dropTask(t.status, el, state.tasks.filter(function (x) { return x.status === t.status; }), nest);
+    });
     el.addEventListener("dragend", function () {
+      stopTaskBoardScroll();
       tb.dragId = null;
       el.classList.remove("dragging");
       els.board.querySelectorAll(".tcol.drop").forEach(function (c) { c.classList.remove("drop"); });
+      els.board.querySelectorAll(".nest-target, .before-target").forEach(function (c) { c.classList.remove("nest-target", "before-target"); });
     });
     return el;
   }
@@ -4629,7 +4776,7 @@
     var q = norm(tf.q);
     return norm(t.title).indexOf(q) !== -1 || norm(t.note).indexOf(q) !== -1 ||
       (t.tags || []).some(function (g) { return norm(g).indexOf(q) !== -1; }) ||
-      (t.subtasks || []).some(function (s) { return norm(s.title).indexOf(q) !== -1; });
+      taskSubtasks(t).some(function (s) { return norm(s.title).indexOf(q) !== -1; });
   }
   function renderTaskFilters() {
     els.tview.querySelectorAll("button").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.v === tf.view)); });
@@ -4848,9 +4995,11 @@
     var d = t.due && !inArchive ? dueInfo(t) : null;
     var cls = "trow " + colClass(t.status) + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
     var el = h("div", { class: cls, tabindex: "0", "data-id": t.id, onclick: function () { openTask(t.id); },
-      onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); } },
+      oncontextmenu: function (e) { e.preventDefault(); e.stopPropagation(); openTaskCtx(t, e.clientX, e.clientY); },
+      onkeydown: function (e) { if (e.key === "Enter" && e.target === el) openTask(t.id); else taskContextKeys(e, t, el); } },
       taskCheck(t),
-      h("div", { class: "trow-main" }, h("span", { class: "task-t", text: t.title }), taskMarks(t, true)),
+      h("div", { class: "trow-main" }, h("span", { class: "task-t", text: t.title }),
+        taskParent(t) ? h("span", { class: "tmark", text: "Подзадача: " + taskParent(t).title }) : null, taskMarks(t, true)),
       h("div", { class: "trow-side" },
         d ? h("span", { class: "tmark due" + (d.late ? " late" : d.today ? " today" : "") }, icon("calendar"), d.text) : null,
         inArchive ? h("span", { class: "trow-col trow-when", title: "Поставлена " + fmtStamp(t.createdAt) + (t.startedAt ? "\nНачата " + fmtStamp(t.startedAt) : "") + "\nСделана " + fmtStamp(t.doneAt) }, "сделана " + fmtDay(new Date(t.doneAt)))
@@ -5021,7 +5170,7 @@
     var known = TASK_TAGS.slice();
     state.tasks.forEach(function (x) { x.tags.forEach(function (g) { if (known.indexOf(g) === -1) known.push(g); }); });
 
-    var subs = t.subtasks || [], subsDone = subs.filter(function (s) { return s.done; }).length;
+    var subs = t.subtasks || [], linked = taskChildren(t), allSubs = taskSubtasks(t), subsDone = allSubs.filter(function (s) { return s.done; }).length;
     var subIn = h("input", { type: "text", class: "tp-sub-in", placeholder: "+ Подзадача (Enter — добавить)", maxlength: "300", "aria-label": "Новая подзадача" });
     subIn.addEventListener("keydown", function (e) {
       if (e.key !== "Enter") return;
@@ -5042,6 +5191,8 @@
         h("span", { class: "tp-col " + colClass(t.status) }, h("i", { "aria-hidden": "true" }), colName(t.status)),
         h("button", { type: "button", class: "tp-close", html: ICONS.x, title: "Закрыть (Esc)", "aria-label": "Закрыть задачу", onclick: closeTask })),
       h("div", { class: "tp-body" },
+        taskParent(t) ? h("button", { type: "button", class: "btn-mini", onclick: function () { openTask(t.parentId); } }, "В задаче: " + taskParent(t).title) : null,
+        t.parentId ? h("button", { type: "button", class: "btn-mini", onclick: function () { savePanel(t.id, { parentId: "" }); } }, "Сделать отдельной задачей") : null,
         h("div", { class: "tp-title-row" }, taskCheck(t, true), title),
         h("div", { class: "tp-field" }, h("span", { class: "tp-label", text: "Столбец" }), status),
         h("div", { class: "tp-field" }, h("span", { class: "tp-label", text: "Срок" }),
@@ -5058,7 +5209,13 @@
                 onclick: function () { savePanel(t.id, { tags: t.tags.filter(function (x, j) { return j !== i; }) }); } }));
           }), tagIn, h("datalist", { id: "tp-tag-list" }, known.filter(function (g) { return t.tags.indexOf(g) === -1; }).map(function (g) { return h("option", { value: g }); })))),
         h("div", { class: "tp-block" },
-          h("div", { class: "tp-block-h" }, "Подзадачи", subs.length ? h("span", { class: "tmark" }, taskBar(subsDone, subs.length), subsDone + " из " + subs.length) : null),
+          h("div", { class: "tp-block-h" }, "Подзадачи", allSubs.length ? h("span", { class: "tmark" }, taskBar(subsDone, allSubs.length), subsDone + " из " + allSubs.length) : null),
+          h("div", { class: "tp-subs" }, linked.map(function (child) {
+            return h("div", { class: "tp-sub" }, taskCheck(child),
+              h("button", { type: "button", class: "task-child-open", onclick: function () { openTask(child.id); } }, child.title),
+              h("button", { type: "button", class: "tp-sub-del", title: "Сделать отдельной задачей", "aria-label": "Сделать отдельной задачей: " + child.title,
+                onclick: function () { saveTaskNow({ id: child.id, parentId: "", expectedFields: { parentId: JSON.stringify(child.parentId) } }); } }, "↗"));
+          })),
           h("div", { class: "tp-subs" }, subs.map(function (s) {
             return h("div", { class: "tp-sub" + (s.done ? " done" : "") },
               h("button", { type: "button", class: "tchk sq" + (s.done ? " on" : ""), html: ICONS.check, "aria-pressed": s.done ? "true" : "false",
@@ -6318,7 +6475,7 @@
   });
   call(api.load()).then(function (r) {
     state.loaded = true;
-    restoreTabs(r && r.info && r.info.tabs);
+    initTabs();
     if (!r) return;
     if (isMainWindow && state.profile && !state.profile.welcomed) openProfile(true);
     var n = r.notice;

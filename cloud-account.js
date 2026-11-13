@@ -7,6 +7,14 @@ const { exportBytes } = require('./safe-export');
 const { CloudSync } = require('./cloud-sync');
 const { CloudLocal } = require('./cloud-local');
 const config = require('./cloud-config');
+function cloudFetch(transport) {
+  return (url, options = {}) => {
+    // Attachments can take longer on a laptop connection. Keep caller cancellation too.
+    const timeout = AbortSignal.timeout(new URL(url).pathname.startsWith('/storage/v1/') ? 120000 : 25000);
+    const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+    return transport(url, { ...options, signal });
+  };
+}
 function message(error) {
   const code = error?.code;
   if (['invalid_credentials', 'invalid_grant'].includes(code)) return 'Почта или пароль не подходят.';
@@ -15,12 +23,18 @@ function message(error) {
   if (['PGRST202', '42P01', 'PGRST205'].includes(code)) return 'Облачный проект ещё не настроен. Выполните cloud-schema.sql в Supabase.';
   if (code === 'weak_password') return 'Выберите более длинный пароль: не менее 8 символов.';
   if (error?.status === 401) return 'Войдите в аккаунт снова.';
-  if (error?.name === 'AbortError' || /fetch|network|timeout/i.test(error?.message || '')) return 'Нет связи с облаком. Данные остаются на компьютере; повторим позже.';
+  // Match known error codes only; never expose raw SDK text (it can contain session data).
+  const diagnostic = [error?.name, error?.code, error?.message, error?.details, error?.cause?.code].join(' ');
+  if (/TimeoutError|timeout|timed_out|ETIMEDOUT/i.test(diagnostic)) return 'Облако не ответило вовремя. На медленном соединении передача файлов занимает дольше. Повторим позже.';
+  if (/ENOTFOUND|EAI_AGAIN|ERR_NAME_NOT_RESOLVED/i.test(diagnostic)) return 'Не удалось найти адрес облака. Проверьте интернет и подключение VPN на этом компьютере.';
+  if (/ERR_PROXY_CONNECTION_FAILED|ERR_TUNNEL_CONNECTION_FAILED/i.test(diagnostic)) return 'Не удалось подключиться к облаку через VPN или прокси. Проверьте его подключение.';
+  if (/CERT_|ERR_CERT|UNABLE_TO_VERIFY|SELF_SIGNED/i.test(diagnostic)) return 'Не удалось проверить защищённое соединение с облаком. Проверьте дату и время Windows и настройки VPN.';
+  if (error?.name === 'AbortError' || /fetch|network|ECONNRESET|ECONNREFUSED|ERR_CONNECTION/i.test(diagnostic)) return 'Соединение с облаком прервано. Проверьте интернет и VPN. Данные остаются на компьютере; повторим позже.';
   // SDK/network errors may contain session data: never return or log their raw text.
   return 'Не удалось обратиться к облаку. Проверьте подключение и настройки проекта.';
 }
 class CloudAccount {
-  constructor({ userData, safeStorage, getStore, lock, changed, emit, backup }) {
+  constructor({ userData, safeStorage, getStore, lock, changed, emit, backup, fetch: transport = globalThis.fetch }) {
     Object.assign(this, { userData, safeStorage, getStore, lock, changed, emit, backup });
     this.status = { email: '', busy: false, lastSync: 0, error: '', conflicts: [] };
     this.queue = Promise.resolve(); this.engine = null; this.authBlocked = false;
@@ -41,7 +55,7 @@ class CloudAccount {
     };
     this.client = createClient(config.url, config.key, {
       auth: { storage, storageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-      global: { fetch: (url, options = {}) => fetch(url, { ...options, signal: options.signal || AbortSignal.timeout(25000) }) }
+      global: { fetch: cloudFetch(transport) }
     });
     this.client.auth.onAuthStateChange((_event, session) => {
       this.session = session; this.status.email = session?.user?.email || ''; this.publish();
@@ -153,4 +167,4 @@ class CloudAccount {
     return job;
   }
 }
-module.exports = { CloudAccount, message };
+module.exports = { CloudAccount, message, cloudFetch };

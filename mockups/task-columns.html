@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Столбцы задач — Snowball.ai</title><style>body{margin:0;padding:16px;background:#8888880b}</style></head><body>
+<div id="snowball-task-columns" aria-label="Общая доска задач с дополнительными столбцами">
+  <div class="sb-window">
+    <aside class="sb-side" aria-label="Разделы Snowball.ai"><span class="sb-logo">✳</span><span>⌂</span><span>▤</span><span>▦</span><span class="sb-selected">✓</span><span>✦</span><span class="sb-avatar">Я</span></aside>
+    <div class="sb-main">
+      <div class="sb-titlebar"><b>Snowball.ai</b><span>Главная</span><span class="sb-tab">✓ Задачи</span></div>
+      <main class="sb-content">
+        <div class="sb-heading"><h2>Задачи</h2><span class="sb-prototype">Макет</span></div>
+        <div class="sb-toolbar"><span class="sb-total"></span><button type="button" class="sb-button sb-new-column">+ Столбец</button></div>
+        <form class="sb-column-form" hidden><label>Название столбца <input name="name" maxlength="40" placeholder="Например, YouTube" required></label><button type="submit" class="sb-button">Добавить</button><button type="button" class="sb-button sb-cancel">Отмена</button></form>
+        <div class="sb-board" role="region" aria-label="Доска задач с горизонтальной прокруткой"></div>
+        <div class="sb-scrollbar"><button type="button" class="sb-button sb-prev" aria-label="Прокрутить столбцы влево">← Влево</button><span class="sb-range"></span><button type="button" class="sb-button sb-next" aria-label="Прокрутить столбцы вправо">Вправо →</button></div>
+        <div class="sb-foot"><span>Правый клик по задаче → «Переместить в столбец»</span><span class="sb-feedback" aria-live="polite"></span></div>
+      </main>
+    </div>
+    <div class="sb-task-menu" role="menu" aria-label="Действия с задачей" hidden></div>
+  </div>
+</div>
+<style>
+#snowball-task-columns { color-scheme:light dark; }
+#snowball-task-columns .sb-window {
+  --sb-bg:light-dark(#fffaf6,#251e1b); --sb-paper:light-dark(#ffffff,#342a25); --sb-side:light-dark(#f8eee7,#2c231e);
+  --sb-line:light-dark(#e9dfd7,#504039); --sb-ink:light-dark(#403630,#f4e8df); --sb-muted:light-dark(#81736a,#bca99c);
+  --sb-accent:light-dark(#a95131,#f3ac8a); --sb-soft:light-dark(#fae4d6,#4b3227);
+  --sb-todo:light-dark(#f0edf6,#332d3d); --sb-custom:light-dark(#edf1f5,#29333b); --sb-doing:light-dark(#f6efdf,#3c3424); --sb-done:light-dark(#e9f0e6,#2b372b);
+  --sb-width:232px; --sb-gap:14px;
+  position:relative; display:grid; grid-template-columns:58px minmax(0,1fr); min-height:720px;
+  border:1px solid var(--sb-line); border-radius:14px; background:var(--sb-bg); color:var(--sb-ink);
+  font:14px/1.45 "Segoe UI",Arial,sans-serif;
+}
+#snowball-task-columns .sb-window * { box-sizing:border-box; }
+#snowball-task-columns .sb-window [hidden] { display:none!important; }
+#snowball-task-columns .sb-window button,#snowball-task-columns .sb-window input,#snowball-task-columns .sb-window select { color:inherit; font:inherit; }
+#snowball-task-columns .sb-window button:disabled { opacity:.4; }
+#snowball-task-columns .sb-side { border-radius:14px 0 0 14px; display:flex; flex-direction:column; align-items:center; gap:22px; padding:16px 8px; border-right:1px solid var(--sb-line); background:var(--sb-side); color:var(--sb-muted); }
+#snowball-task-columns .sb-logo { width:30px; height:30px; display:grid; place-items:center; background:var(--sb-soft); color:var(--sb-accent); border-radius:8px; font-size:20px; }
+#snowball-task-columns .sb-selected { display:grid; place-items:center; width:34px; height:34px; border-radius:8px; background:var(--sb-paper); color:var(--sb-accent); }
+#snowball-task-columns .sb-avatar { display:grid; place-items:center; width:30px; height:30px; margin-top:auto; border-radius:50%; background:var(--sb-soft); color:var(--sb-accent); }
+#snowball-task-columns .sb-main { min-width:0; }
+#snowball-task-columns .sb-titlebar { display:flex; flex-wrap:wrap; align-items:center; gap:20px; min-height:44px; padding:6px 18px; border-bottom:1px solid var(--sb-line); border-radius:0 14px 0 0; background:var(--sb-side); color:var(--sb-muted); font-size:12px; }
+#snowball-task-columns .sb-titlebar b { color:var(--sb-ink); font-weight:600; }
+#snowball-task-columns .sb-tab { padding:6px 14px; border-radius:7px; background:var(--sb-paper); color:var(--sb-ink); }
+#snowball-task-columns .sb-content { padding:24px; min-width:0; }
+#snowball-task-columns .sb-heading { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin-bottom:20px; }
+#snowball-task-columns .sb-heading h2 { margin:0; font-size:28px; line-height:1.2; letter-spacing:-.7px; font-weight:650; }
+#snowball-task-columns .sb-prototype { padding:3px 7px; border-radius:5px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--sb-accent); background:var(--sb-soft); }
+#snowball-task-columns .sb-toolbar { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:10px; margin-bottom:16px; }
+#snowball-task-columns .sb-total { color:var(--sb-muted); font-size:13px; }
+#snowball-task-columns .sb-button { display:inline-flex; align-items:center; justify-content:center; padding:6px 10px; border:1px solid var(--sb-line); border-radius:7px; background:var(--sb-paper); font-size:12px; white-space:nowrap; }
+#snowball-task-columns .sb-button:hover:not(:disabled) { background:var(--sb-soft); }
+#snowball-task-columns .sb-column-form { display:flex; flex-wrap:wrap; align-items:end; gap:8px; padding-bottom:16px; }
+#snowball-task-columns .sb-column-form label { display:grid; gap:5px; font-size:12px; color:var(--sb-muted); }
+#snowball-task-columns .sb-window input { min-width:0; max-width:100%; padding:7px 9px; border:1px solid var(--sb-line); border-radius:6px; background:var(--sb-paper); }
+#snowball-task-columns .sb-board { display:grid; grid-auto-flow:column; grid-auto-columns:var(--sb-width); align-items:stretch; gap:var(--sb-gap); overflow-x:auto; padding:2px 2px 16px; scroll-snap-type:x proximity; scrollbar-width:auto; scrollbar-color:var(--sb-muted) var(--sb-side); }
+#snowball-task-columns .sb-board::-webkit-scrollbar { height:10px; }
+#snowball-task-columns .sb-board::-webkit-scrollbar-track { background:var(--sb-side); border-radius:8px; }
+#snowball-task-columns .sb-board::-webkit-scrollbar-thumb { background:var(--sb-muted); border-radius:8px; border:2px solid var(--sb-side); }
+#snowball-task-columns .sb-column { min-width:0; min-height:390px; border:1px solid var(--sb-line); border-radius:10px; padding:10px; background:var(--sb-custom); scroll-snap-align:start; }
+#snowball-task-columns .sb-column[data-column=todo] { background:var(--sb-todo); }
+#snowball-task-columns .sb-column[data-column=doing] { background:var(--sb-doing); }
+#snowball-task-columns .sb-column[data-column=done] { background:var(--sb-done); }
+#snowball-task-columns .sb-column.is-over { outline:2px solid var(--sb-accent); outline-offset:-2px; }
+#snowball-task-columns .sb-column-heading { display:flex; align-items:center; gap:7px; min-height:32px; margin-bottom:8px; }
+#snowball-task-columns .sb-column-heading h3 { font-size:13px; font-weight:600; margin:0; min-width:0; overflow-wrap:anywhere; }
+#snowball-task-columns .sb-column-count { font-size:12px; color:var(--sb-muted); margin-right:auto; }
+#snowball-task-columns .sb-lock { font-size:11px; color:var(--sb-muted); }
+#snowball-task-columns .sb-column-more { position:relative; }
+#snowball-task-columns .sb-column-more summary { list-style:none; padding:3px 7px; border-radius:5px; color:var(--sb-muted); }
+#snowball-task-columns .sb-column-more summary::-webkit-details-marker { display:none; }
+#snowball-task-columns .sb-column-actions { position:absolute; right:0; top:28px; z-index:4; width:180px; padding:5px; border:1px solid var(--sb-line); background:var(--sb-paper); border-radius:8px; box-shadow:0 8px 22px #00000016; }
+#snowball-task-columns .sb-column-actions button { width:100%; padding:7px; background:transparent; border:0; border-radius:5px; text-align:left; font-size:12px; }
+#snowball-task-columns .sb-column-actions button:hover { background:var(--sb-soft); }
+#snowball-task-columns .sb-task { margin-bottom:9px; padding:11px; background:var(--sb-paper); border:1px solid var(--sb-line); border-radius:8px; box-shadow:0 1px 2px #00000006; cursor:grab; }
+#snowball-task-columns .sb-task.is-dragging { opacity:.4; }
+#snowball-task-columns .sb-task-top { display:flex; gap:9px; align-items:start; }
+#snowball-task-columns .sb-check { flex:none; width:17px; height:17px; padding:0; margin-top:2px; border:1px solid var(--sb-muted); border-radius:50%; background:transparent; display:grid; place-items:center; font-size:11px; }
+#snowball-task-columns .sb-task.is-done .sb-check { background:var(--sb-done); }
+#snowball-task-columns .sb-task-name { flex:1; border:0; background:none; padding:0; text-align:left; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+#snowball-task-columns .sb-task.is-done .sb-task-name { color:var(--sb-muted); text-decoration:line-through; }
+#snowball-task-columns .sb-task-more { flex:none; border:0; background:none; color:var(--sb-muted); padding:0 2px; line-height:20px; }
+#snowball-task-columns .sb-meta { display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 0 26px; font-size:11px; color:var(--sb-muted); }
+#snowball-task-columns .sb-badge { background:var(--sb-soft); color:var(--sb-accent); border-radius:4px; padding:1px 5px; }
+#snowball-task-columns .sb-child { margin:10px 0 0 26px; padding-left:9px; border-left:2px solid var(--sb-line); font-size:12px; color:var(--sb-muted); }
+#snowball-task-columns .sb-add-task { border:0; background:transparent; color:var(--sb-muted); padding:6px 2px; width:100%; text-align:left; font-size:12px; }
+#snowball-task-columns .sb-task-form input { width:100%; margin:4px 0 8px; font-size:13px; }
+#snowball-task-columns .sb-scrollbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:12px; margin-top:10px; }
+#snowball-task-columns .sb-range { min-width:112px; text-align:center; font-size:12px; color:var(--sb-muted); font-variant-numeric:tabular-nums; }
+#snowball-task-columns .sb-foot { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:20px; font-size:12px; color:var(--sb-muted); }
+#snowball-task-columns .sb-feedback { margin-left:auto; color:var(--sb-accent); }
+#snowball-task-columns .sb-task-menu { position:absolute; z-index:10; width:250px; max-width:calc(100% - 16px); max-height:410px; overflow-y:auto; padding:5px; border:1px solid var(--sb-line); border-radius:9px; background:var(--sb-paper); box-shadow:0 10px 30px #00000025; font-size:13px; }
+#snowball-task-columns .sb-task-menu .sb-menu-title { display:block; padding:8px 9px; font-size:11px; color:var(--sb-muted); overflow-wrap:anywhere; }
+#snowball-task-columns .sb-task-menu button { display:flex; gap:8px; align-items:center; width:100%; padding:8px 9px; border:0; border-radius:5px; background:transparent; text-align:left; font-size:13px; overflow-wrap:anywhere; }
+#snowball-task-columns .sb-task-menu button:hover,#snowball-task-columns .sb-task-menu button:focus-visible { background:var(--sb-soft); }
+#snowball-task-columns .sb-task-menu .sb-current { margin-left:auto; color:var(--sb-muted); font-size:11px; }
+#snowball-task-columns .sb-task-menu .sb-menu-arrow { margin-left:auto; }
+#snowball-task-columns .sb-window.is-compact .sb-task { padding:8px; }
+#snowball-task-columns .sb-window.is-compact .sb-meta,#snowball-task-columns .sb-window.is-compact .sb-child { display:none; }
+@media(max-width:620px) {
+  #snowball-task-columns .sb-window { grid-template-columns:minmax(0,1fr); }
+  #snowball-task-columns .sb-side { display:none; }
+  #snowball-task-columns .sb-content { padding:16px; }
+  #snowball-task-columns .sb-titlebar { border-radius:14px 14px 0 0; }
+  #snowball-task-columns .sb-titlebar b { display:none; }
+  #snowball-task-columns .sb-feedback { margin-left:0; width:100%; }
+}
+@media(pointer:coarse) {
+  #snowball-task-columns .sb-button,#snowball-task-columns .sb-add-task,#snowball-task-columns .sb-task-menu button { min-height:44px; }
+  #snowball-task-columns .sb-window input { font-size:16px; }
+}
+</style>
+<script>
+(() => {
+  const root=document.getElementById('snowball-task-columns');
+  const app=root.querySelector('.sb-window'),board=root.querySelector('.sb-board'),menu=root.querySelector('.sb-task-menu');
+  const initial={version:2,columns:[{id:'todo',name:'Предстоит',base:true},{id:'youtube',name:'YouTube'},{id:'learn',name:'Обучение'},{id:'personal',name:'Личное'},{id:'doing',name:'В процессе',base:true},{id:'done',name:'Готово',base:true}],tasks:[
+    {id:'a',title:'Разобрать сохранённые идеи',column:'todo',date:'Без срока'},
+    {id:'b',title:'Выбрать микрофон',column:'todo',date:'На этой неделе'},
+    {id:'c',title:'Сценарий нового выпуска',column:'youtube',date:'Завтра',tag:'Важно',child:'Собрать референсы · 1 из 3'},
+    {id:'d',title:'Обложка для ролика',column:'youtube',date:'Понедельник'},
+    {id:'e',title:'Идеи для Shorts',column:'youtube',date:'Без срока'},
+    {id:'f',title:'Посмотреть урок по свету',column:'learn',date:'Без срока'},
+    {id:'g',title:'Попробовать новые промты',column:'learn',date:'На этой неделе'},
+    {id:'h',title:'Записаться на тренировку',column:'personal',date:'Завтра'},
+    {id:'i',title:'Монтаж выпуска',column:'doing',date:'Сегодня',tag:'YouTube'},
+    {id:'j',title:'Подобрать музыку',column:'doing',date:'Сегодня'},
+    {id:'k',title:'Подготовить референсы',column:'done',date:'Готово сегодня'}]};
+  const valid=s=>s?.version===2&&Array.isArray(s.columns)&&s.columns.length>=3&&s.columns.length<=20&&Array.isArray(s.tasks)&&s.tasks.length<=80&&s.columns.every(c=>c&&typeof c.id==='string'&&typeof c.name==='string')&&s.tasks.every(t=>t&&typeof t.id==='string'&&typeof t.title==='string'&&s.columns.some(c=>c.id===t.column));
+  const saved=window.openai?.widgetState?.privateContent;
+  let data=structuredClone(valid(saved)?saved:initial),dragId=null,edge=0,frame=0,menuTask=null;
+  const design={compact:false,width:232};
+  const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
+  const button=(label,cls,fn)=>{const b=el('button',cls,label);b.type='button';b.classList.add('cursor-interaction');b.addEventListener('click',fn);return b;};
+  const save=()=>{if(window.openai?.setWidgetState)window.openai.setWidgetState({modelContent:{layout:'Одна горизонтальная доска',columns:data.columns.map(c=>c.name),quickMove:'Правый клик → Переместить в столбец'},privateContent:data}).catch(()=>{});};
+  const closeMenu=()=>{menu.hidden=true;menuTask=null;};
+  const say=text=>{root.querySelector('.sb-feedback').textContent=text;};
+  function move(id,column){const task=data.tasks.find(t=>t.id===id),target=data.columns.find(c=>c.id===column);if(!task||!target)return;if(task.column===column){closeMenu();return;}task.previous=task.column;task.column=column;closeMenu();save();render();say('«'+task.title+'» → '+target.name);}
+  function updateScroll(){
+    const nodes=Array.from(board.children),r=board.getBoundingClientRect();
+    const visible=nodes.map((n,i)=>({i,rect:n.getBoundingClientRect()})).filter(x=>x.rect.right>r.left+10&&x.rect.left<r.right-10);
+    root.querySelector('.sb-range').textContent=visible.length?(visible[0].i+1)+'–'+(visible.at(-1).i+1)+' из '+nodes.length+' столбцов':'';
+    root.querySelector('.sb-prev').disabled=board.scrollLeft<2;
+    root.querySelector('.sb-next').disabled=board.scrollLeft>=board.scrollWidth-board.clientWidth-2;
+  }
+  function scroll(direction){closeMenu();const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;board.scrollBy({left:direction*(board.firstElementChild?.getBoundingClientRect().width+14||246),behavior:reduced?'instant':'smooth'});}
+  root.querySelector('.sb-prev').addEventListener('click',()=>scroll(-1));root.querySelector('.sb-next').addEventListener('click',()=>scroll(1));
+  board.addEventListener('scroll',()=>{updateScroll();closeMenu();});
+  if(window.ResizeObserver)new ResizeObserver(updateScroll).observe(board);
+  function stopEdge(){edge=0;cancelAnimationFrame(frame);frame=0;}
+  function tick(){if(!edge||!dragId){frame=0;return;}board.scrollLeft+=edge;frame=requestAnimationFrame(tick);}
+  board.addEventListener('dragover',e=>{if(!dragId)return;e.preventDefault();const r=board.getBoundingClientRect();edge=e.clientX<r.left+40?-8:e.clientX>r.right-40?8:0;if(edge&&!frame)frame=requestAnimationFrame(tick);});
+  board.addEventListener('dragleave',e=>{if(!board.contains(e.relatedTarget))stopEdge();});
+  function positionMenu(x,y){
+    const bounds=app.getBoundingClientRect();menu.hidden=false;
+    const w=menu.getBoundingClientRect().width,h=menu.getBoundingClientRect().height;
+    menu.style.left=Math.max(8,Math.min(x-bounds.left,bounds.width-w-8))+'px';
+    menu.style.top=Math.max(8,Math.min(y-bounds.top,bounds.height-h-8))+'px';
+  }
+  function showTargets(task,x,y){
+    menu.replaceChildren();menu.append(button('← Назад','',()=>showMenu(task,x,y)),el('span','sb-menu-title','Переместить в столбец'));
+    data.columns.forEach(c=>{const b=button(c.name,'',()=>move(task.id,c.id));b.dataset.target=c.id;b.setAttribute('role','menuitem');if(c.id===task.column){b.append(el('span','sb-current','Сейчас здесь'));b.disabled=true;}menu.append(b);});positionMenu(x,y);menu.querySelector('button:not(:disabled)')?.focus();
+  }
+  function showMenu(task,x,y){
+    closeMenu();menuTask=task.id;menu.replaceChildren();menu.append(el('span','sb-menu-title',task.title));
+    const moveButton=button('Переместить в столбец','',()=>showTargets(task,x,y));moveButton.setAttribute('role','menuitem');moveButton.append(el('span','sb-menu-arrow','›'));moveButton.dataset.action='move';
+    moveButton.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){e.preventDefault();showTargets(task,x,y);}});
+    const done=button(task.column==='done'?'Вернуть в работу':'Отметить выполненной','',()=>move(task.id,task.column==='done'?(data.columns.some(c=>c.id===task.previous)?task.previous:'todo'):'done'));done.setAttribute('role','menuitem');
+    menu.append(moveButton,done);positionMenu(x,y);moveButton.focus();
+  }
+  document.addEventListener('pointerdown',e=>{if(!menu.hidden&&!menu.contains(e.target))closeMenu();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!menu.hidden){const id=menuTask;closeMenu();if(id)board.querySelector('[data-task="'+id+'"] .sb-task-name')?.focus();}});
+  menu.addEventListener('keydown',e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const buttons=Array.from(menu.querySelectorAll('button:not(:disabled)'));let i=buttons.indexOf(document.activeElement);i=e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length;buttons[i]?.focus();});
+  function taskCard(task){
+    const card=el('article','sb-task'+(task.column==='done'?' is-done':''));card.dataset.task=task.id;card.draggable=true;
+    const top=el('div','sb-task-top');
+    const check=button(task.column==='done'?'✓':'','sb-check',()=>move(task.id,task.column==='done'?(data.columns.some(c=>c.id===task.previous)?task.previous:'todo'):'done'));check.setAttribute('aria-label',(task.column==='done'?'Вернуть в работу: ':'Отметить выполненной: ')+task.title);
+    const openAt=b=>{const r=b.getBoundingClientRect();showMenu(task,r.left,r.bottom+4);};
+    const name=button(task.title,'sb-task-name',e=>openAt(e.currentTarget)),more=button('···','sb-task-more',e=>openAt(e.currentTarget));more.setAttribute('aria-label','Действия с задачей «'+task.title+'»');more.setAttribute('aria-haspopup','menu');
+    top.append(check,name,more);card.append(top);
+    const meta=el('div','sb-meta');if(task.tag)meta.append(el('span','sb-badge',task.tag));meta.append(el('span','',task.date||'Без срока'));card.append(meta);if(task.child)card.append(el('div','sb-child',task.child));
+    card.addEventListener('contextmenu',e=>{e.preventDefault();e.stopPropagation();showMenu(task,e.clientX,e.clientY);});
+    name.addEventListener('keydown',e=>{if(e.key==='ContextMenu'||e.key==='F10'&&e.shiftKey){e.preventDefault();openAt(name);}});
+    card.addEventListener('dragstart',e=>{closeMenu();dragId=task.id;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',task.id);card.classList.add('is-dragging');});
+    card.addEventListener('dragend',()=>{dragId=null;stopEdge();root.querySelectorAll('.is-dragging,.is-over').forEach(n=>n.classList.remove('is-dragging','is-over'));});return card;
+  }
+  function columnView(c){
+    const col=el('section','sb-column');col.dataset.column=c.id;col.setAttribute('aria-label',c.name);
+    const tasks=data.tasks.filter(t=>t.column===c.id),head=el('div','sb-column-heading');head.append(el('h3','',c.name),el('span','sb-column-count',String(tasks.length)));
+    if(c.base)head.append(el('span','sb-lock','•'));
+    else {
+      const details=el('details','sb-column-more'),summary=el('summary','','···');summary.classList.add('cursor-interaction');summary.setAttribute('aria-label','Действия со столбцом «'+c.name+'»');
+      const actions=el('div','sb-column-actions');actions.append(button('Переименовать','',()=>{
+        details.open=false;const form=el('form'),input=el('input');input.value=c.name;input.maxLength=40;input.setAttribute('aria-label','Новое название столбца');form.append(input);head.replaceChildren(form);input.focus();input.select();form.addEventListener('submit',e=>{e.preventDefault();const name=input.value.trim();if(!name)return;c.name=name;save();render();});input.addEventListener('keydown',e=>{if(e.key==='Escape')render();});
+      }),button('Убрать столбец','',()=>{data.tasks.forEach(t=>{if(t.column===c.id)t.column='todo';});data.columns=data.columns.filter(x=>x.id!==c.id);save();render();say('Задачи перенесены в «Предстоит»');}));details.append(summary,actions);head.append(details);
+    }
+    col.append(head);tasks.forEach(t=>col.append(taskCard(t)));
+    if(c.id!=='done')col.append(button('+ Новая задача','sb-add-task',e=>{const form=el('form','sb-task-form'),input=el('input');input.placeholder='Название задачи · Enter';input.maxLength=160;input.setAttribute('aria-label','Новая задача: '+c.name);form.append(input);e.currentTarget.replaceWith(form);input.focus();form.addEventListener('submit',event=>{event.preventDefault();if(!input.value.trim())return;data.tasks.push({id:'t'+Date.now(),title:input.value.trim(),column:c.id,date:'Без срока'});save();render();say('Задача добавлена');});}));
+    col.addEventListener('dragover',e=>{if(!dragId)return;e.preventDefault();e.dataTransfer.dropEffect='move';col.classList.add('is-over');});
+    col.addEventListener('dragleave',e=>{if(!col.contains(e.relatedTarget))col.classList.remove('is-over');});
+    col.addEventListener('drop',e=>{if(!dragId)return;e.preventDefault();e.stopPropagation();const id=dragId;dragId=null;stopEdge();move(id,c.id);});return col;
+  }
+  function render(){const x=board.scrollLeft;board.replaceChildren(...data.columns.map(columnView));board.scrollLeft=x;root.querySelector('.sb-total').textContent=data.tasks.length+' задач · '+data.columns.length+' столбцов';app.classList.toggle('is-compact',design.compact);requestAnimationFrame(updateScroll);}
+  const form=root.querySelector('.sb-column-form'),input=form.querySelector('input');
+  root.querySelector('.sb-new-column').addEventListener('click',()=>{form.hidden=false;input.focus();});
+  root.querySelector('.sb-cancel').addEventListener('click',()=>{form.hidden=true;input.value='';});
+  form.addEventListener('submit',e=>{e.preventDefault();const name=input.value.trim();if(!name)return;if(data.columns.some(c=>c.name.toLowerCase()===name.toLowerCase())){input.setCustomValidity('Такой столбец уже есть');input.reportValidity();return;}const c={id:'col'+Date.now(),name};data.columns.splice(data.columns.findIndex(c=>c.id==='doing'),0,c);form.hidden=true;input.value='';save();render();say('Столбец «'+name+'» добавлен');requestAnimationFrame(()=>board.querySelector('[data-column="'+c.id+'"]').scrollIntoView({block:'nearest',inline:'nearest'}));});
+  input.addEventListener('input',()=>input.setCustomValidity(''));
+  render();
+  window.addEventListener('openai:set_globals',e=>{const next=e.detail?.globals?.widgetState?.privateContent;if(valid(next)){data=structuredClone(next);closeMenu();render();}});
+  if(globalThis.Tweak){const apply=()=>{app.style.setProperty('--sb-width',design.width+'px');render();};const controls=new Tweak({container:app,onChange:apply});controls.addSlider(design,'width',{label:'Ширина столбца',min:210,max:300,step:10,unit:'px'});controls.addToggle(design,'compact',{label:'Компактные карточки'});}
+})();
+</script>
+
+</body></html>

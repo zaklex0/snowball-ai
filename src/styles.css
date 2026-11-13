@@ -97,6 +97,21 @@
   --pop-shadow: 0 14px 34px -10px rgba(0, 0, 0, .9);
 }
 
+:root[data-theme="codex-everforest"] {
+  --bg:#2D353B; --glow:#323B40; --titlebar:#2D353B; --surface:#2D353B; --surface-2:#3A4246; --line:#424B4E;
+  --ink:#D3C6AA; --ink-soft:#A7A18D; --accent:#A7C080; --accent-hover:#B9D292; --accent-ink:#27312B; --accent-strong:#A7C080;
+  --row-hover:#3A4246; --drop:#475448; --danger:#E67E80; --ok-bg:#405047; --ok-ink:#D3C6AA; --toast-bg:#D3C6AA; --toast-ink:#2D353B; --scroll-thumb:#505A59;
+  --cat-code-dot:#D699B6;
+}
+:root[data-theme="codex-absolutely"] {
+  --bg:#24211F; --glow:#302A26; --titlebar:#292522; --surface:#302B28; --surface-2:#3A332F; --line:#4A403A;
+  --ink:#E6D3C3; --ink-soft:#B7A397; --accent:#D68B70; --accent-hover:#E6A58B; --accent-ink:#2B201B; --accent-strong:#E6A58B;
+  --row-hover:#3A332F; --drop:#513B31; --danger:#EF9B8D; --ok-bg:#3C4938; --ok-ink:#D6E6C9; --toast-bg:#E6D3C3; --toast-ink:#24211F; --scroll-thumb:#594B43;
+}
+.sw-codex { background:linear-gradient(135deg,#D68B70 50%,#A7C080 50%); }
+.sw-absolutely { background:linear-gradient(135deg,#24211F 50%,#D68B70 50%); }
+.sw-everforest { background:linear-gradient(135deg,#2D353B 50%,#A7C080 50%); }
+
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body {
@@ -1318,6 +1333,14 @@ h1 .brand { color: var(--accent-strong); }
 .board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding: 4px 2px 8px; }
 .board[hidden], .tlist[hidden] { display: none; }
 .board > .tcol { flex: 1 0 250px; min-width: 250px; }
+.task-board-nav { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
+.task-board-nav[hidden] { display: none; }
+.task-board-nav > span { min-width: 125px; text-align: center; font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.task-board-nav button:disabled { opacity: .4; cursor: default; }
+.menu.task-ctx { position: fixed; z-index: 130; min-width: 250px; max-width: calc(100vw - 16px); max-height: min(500px, calc(100vh - 16px)); overflow-y: auto; bottom: auto; right: auto; }
+.task-ctx .menu-label { overflow-wrap: anywhere; }
+.task-ctx button:disabled { opacity: .5; }
+.task-ctx small { margin-left: auto; color: var(--ink-soft); white-space: nowrap; }
 .tcol { --c: #8F6BC4; display: grid; gap: 8px; align-content: start; min-height: 180px; padding: 10px; border-radius: 18px;
   background: color-mix(in srgb, var(--c) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 20%, var(--line)); }
 .tc-todo { --c: #8F6BC4; }
@@ -1367,10 +1390,16 @@ h1 .brand { color: var(--accent-strong); }
 .task:hover { border-color: color-mix(in srgb, var(--c) 50%, var(--line)); }
 .task.sel { border-color: var(--c); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 30%, transparent); }
 .task.dragging { opacity: .4; }
+.task.nest-target { border-color: var(--accent-strong); box-shadow: 0 0 0 2px var(--accent-strong); }
+.task.nest-target::after { content: "Отпустите — станет подзадачей"; grid-column: 1 / -1; color: var(--accent-strong); font-size: 12px; }
+.task.before-target { border-top: 3px solid var(--accent-strong); }
+.task-children { grid-column: 1 / -1; display: grid; gap: 8px; margin-left: 10px; padding-left: 10px; border-left: 2px solid var(--line); }
+.task-child-open { border: 0; background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
+.task-child-open:hover { color: var(--accent-strong); }
 .task.fresh { animation: task-fresh 1.6s ease-out; }
 @keyframes task-fresh { 0%, 40% { background: color-mix(in srgb, var(--accent) 30%, var(--surface)); } }
 .task-t { overflow-wrap: anywhere; }
-.task.is-done .task-t { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ink-soft) 50%, transparent); }
+.task.is-done > .task-t { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--ink-soft) 50%, transparent); }
 .task-marks { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 /* The tick circle: on a card, big in the panel, square for subtasks */
 .tchk {

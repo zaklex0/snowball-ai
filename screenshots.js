@@ -86,6 +86,8 @@ module.exports = function setupScreenshots(options) {
   // loading a new window took 0.15–0.25 s per monitor at every shortcut. They are remade when monitors change.
   const pool = new Map(); // display id → { win, display, loaded }
   let warmTimer = null;
+  let captureWarmup = null;
+  let captureWarmed = false;
   const sameDisplay = (a, b) =>
     a.scaleFactor === b.scaleFactor && ['x', 'y', 'width', 'height'].every((k) => a.bounds[k] === b.bounds[k]);
   function dropOverlay(id) {
@@ -147,6 +149,13 @@ module.exports = function setupScreenshots(options) {
     for (const [id, o] of [...pool])
       if (o.win.isDestroyed() || !displays.some((d) => d.id === id && sameDisplay(d, o.display))) dropOverlay(id);
     for (const d of displays) if (!pool.has(d.id)) makeOverlay(d);
+    // Initialize Windows' screen capture machinery before the first shortcut.
+    // A tiny thumbnail is discarded immediately and never saved.
+    if (!captureWarmed && !captureWarmup) {
+      captureWarmup = desktopCapturer.getSources({
+        types: ['screen'], thumbnailSize: { width: 1, height: 1 }, fetchWindowIcons: false,
+      }).then(() => { captureWarmed = true; }).catch(() => {}).finally(() => { captureWarmup = null; });
+    }
   }
   function warmLater(ms) {
     clearTimeout(warmTimer);
@@ -242,8 +251,12 @@ module.exports = function setupScreenshots(options) {
       const displays = screen.getAllDisplays();
       for (const [id, o] of [...pool])
         if (o.win.isDestroyed() || !displays.some((d) => d.id === id && sameDisplay(d, o.display))) dropOverlay(id);
+      // Load any missing selection windows while Windows obtains the screen image.
+      for (const d of displays) if (!pool.has(d.id)) makeOverlay(d);
       const maxW = Math.max(...displays.map((d) => Math.ceil(d.size.width * d.scaleFactor)));
       const maxH = Math.max(...displays.map((d) => Math.ceil(d.size.height * d.scaleFactor)));
+      if (captureWarmup) await captureWarmup;
+      if (session !== current) return {};
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: { width: maxW, height: maxH },

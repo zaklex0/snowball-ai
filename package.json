@@ -1,14 +1,14 @@
 {
   "name": "snowball",
   "productName": "Snowball.ai",
-  "version": "1.21.0",
+  "version": "1.22.0",
   "description": "Snowball.ai — система хранения информации",
   "main": "main.js",
   "author": "Snowball.ai",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "test": "node --test tools/storage-recovery.test.cjs tools/screenshot-store.test.cjs tools/transcription-core.test.cjs tools/export-recovery.test.cjs tools/settings-store.test.cjs tools/profile-recovery.test.cjs tools/data-copy.test.cjs tools/cloud-sync.test.cjs tools/cloud-account.test.cjs",
+    "test": "node --test tools/task-nesting.test.cjs tools/storage-recovery.test.cjs tools/screenshot-store.test.cjs tools/transcription-core.test.cjs tools/export-recovery.test.cjs tools/settings-store.test.cjs tools/profile-recovery.test.cjs tools/data-copy.test.cjs tools/cloud-sync.test.cjs tools/cloud-account.test.cjs",
     "build:win": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {

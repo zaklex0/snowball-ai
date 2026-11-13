@@ -374,6 +374,7 @@ function normalizeTask(t, fallbackTime) {
     id: ID_RE.test(str(t.id)) ? t.id : newId('t'),
     title,
     status,
+    parentId: ID_RE.test(str(t.parentId)) && t.parentId !== t.id ? t.parentId : '',
     note: str(t.note, 5000).trim(),
     due,
     time: due && TIME_RE.test(str(t.time)) ? t.time : '',
@@ -988,6 +989,17 @@ class Store {
       }
       const now = Date.now();
       const merged = Object.assign({}, prev || {}, input, { createdAt: prev ? prev.createdAt : now, updatedAt: now });
+      // A moved card keeps all of its fields. Reject missing parents and loops inside the same write queue.
+      if (input.parentId) {
+        const seen = new Set([merged.id]);
+        let parent = this.findTask(input.parentId);
+        if (!prev || !parent || parent.archivedAt) throw Object.assign(new Error('bad parent'), { userMessage: 'Задача для вложения больше недоступна. Обновите доску и попробуйте снова.' });
+        while (parent) {
+          if (seen.has(parent.id)) throw Object.assign(new Error('task cycle'), { userMessage: 'Нельзя вложить задачу в саму себя или в её подзадачу.' });
+          seen.add(parent.id);
+          parent = this.findTask(parent.parentId);
+        }
+      }
       const moved = prev && input.status && input.status !== prev.status;
       if ((!prev || moved) && input.order === undefined) {
         const col = this.tasks.filter((t) => t.status === (merged.status || 'todo') && t !== prev);

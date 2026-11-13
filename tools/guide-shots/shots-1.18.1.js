@@ -64,5 +64,12 @@ module.exports = async function ({ main, page, shot }) {
   await openTheme(false);
   await shot('03-back', { light: '.menu button[data-theme="light"]', system: '.menu button[data-theme="system"]', macos: '.has-sub[data-sub="macos"]' });
   await closeMenu();
+  await openTheme(false);
+  await click('.has-sub[data-sub="codex"]');
+  await shot('04-codex', { codex: '.has-sub[data-sub="codex"]', choices: '.submenu[data-sub-of="codex"]' });
+  await click('.menu button[data-theme="codex-absolutely"]');
+  await until("document.documentElement.dataset.theme === 'codex-absolutely'");
+  await click('.menu button[data-theme="codex-everforest"]');
+  await until("document.documentElement.dataset.theme === 'codex-everforest'");
   return shot.boxes;
 };

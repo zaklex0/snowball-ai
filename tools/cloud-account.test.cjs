@@ -7,12 +7,39 @@ const path = require('node:path');
 const http = require('node:http');
 const config = require('../cloud-config');
 const { Store } = require('../storage');
-const { CloudAccount } = require('../cloud-account');
+const { CloudAccount, message, cloudFetch } = require('../cloud-account');
 const safeStorage = {
   isEncryptionAvailable: () => true,
   encryptString: text => Buffer.from('encrypted:' + Buffer.from(text).toString('base64')),
   decryptString: bytes => { const text = bytes.toString(); if (!text.startsWith('encrypted:')) throw Error('unreadable'); return Buffer.from(text.slice(10), 'base64').toString(); }
 };
+test('cloud errors explain connection failures without exposing session details', () => {
+  for (const [error, expected] of [
+    [{ name: 'TimeoutError' }, /не ответило вовремя/],
+    [{ message: 'TypeError: fetch failed', details: 'Caused by ENOTFOUND secret-token' }, /найти адрес/],
+    [{ message: 'net::ERR_PROXY_CONNECTION_FAILED secret-token' }, /через VPN/],
+    [{ cause: { code: 'CERT_HAS_EXPIRED' } }, /защищённое соединение/],
+    [{ message: 'TypeError: fetch failed secret-token' }, /Соединение.*прервано/],
+    [{ code: 'PGRST202', message: 'secret-token' }, /не настроен/]
+  ]) {
+    const result = message(error); assert.match(result, expected); assert.equal(result.includes('secret-token'), false);
+  }
+});
+test('cloud transport keeps caller cancellation and sets a deadline even with a caller signal', async () => {
+  const originalTimeout = AbortSignal.timeout, deadlines = [], requests = [];
+  AbortSignal.timeout = ms => { deadlines.push(ms); return originalTimeout(ms); };
+  try {
+    const fetch = cloudFetch(async (url, options) => { requests.push({ url, options }); return 'response'; });
+    const caller = new AbortController();
+    assert.equal(await fetch('https://example.com/auth/v1/token', { method: 'POST', signal: caller.signal }), 'response');
+    await fetch('https://example.com/storage/v1/object/files/hash', { body: Buffer.from('file') });
+    assert.deepEqual(deadlines, [25000, 120000]);
+    assert.equal(requests[0].options.method, 'POST');
+    assert.equal(requests[0].options.signal.aborted, false);
+    caller.abort(); assert.equal(requests[0].options.signal.aborted, true);
+    assert.equal(requests[1].options.body.toString(), 'file');
+  } finally { AbortSignal.timeout = originalTimeout; }
+});
 test('official SDK: encrypted login, two accounts isolated, restart and sign-out', async t => {
   const old = { ...config }, records = new Map(), sessions = new Map();
   const users = { 'alice@example.com': '11111111-1111-4111-8111-111111111111', 'bob@example.com': '22222222-2222-4222-8222-222222222222' };

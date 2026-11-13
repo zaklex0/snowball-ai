@@ -84,6 +84,11 @@
                   <span class="theme-swatch sw-black" aria-hidden="true"></span>Чёрная <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
                 </button>
                 <hr>
+                <div class="sub-wrap"><button type="button" role="menuitem" class="has-sub" aria-haspopup="true" aria-expanded="false" data-sub="codex"><span class="theme-swatch sw-codex"></span>Codex <svg class="sub-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></button>
+                  <div class="menu submenu" role="menu" aria-label="Темы Codex" data-sub-of="codex">
+                    <button type="button" role="menuitemradio" aria-checked="false" data-theme="codex-absolutely"><span class="theme-swatch sw-absolutely"></span>Absolutely <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                    <button type="button" role="menuitemradio" aria-checked="false" data-theme="codex-everforest"><span class="theme-swatch sw-everforest"></span>Everforest <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></button>
+                  </div></div>
                 <div class="sub-wrap">
                   <button type="button" role="menuitemradio" aria-checked="false" class="has-sub" aria-haspopup="true" aria-expanded="false" data-sub="macos" data-theme="macos">
                     <span class="theme-swatch sw-macos" aria-hidden="true"></span>macOS <span class="alpha">Бета</span><svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg><svg class="sub-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
@@ -392,6 +397,8 @@
               <p class="meta" id="tasks-meta"></p>
             </div>
             <div class="top-actions">
+              <button type="button" class="btn btn-ghost" id="task-column-add">+ Столбец</button>
+              <button type="button" class="btn btn-ghost tr-help" data-guide="tasks">Как пользоваться</button>
               <div class="tview" id="tview" role="group" aria-label="Как показывать задачи">
                 <button type="button" data-v="board" aria-pressed="true" title="Столбцы по стадиям работы">Доска</button>
                 <button type="button" data-v="list" aria-pressed="false" title="Задачи по срокам: что горит, что сегодня, что завтра">Список</button>
@@ -420,8 +427,13 @@
             <button type="button" class="link-btn" id="tf-reset" hidden>Сбросить фильтры</button>
           </div>
           <div class="board" id="board"></div>
+          <div class="task-board-nav" id="task-board-nav" aria-label="Прокрутка столбцов">
+            <button type="button" class="btn-mini" id="task-board-prev" aria-label="Прокрутить столбцы влево">← Влево</button>
+            <span id="task-board-range"></span>
+            <button type="button" class="btn-mini" id="task-board-next" aria-label="Прокрутить столбцы вправо">Вправо →</button>
+          </div>
           <div class="tlist" id="tlist" hidden></div>
-          <p class="board-hint" id="board-hint">Нажмите на задачу, чтобы открыть её целиком: срок, важность, теги, подзадачи, заметка. Кружок слева отмечает задачу сделанной. Задачи можно перетаскивать между столбцами.</p>
+          <p class="board-hint" id="board-hint">Перетаскивайте задачи между столбцами. На середину карточки — вложить как подзадачу; на верхний край — поставить перед ней. Правый клик по задаче → «Переместить в столбец» — быстрый перенос без прокрутки.</p>
         </section>
 
         <section class="view" id="view-calendar" aria-labelledby="calendar-title" hidden>
@@ -890,6 +902,7 @@
 
 <script src="guides/guides.js"></script>
 <script src="guides/1.21.0/boxes.js"></script>
+<script src="guides/1.22.0/boxes.js"></script>
 <script src="guides/1.15.0/boxes.js"></script>
 <script src="guides/1.16.0/boxes.js"></script>
 <script src="guides/1.17.0/boxes.js"></script>
