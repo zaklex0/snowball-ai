@@ -45,5 +45,8 @@ module.exports = async function ({ main, page, shot }) {
   await shot('08-nested',{children:'.tp-subs .tp-sub[data-task-id]',counter:'.task .task-marks'});
   await ev('document.querySelector(".task-child-open").click();true');
   await shot('09-detach',{detach:{sel:'#tpanel button',text:'Сделать отдельной задачей'}});
+  await ev('document.querySelector(".tp-close").click();const input=document.querySelector("#tbar-input");input.value="Перемести задачу 1 из В процессе в подгруппу Курс";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector("#tbar").requestSubmit();true');
+  await until('!document.querySelector("#task-undo").disabled && !!document.querySelector(".tnote-text")');
+  await shot('10-undo',{undo:'#task-undo',result:'.tnote'});
   return shot.boxes;
 };

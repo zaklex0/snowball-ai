@@ -1490,6 +1490,12 @@ h1 .brand { color: var(--accent-strong); }
 
 /* The tasks assistant bar above the board */
 .tbar-wrap { display: grid; gap: 8px; }
+.task-undo-row { display: flex; align-items: center; gap: 10px; }
+.task-undo-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 5px 9px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; cursor: pointer; }
+.task-undo-btn svg { width: 15px; height: 15px; }
+.task-undo-btn:hover:not(:disabled) { background: var(--surface-2); }
+.task-undo-btn:disabled { opacity: .45; cursor: default; }
+.task-undo-count { color: var(--ink-soft); font-size: 12px; }
 .tbar { display: flex; align-items: flex-end; gap: 10px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
 .tbar:focus-within { border-color: var(--accent-strong); }
 .tbar-ico { flex: none; align-self: flex-start; margin-top: 4px; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 30%, var(--surface)); color: var(--accent-strong); }

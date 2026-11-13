@@ -76,8 +76,8 @@ const { Store } = require('../storage');
     const image = await page.send('Page.captureScreenshot', { format: 'png' }); await fs.writeFile(path.join(root, 'mockups/tasks-implemented-macos.png'), Buffer.from(image.result.data, 'base64'));
     await page.ev('document.querySelector("button[data-guide=tasks]").click();true');
     await page.until('!!document.querySelector("dialog.guide-dlg[open]")');
-    assert.equal(await page.ev('document.querySelectorAll(".gd-dots button").length'), 9);
-    for (let step = 0; step < 9; step++) {
+    assert.equal(await page.ev('document.querySelectorAll(".gd-dots button").length'), 10);
+    for (let step = 0; step < 10; step++) {
       await page.ev(`document.querySelectorAll('.gd-dots button')[${step}].click();true`);
       await page.until('(()=>{const i=document.querySelector(".gd-shot img");return i?.complete&&i.naturalWidth===1280})()');
       assert.equal(await page.ev('document.querySelectorAll(".gd-shot .gd-frame").length>0'), true);

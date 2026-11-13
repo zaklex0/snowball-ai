@@ -1,5 +1,7 @@
 'use strict';
 const { taskReferences, taskReferenceSelection, taskColumnReferences, taskTargetGroup, resolveTaskSelection } = require('./task-reference');
+const { TaskUndoHistory, taskUndoRequest } = require('./task-undo');
+const taskHistory = new TaskUndoHistory();
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage, Notification, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -495,7 +497,7 @@ nativeTheme.on('updated', paintWindows);
 
 /* ---------- IPC ---------- */
 function ok(extra) {
-  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView(), taskGroups: store.groupsView(), taskArchiveMode: store.archiveMode, skills: store.skillsView() }, extra || {});
+  return Object.assign({ ok: true, prompts: store.view(), profile: store.profileView(), activity: store.activityView(), events: store.calendarView(), tasks: store.tasksView(), taskColumns: store.columnsView(), taskGroups: store.groupsView(), taskArchiveMode: store.archiveMode, taskUndo: taskHistory.state(), skills: store.skillsView() }, extra || {});
 }
 function fail(e) {
   const code = e && e.code;
@@ -533,7 +535,7 @@ function handle(name, fn) {
 }
 function syncOthers(r, except) {
   const data = { info: info() };
-  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, taskGroups: r.taskGroups, taskArchiveMode: r.taskArchiveMode, skills: r.skills, profile: r.profile, activity: r.activity });
+  if (r.prompts) Object.assign(data, { prompts: r.prompts, events: r.events, tasks: r.tasks, taskColumns: r.taskColumns, taskGroups: r.taskGroups, taskArchiveMode: r.taskArchiveMode, taskUndo: r.taskUndo, skills: r.skills, profile: r.profile, activity: r.activity });
   if (r.chats) data.chats = r.chats;
   if (r.transcripts) data.transcripts = r.transcripts;
   broadcast('sync', data, except);
@@ -2264,16 +2266,21 @@ const TASK_TOOLS = [
 
 // Every change goes through here and is remembered in log, so «Отменить» can put the tasks back.
 async function loggedTask(log, id, fn) {
-  const before = id ? store.findTask(id) : null;
+  const before = structuredClone(store.tasks);
   const r = await fn();
-  log.push({ before: before ? JSON.parse(JSON.stringify(before)) : null, id: r ? r.id : id });
+  const old = new Map(before.map(t => [t.id, t]));
+  const current = new Map(store.tasks.map(t => [t.id, t]));
+  for (const key of new Set([...old.keys(), ...current.keys()])) {
+    const prev = old.get(key) || null, after = current.get(key) || null;
+    if (JSON.stringify(prev) !== JSON.stringify(after)) log.push({ id: key, before: prev, after: structuredClone(after) });
+  }
   return r;
 }
 async function runTaskTool(name, input, log) {
   const a = input && typeof input === 'object' ? input : {};
   if (name === 'tasks_move') {
     const result = await store.moveTasks(a.ids, { status: a.status, groupId: a.groupId });
-    result.before.forEach(before => log.push({ id: before.id, before }));
+    result.before.forEach(before => log.push({ id: before.id, before, after: structuredClone(store.findTask(before.id)) }));
     return 'Перемещено задач: ' + result.tasks.length + '.';
   }
   if (name === 'tasks_list') return tasksForModel();
@@ -2491,9 +2498,12 @@ async function numericTaskMove(text, log) {
   if (group.error) return group.error;
   const { source, target } = taskColumnReferences(group.text, store.columnsView());
   if (!group.mentioned && !target) return null;
-  const resolved = resolveTaskSelection(selection.numbers, store.tasksView(), source);
+  const snapshot = store.tasksView();
+  const resolved = resolveTaskSelection(selection.numbers, snapshot, source);
   if (resolved.error) return resolved.error;
-  return runTaskTool('tasks_move', { ids: resolved.ids, status: target, groupId: group.mentioned ? group.groupId : null }, log);
+  const selected = resolved.ids.map(id => { const t = snapshot.find(t => t.id === id); return { number: t.number, title: t.title, status: t.status }; });
+  await runTaskTool('tasks_move', { ids: resolved.ids, status: target, groupId: group.mentioned ? group.groupId : null }, log);
+  return 'Перемещено задач: ' + selected.length + '. Из «' + columnName(selected[0].status) + '»: ' + selected.slice(0, 10).map(t => '№ ' + t.number + ' «' + t.title + '»').join(', ') + (selected.length > 10 ? ' и ещё ' + (selected.length - 10) : '') + '. Номера на доске пересчитаны после переноса.';
 }
 async function stubTasksAssistant(text, log) {
   const low = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
@@ -2595,11 +2605,14 @@ async function stubTasksAssistant(text, log) {
     : 'Добавил ' + made.length + ' ' + (made.length < 5 ? 'задачи' : 'задач') + ' в «Предстоит»: ' + made.map(stubTaskWords).join(', ') + '.';
 }
 
-const taskUndos = new Map();   // undo id -> what one message to the tasks assistant changed
-let taskUndoSeq = 0;
-handle('tasks-assistant', async function (text) {
+handle('tasks-assistant', text => taskHistory.run(async () => {
   const msg = String(text || '').trim().slice(0, 2000);
   if (!msg) return { ok: false, error: 'Напишите, что сделать с задачами.' };
+  const undoCount = taskUndoRequest(msg);
+  if (undoCount !== null) {
+    await taskHistory.undo(store, { count: undoCount });
+    return ok({ reply: 'Отменено действий ассистента: ' + undoCount + '.', changed: [], cost: 0 });
+  }
   store.recordAssistant();
   const model = quickModel();
   const log = [];
@@ -2616,26 +2629,15 @@ handle('tasks-assistant', async function (text) {
     reply = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
     failed = true;
   }
-  let undoId = null;
-  if (log.length) {
-    undoId = 'u' + (++taskUndoSeq);
-    taskUndos.set(undoId, log);
-    if (taskUndos.size > 20) taskUndos.delete(taskUndos.keys().next().value);
-  }
+  const undoId = taskHistory.record(log, msg);
   const changed = Array.from(new Set(log.map((x) => x.id).filter((id) => id && store.findTask(id))));
   return ok({ reply: reply || 'Готово.', failed, undoId, changed, cost: runCost.get(controller.signal) || 0, info: info() });
-});
+}));
 // «Отменить» under the answer: everything that message changed goes back, newest change first.
-handle('tasks-assistant-undo', async (undoId) => {
-  const log = taskUndos.get(undoId);
-  if (!log) return { ok: false, error: 'Отменить уже нельзя.' };
-  taskUndos.delete(undoId);
-  for (const x of log.slice().reverse()) {
-    if (x.before) await store.putTask(x.before);
-    else if (x.id) await store.deleteTask(x.id);
-  }
+handle('tasks-assistant-undo', undoId => taskHistory.run(async () => {
+  await taskHistory.undo(store, { id: undoId });
   return ok();
-});
+}));
 
 /* ---------- the calendar assistant ---------- */
 // The bar above the calendar works like the one above the tasks: the cheapest model, every message is a separate

@@ -42,6 +42,7 @@
     tasks: [],            // tasks board: { id, title, status (a column id), note, due, time, priority, tags, subtasks, doneFrom, order }
     taskColumns: [],      // all task columns in order: { id, name, base? , color? }
     taskGroups: [],
+    taskUndo: { count: 0, id: null, text: "" },
     taskArchiveMode: "day", // done tasks go to the archive by themselves: "day", "week" or "manual"
     skills: [],           // «Скиллы» on the «Промты» page: { id, title, type, desc, descBy, descCost, descAt, file, main, inside, files, text, createdAt }
     lib: "prompts",       // which list the «Промты» page shows: "prompts" or "skills"
@@ -106,7 +107,7 @@
     setDir: $("set-dir"), setDirChange: $("set-dir-change"), setBackupSave: $("set-backup-save"), setBackupOpen: $("set-backup-open"), themeValue: $("theme-value"),
     timerRow: $("timer-row"), timerPop: $("timer-pop"),
     tabs: $("tabs"), tabPlus: $("tab-plus"), soloTitle: $("solo-title"), soloBack: $("solo-back"), tabMenu: $("tab-menu"), upList: $("up-list"), board: $("board"), tasksMeta: $("tasks-meta"),
-    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tnotes: $("tnotes"),
+    tbar: $("tbar"), tbarInput: $("tbar-input"), tbarModel: $("tbar-model"), tbarSend: $("tbar-send"), tnotes: $("tnotes"), taskUndo: $("task-undo"), taskUndoCount: $("task-undo-count"),
     tpanel: $("tpanel"), utoast: $("utoast"), utoastText: $("utoast-text"), utoastUndo: $("utoast-undo"),
     tview: $("tview"), tsearch: $("tsearch"), tfTag: $("tf-tag"), tfPrio: $("tf-prio"), tfDone: $("tf-done"), tfReset: $("tf-reset"), tlist: $("tlist"), boardHint: $("board-hint"),
     qa: $("qa"), qaBtn: $("qa-btn"), qaModel: $("qa-model"), qaNew: $("qa-new"), qaFull: $("qa-full"), qaClose: $("qa-close"),
@@ -319,6 +320,7 @@
     if (r.tasks) state.tasks = r.tasks;
     if (r.taskColumns) state.taskColumns = r.taskColumns;
     if (r.taskGroups) state.taskGroups = r.taskGroups;
+    if (r.taskUndo) state.taskUndo = r.taskUndo;
     if (r.taskArchiveMode) state.taskArchiveMode = r.taskArchiveMode;
     if (r.skills) state.skills = r.skills;
   }
@@ -5360,6 +5362,9 @@
     els.tbarModel.textContent = quickModelName();
     els.tbar.classList.toggle("busy", tbar.busy);
     els.tbarInput.disabled = tbar.busy;
+    els.taskUndo.disabled = tbar.busy || !state.taskUndo.count;
+    els.taskUndo.title = state.taskUndo.count ? "Отменить: " + state.taskUndo.text : "Нет действий для отмены. История сохраняется до закрытия программы.";
+    els.taskUndoCount.textContent = state.taskUndo.count ? "Доступно для отмены: " + state.taskUndo.count : "";
     els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim();
     els.tbarSend.title = tbar.busy ? "Ассистент разбирает…" : "Отправить (Enter)";
   }
@@ -5388,6 +5393,14 @@
     }, function () { fail(); });
   }
   els.tbar.addEventListener("submit", function (e) { e.preventDefault(); sendTbar(els.tbarInput.value); });
+  els.taskUndo.addEventListener("click", function () {
+    if (tbar.busy || !state.taskUndo.count) return;
+    tbar.busy = true; renderTbar();
+    call(api.tasksAssistantUndo(state.taskUndo.id)).then(function (r) {
+      tbar.busy = false; render();
+      if (r) taskNote({ text: "Последнее действие ассистента отменено." });
+    }, function () { tbar.busy = false; renderTbar(); });
+  });
   els.tbarInput.addEventListener("input", function () { growTbar(); els.tbarSend.disabled = tbar.busy || !els.tbarInput.value.trim(); });
   els.tbarInput.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && !e.isComposing) {

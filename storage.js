@@ -1089,6 +1089,21 @@ class Store {
     });
   }
 
+  restoreTaskChanges(batches) {
+    return this.runLists(['tasks'], async function () {
+      for (const changes of batches) {
+        for (const change of changes) {
+          if (JSON.stringify(this.findTask(change.id) || null) !== JSON.stringify(change.after || null)) throw Object.assign(new Error('undo conflict'), { userMessage: 'Эти задачи уже изменились после действия ассистента. Отмена остановлена, чтобы сохранить новые изменения.' });
+        }
+        for (const change of changes) {
+          this.tasks = this.tasks.filter(t => t.id !== change.id);
+          if (change.before) this.tasks.push(structuredClone(change.before));
+        }
+      }
+      await this.writeTasks();
+    });
+  }
+
   // Resolve numbers before calling this method: moving a category can renumber the board.
   moveTasks(ids, { status = null, groupId = null } = {}) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
