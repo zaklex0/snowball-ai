@@ -4362,10 +4362,24 @@
       if (tb.adding === status && tb.addingGroup === g.id) box.append(addRow(status, g.id));
       else if (!list.length) box.append(h("p", { class: "task-group-empty", text: "Пока нет задач" }));
     }
+    box.addEventListener("dragover", function (e) {
+      if (!tb.dragId) return;
+      e.preventDefault(); e.stopPropagation();
+      e.dataTransfer.dropEffect = "move";
+      box.classList.add("drop-group");
+    });
+    box.addEventListener("dragleave", function (e) { if (!box.contains(e.relatedTarget)) box.classList.remove("drop-group"); });
+    box.addEventListener("drop", function (e) {
+      if (!tb.dragId) return;
+      e.preventDefault(); e.stopPropagation();
+      box.classList.remove("drop-group");
+      tb.folded.delete(key);
+      dropTask(status, null, list, false, g.id);
+    });
     return box;
   }
   // The card centre nests a task; its top edge reorders; empty column space detaches to its bottom.
-  function dropTask(status, targetEl, list, nest) {
+  function dropTask(status, targetEl, list, nest, groupId) {
     var id = tb.dragId;
     tb.dragId = null;
     var task = findTask(id);
@@ -4378,7 +4392,8 @@
       });
       return;
     }
-    var rest = list.filter(function (t) { return t.id !== id; });
+    var nextGroup = groupId === undefined ? task.groupId || "" : groupId;
+    var rest = list.filter(function (t) { return t.id !== id && (t.groupId || "") === nextGroup; });
     var order, parentId = "";
     if (targetEl) {
       if (targetEl.dataset.id === id) return;
@@ -4386,10 +4401,10 @@
       parentId = target.parentId || "";
       order = before ? (before.order + target.order) / 2 : target.order - 1;
     } else {
-      if (!task.parentId && task.status === status && rest.length && rest[rest.length - 1].order < task.order) return;
+      if (!task.parentId && task.status === status && (task.groupId || "") === nextGroup && rest.length && rest[rest.length - 1].order < task.order) return;
       order = rest.length ? rest[rest.length - 1].order + 1 : Date.now();
     }
-    saveTaskNow({ id: id, parentId: parentId, status: status, order: order, expectedFields: { parentId: JSON.stringify(task.parentId), status: JSON.stringify(task.status), order: JSON.stringify(task.order) } });
+    saveTaskNow({ id: id, parentId: parentId, status: status, groupId: nextGroup, order: order, expectedFields: { parentId: JSON.stringify(task.parentId), status: JSON.stringify(task.status), groupId: JSON.stringify(task.groupId), order: JSON.stringify(task.order) } });
   }
   // Child tasks stay inside the task panel; the board card shows their progress counter only.
   function taskNumberMark(t) {
@@ -4429,7 +4444,7 @@
       var dragged = findTask(tb.dragId);
       var nest = e.clientY - el.getBoundingClientRect().top > 10 && dragged && dragged.status === t.status && dragged.groupId === t.groupId;
       el.classList.remove("nest-target", "before-target");
-      dropTask(t.status, el, state.tasks.filter(function (x) { return x.status === t.status; }), nest);
+      dropTask(t.status, el, state.tasks.filter(function (x) { return x.status === t.status; }), nest, t.groupId || "");
     });
     el.addEventListener("dragend", function () {
       stopTaskBoardScroll();
@@ -4437,6 +4452,7 @@
       el.classList.remove("dragging");
       els.board.querySelectorAll(".tcol.drop").forEach(function (c) { c.classList.remove("drop"); });
       els.board.querySelectorAll(".nest-target, .before-target").forEach(function (c) { c.classList.remove("nest-target", "before-target"); });
+      els.board.querySelectorAll(".drop-group").forEach(function (c) { c.classList.remove("drop-group"); });
     });
     return el;
   }

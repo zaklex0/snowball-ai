@@ -1017,6 +1017,20 @@ class Store {
   }
 
   // A new task (no id or an unknown one) lands at the bottom of its column; a known one changes (only the fields given).
+  moveTaskChildrenGroup(task, prev, now) {
+    if (!prev || task.groupId === prev.groupId) return;
+    const moved = new Set([task.id]);
+    let added = true;
+    while (added) {
+      added = false;
+      this.tasks.forEach(child => {
+        if (!moved.has(child.id) && moved.has(child.parentId) && child.groupId === prev.groupId) {
+          child.groupId = task.groupId; child.updatedAt = now;
+          moved.add(child.id); added = true;
+        }
+      });
+    }
+  }
   // Moving to another column without an order puts it at the bottom there.
   // Statistics: a new task, a move to another column, every new subtask and every subtask ticked off count as actions.
   // Edits, deleting, a move inside the column and taking a tick back (out of «Готово» too) do not.
@@ -1059,6 +1073,9 @@ class Store {
       if (!task) throw Object.assign(new Error('bad task'), { userMessage: 'Напишите, что нужно сделать.' });
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task;
       else { if (this.findTask(task.id)) task.id = newId('t'); this.tasks.push(task); }
+      // A category belongs to the nested task tree. Keep children with the moved task,
+      // while preserving children that were explicitly assigned a different category.
+      this.moveTaskChildrenGroup(task, prev, now);
       await this.writeTasks();
       let n = !prev || (moved && prev.status !== 'done') ? 1 : 0;
       const before = new Map((prev ? prev.subtasks : []).map((s) => [s.id, s]));
@@ -1126,6 +1143,7 @@ class Store {
       if (!task) return null;
       const prev = this.findTask(task.id);
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task; else this.tasks.push(task);
+      this.moveTaskChildrenGroup(task, prev, Date.now());
       await this.writeTasks();
       return task;
     });

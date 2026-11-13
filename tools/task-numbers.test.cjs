@@ -44,6 +44,20 @@ test('archive numbers are separate from active done tasks', async t => {
   assert.equal(s.findTaskByNumber(1, 'done').id, b.id); assert.equal(s.findTaskByNumber(1, 'done', true).id, a.id);
   await s.unarchive([a.id]); assert.deepEqual(s.tasksView().map(t => t.number), [1, 2]);
 });
+test('moving an ungrouped parent into a category keeps nested tasks and their details with it', async t => {
+  const s = await setup(t), g = await s.addTaskGroup('YouTube');
+  const parent = await s.saveTask({ title: 'Проект' }), child = await s.saveTask({ title: 'Монтаж', note: 'Не потерять', subtasks: [{ title: 'Черновик', done: true }] });
+  await s.saveTask({ id: child.id, parentId: parent.id });
+  await s.saveTask({ id: parent.id, groupId: g.id });
+  const moved = s.findTask(child.id);
+  assert.equal(moved.parentId, parent.id); assert.equal(moved.groupId, g.id);
+  assert.equal(moved.note, child.note); assert.deepEqual(moved.subtasks, child.subtasks);
+  assert.equal(s.taskNumber(child.id), '1.1');
+  assert.equal((await new Store(s.dir).init()).findTask(child.id).groupId, g.id);
+  await s.putTask(parent);
+  assert.equal(s.findTask(child.id).groupId, '', 'Undo restores the child category with its parent');
+  assert.equal(s.findTask(child.id).note, child.note);
+});
 test('failed writes publish no partial task or group state', async t => {
   const s = await setup(t), a = await s.saveTask({ title: 'Сохранённая' }), before = await fs.readFile(s.tasksPath, 'utf8'), rename = fs.rename;
   fs.rename = async (from, to) => { if (to === s.tasksPath) throw Object.assign(new Error('disk full'), { code: 'ENOSPC' }); return rename(from, to); };

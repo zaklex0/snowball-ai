@@ -1405,6 +1405,7 @@ h1 .brand { color: var(--accent-strong); }
 .tchk.numbered.big { width: 24px; height: 24px; }
 .tchk.numbered canvas { display: block; }
 .task-group { margin-top: 12px; }
+.task-group.drop-group { outline: 2px dashed var(--accent-strong); outline-offset: 4px; border-radius: 6px; }
 .task-group > .task { margin-top: 7px; }
 .task-group-head { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-bottom: 5px; }
 .task-group-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
