@@ -4332,7 +4332,14 @@
     return g ? g.name : id ? "Подгруппа" : "Без подгруппы";
   }
   function taskColumnGroups(status, all) {
-    var groups = state.taskGroups.filter(function (g) { return status === "todo" || all.some(function (t) { return t.status === status && t.groupId === g.id; }); });
+    var groups = state.taskGroups.filter(function (g) {
+      if (all.some(function (t) { return t.status === status && t.groupId === g.id; })) return true;
+      if (status !== "todo") return false;
+      // Keep new empty groups available, but hide finished groups from «Предстоит».
+      // Include archived tasks so archiving the last done task cannot bring an empty group back.
+      var tasks = state.tasks.filter(function (t) { return t.groupId === g.id; });
+      return !tasks.length || tasks.some(function (t) { return t.status !== "done"; });
+    });
     all.forEach(function (t) { if (t.status === status && t.groupId && !groups.some(function (g) { return g.id === t.groupId; })) groups = groups.concat([{ id: t.groupId, name: "Подгруппа" }]); });
     if (!state.taskGroups.length || all.some(function (t) { return t.status === status && !t.groupId; })) groups = groups.concat([{ id: "", name: "Без подгруппы" }]);
     return groups;

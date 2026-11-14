@@ -396,8 +396,8 @@ function normalizeTask(t, fallbackTime) {
     doneFrom: status === 'done' && t.doneFrom !== 'done' && isTaskStatus(t.doneFrom) ? t.doneFrom : '',
     // When it was ticked off (tasks done in older versions get the time of their last change) and when it went
     // to the archive. Both only for a task in «Готово»: taking it out of there clears them.
-    // The first time it left «Предстоит» for work (kept when it goes back; a task in work from an older version gets
-    // the time of its last change; one done straight from «Предстоит» has none).
+    // The latest entry into «В процессе»; moves update it, while loading and edits preserve it.
+    // Older tasks in work fall back to their last change; one done straight from «Предстоит» has none.
     startedAt: num(t.startedAt) || (status !== 'todo' && status !== 'done' ? num(t.updatedAt) || now : 0),
     doneAt: status === 'done' ? num(t.doneAt) || num(t.updatedAt) || now : 0,
     archivedAt: status === 'done' ? num(t.archivedAt) : 0,
@@ -1017,7 +1017,7 @@ class Store {
   }
 
   // A new task (no id or an unknown one) lands at the bottom of its column; a known one changes (only the fields given).
-  moveTaskChildren(task, prev, now) {
+  moveTaskChildren(task, prev, now, restartStartedAt = true) {
     if (!prev) return;
     // Follow each field independently: a completed child keeps its status, while
     // children in the parent's old column travel with it through every nesting level.
@@ -1033,7 +1033,7 @@ class Store {
           if (field === 'status') {
             merged.archivedAt = 0;
             if (task.status === 'done') { merged.doneFrom = child.status; merged.doneAt = now; }
-            if (!['todo', 'done'].includes(task.status) && !merged.startedAt) merged.startedAt = now;
+            if (!['todo', 'done'].includes(task.status) && ((restartStartedAt && task.status === 'doing') || !merged.startedAt)) merged.startedAt = now;
           }
           this.tasks[index] = normalizeTask(merged);
           moved.add(child.id); added = true;
@@ -1078,7 +1078,7 @@ class Store {
       }
       if (moved && merged.status === 'done' && input.doneFrom === undefined) merged.doneFrom = prev.status;
       if ((!prev || moved) && merged.status === 'done' && input.doneAt === undefined) { merged.doneAt = now; merged.archivedAt = 0; }
-      if ((!prev || moved) && !['todo', 'done'].includes(merged.status || 'todo') && !num(merged.startedAt)) merged.startedAt = now;
+      if ((!prev || moved) && !['todo', 'done'].includes(merged.status || 'todo') && ((moved && merged.status === 'doing') || !num(merged.startedAt))) merged.startedAt = now;
       const task = this.fitColumn(normalizeTask(merged));
       if (!task) throw Object.assign(new Error('bad task'), { userMessage: 'Напишите, что нужно сделать.' });
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task;
@@ -1127,7 +1127,7 @@ class Store {
           merged.status = status; merged.archivedAt = 0;
           merged.order = Math.max(now, ...this.tasks.filter(t => t.status === status).map(t => t.order)) + 1;
           if (status === 'done') { merged.doneFrom = prev.status; merged.doneAt = now; }
-          if (!['todo', 'done'].includes(status) && !merged.startedAt) merged.startedAt = now;
+          if (!['todo', 'done'].includes(status) && (status === 'doing' || !merged.startedAt)) merged.startedAt = now;
           if (prev.status !== 'done') count++;
         }
         const task = this.fitColumn(normalizeTask(merged));
@@ -1194,7 +1194,8 @@ class Store {
       if (!task) return null;
       const prev = this.findTask(task.id);
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task; else this.tasks.push(task);
-      this.moveTaskChildren(task, prev, Date.now());
+      // Restoring a saved version is an undo, not a fresh start of work.
+      this.moveTaskChildren(task, prev, Date.now(), false);
       await this.writeTasks();
       return task;
     });

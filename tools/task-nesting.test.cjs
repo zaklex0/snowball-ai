@@ -13,6 +13,39 @@ async function setup(t) {
 }
 
 for (const method of ['saveTask', 'moveTasks']) {
+  test(method + ': returning to doing restarts the timeline for the task and its nested tree', async t => {
+    const store = await setup(t);
+    let now = Date.now();
+    t.mock.method(Date, 'now', () => now);
+    const parent = await store.saveTask({ title: 'Parent' });
+    const child = await store.saveTask({ title: 'Child', parentId: '' });
+    const grandchild = await store.saveTask({ title: 'Grandchild' });
+    await store.saveTask({ id: child.id, parentId: parent.id });
+    await store.saveTask({ id: grandchild.id, parentId: child.id });
+    const waiting = await store.addColumn('Отложено');
+    const move = status => method === 'saveTask' ? store.saveTask({ id: parent.id, status }) : store.moveTasks([parent.id], { status });
+    const ids = [parent.id, child.id, grandchild.id];
+    for (const source of ['todo', waiting.id, 'done', 'todo']) {
+      now += 60e3;
+      await move(source);
+      const before = structuredClone(store.tasks);
+      now += 60e3;
+      await move('doing');
+      for (const id of ids) assert.equal(store.findTask(id).startedAt, now);
+      const startedAt = now;
+      now += 60e3;
+      await store.saveTask({ id: parent.id, note: 'An edit must not restart work' });
+      await move('doing');
+      for (const id of ids) assert.equal(store.findTask(id).startedAt, startedAt);
+      const restarted = await new Store(store.dir).init();
+      for (const id of ids) assert.equal(restarted.findTask(id).startedAt, startedAt);
+      const after = structuredClone(store.tasks);
+      await store.restoreTaskChanges([before.map(task => ({ id: task.id, before: task, after: after.find(x => x.id === task.id) }))]);
+      for (const task of before) assert.deepEqual(store.findTask(task.id), task);
+      await move('doing');
+    }
+  });
+
   test(method + ': moving a parent moves its nested tree without exposing old-column cards', async t => {
     const store = await setup(t);
     const parent = await store.saveTask({ title: 'Parent' });
@@ -55,6 +88,25 @@ for (const method of ['saveTask', 'moveTasks']) {
     }
   });
 }
+
+test('restoring a saved parent preserves start times instead of restarting nested tasks', async t => {
+  const store = await setup(t);
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  const parent = await store.saveTask({ title: 'Parent' });
+  const child = await store.saveTask({ title: 'Child' });
+  await store.saveTask({ id: child.id, parentId: parent.id });
+  now += 60e3;
+  const working = await store.saveTask({ id: parent.id, status: 'doing' });
+  const startedAt = now;
+  now += 60e3;
+  await store.saveTask({ id: parent.id, status: 'todo' });
+  now += 60e3;
+  await store.putTask(working);
+  assert.deepEqual(store.findTask(parent.id), working);
+  assert.equal(store.findTask(child.id).status, 'doing');
+  assert.equal(store.findTask(child.id).startedAt, startedAt);
+});
 
 test('nesting preserves task details, survives restart and cloud transfer, and can be reversed', async t => {
   const store = await setup(t), other = await setup(t);
