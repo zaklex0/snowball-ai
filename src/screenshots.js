@@ -58,6 +58,25 @@
     return { r, pad, size: low, lines: wrappedText(o.text || '', low, w), lineHeight: low * 1.25 };
   }
   const ERASER_SCALE = 3;
+  const LAYER_NAMES = { pen: 'Перо', marker: 'Маркер', eraser: 'Ластик', rect: 'Рамка', focus: 'Подсветка', text: 'Текст' };
+  function layerBounds(o) {
+    if (!o.points) return bounds(o);
+    const xs = o.points.map((p) => p.x), ys = o.points.map((p) => p.y);
+    return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+  }
+  function hitLayer(o, p, tolerance) {
+    const r = layerBounds(o);
+    const stroke = o.width * (o.type === 'marker' ? 5 : o.type === 'eraser' ? ERASER_SCALE : 1);
+    const t = tolerance + stroke / 2;
+    if (p.x < r.x - t || p.x > r.x + r.w + t || p.y < r.y - t || p.y > r.y + r.h + t) return false;
+    if (!o.points) return o.type !== 'rect' ||
+      Math.min(Math.abs(p.x - r.x), Math.abs(p.x - r.x - r.w), Math.abs(p.y - r.y), Math.abs(p.y - r.y - r.h)) <= t;
+    return o.points.some((b, i) => {
+      const a = o.points[Math.max(0, i - 1)], dx = b.x - a.x, dy = b.y - a.y;
+      const at = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.hypot(p.x - a.x - at * dx, p.y - a.y - at * dy) <= t;
+    });
+  }
   function drawOp(g, o) {
     g.save();
     g.strokeStyle = o.color;
@@ -80,8 +99,9 @@
       o.points.slice(1).forEach((p) => g.lineTo(p.x, p.y));
       if (o.points.length === 1) g.lineTo(o.points[0].x + 0.1, o.points[0].y);
       g.stroke();
-    } else if (o.type === 'rect') {
+    } else if (o.type === 'rect' || o.type === 'focus') {
       const r = bounds(o);
+      if (o.type === 'focus') g.lineWidth = 2;
       g.strokeRect(r.x, r.y, r.w, r.h);
     } else if (o.type === 'text') {
       if (o.text === undefined) {
@@ -105,6 +125,7 @@
   }
   // One renderer is shared by the canvas, history thumbnails and clipboard export.
   function paint(g, source, ops, softness, crop = null) {
+    ops = ops.filter((o) => !o.hidden);
     const w = source.width,
       h = source.height,
       focus = ops.filter((o) => o.type === 'focus');
@@ -124,9 +145,6 @@
         g.drawImage(source, r.x, r.y, r.w, r.h, r.x, r.y, r.w, r.h);
         g.fillStyle = 'rgba(255,231,140,.12)';
         g.fillRect(r.x, r.y, r.w, r.h);
-        g.strokeStyle = o.color;
-        g.lineWidth = 2;
-        g.strokeRect(r.x, r.y, r.w, r.h);
       });
     }
     if (ops.some((o) => o.type === 'eraser')) {
@@ -200,6 +218,7 @@
         <div class="shot-work">
           <div class="shot-bar">
           <div class="shot-tools" role="toolbar" aria-label="Инструменты редактора">
+            <button data-tool="select" aria-pressed="false" title="Выбрать и переместить слой">Выбрать</button>
             <button data-tool="pen" aria-pressed="true">Перо</button>
             <button data-tool="marker" aria-pressed="false">Маркер</button>
             <button data-tool="eraser" aria-pressed="false" title="Стереть пометки (картинка остаётся)">Ластик</button>
@@ -259,6 +278,7 @@
             <button data-action="export" class="primary">Сохранить как</button>
           </div>
           </div>
+          <div class="shot-editor-body">
           <div class="shot-stage">
             <p class="shot-empty">
               <span class="shot-empty-key">Нажмите «Снять область».</span>
@@ -267,6 +287,25 @@
             </p>
             <canvas hidden aria-label="Снимок: рисуйте выбранным инструментом"></canvas>
             <div class="shot-brush-preview" hidden aria-hidden="true"></div>
+          </div>
+          <aside class="shot-layers" aria-label="Слои снимка">
+            <div class="shot-layer-head"><strong>Слои <span class="shot-layer-count">0</span></strong><p class="shot-layer-image"></p></div>
+            <div class="shot-layer-list" role="group" aria-label="Пометки снимка"></div>
+            <p class="shot-layer-original">▧ Исходное изображение · 🔒</p>
+            <div class="shot-layer-properties">
+              <strong class="shot-layer-title">Выберите слой</strong>
+              <p class="shot-layer-hint">Нажмите на пометку в списке или выберите её на снимке инструментом «Выбрать».</p>
+              <div class="shot-layer-fields" hidden>
+                <label class="shot-layer-text-label" hidden>Текст<textarea class="shot-layer-text" maxlength="2000" rows="3"></textarea></label>
+                <label>Цвет<input class="shot-layer-color" type="color" /></label>
+                <label class="shot-layer-width-label">Толщина<input class="shot-layer-width" type="range" min="1" max="50" /><output class="shot-layer-width-out"></output></label>
+                <label class="shot-layer-pressure-label" hidden>Нажим<input class="shot-layer-pressure" type="range" min="10" max="100" /><output class="shot-layer-pressure-out"></output></label>
+                <label class="shot-layer-blur-label" hidden title="Общий блюр фона для всех областей подсветки">Блюр фона<input class="shot-layer-blur" type="range" min="0" max="40" /><output class="shot-layer-blur-out"></output></label>
+                <div class="shot-layer-order"><button data-layer-action="up">↑ Выше</button><button data-layer-action="down">↓ Ниже</button></div>
+                <button class="shot-layer-remove" data-layer-action="remove">Удалить слой</button>
+              </div>
+            </div>
+          </aside>
           </div>
           <div class="shot-recovery" hidden>
             <button class="shot-recover">Сохранить снимок с пометками как файл…</button>
@@ -316,6 +355,7 @@
       previewPoint = { x: 0.5, y: 0.5 },
       overCanvas = false,
       sizing = null;
+    let selectedNumber = null, moving = null, layerListKey = '';
     let timer = null,
       loading = 0,
       opening = false,
@@ -415,6 +455,94 @@
       $('.shot-status').title = view.width + ' × ' + view.height;
       fitCanvas();
     }
+    const selectedLayer = () => current?.ops.find((o) => o.number === selectedNumber);
+    // History contains complete edit states: moving, hiding and changing a layer can all be undone.
+    const snapshot = () => structuredClone({ ops: current.ops, crop: current.crop, blur: current.blur, selectedNumber });
+    function remember() {
+      if (!current) return;
+      current.undo.push(snapshot());
+      if (current.undo.length > 60) current.undo.shift();
+      current.redo = [];
+    }
+    function addLayer(op) {
+      remember();
+      op.number = current.nextLayerNumber++;
+      op.hidden = false;
+      current.ops.push(op);
+      selectedNumber = op.number;
+      dirty();
+    }
+    function selectLayer(number) {
+      finishText();
+      selectedNumber = number;
+      tool = 'select';
+      cropSelection = null;
+      root.querySelectorAll('[data-tool]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tool === tool)));
+      render();
+      $('.shot-layer-list [data-layer-pick="' + number + '"]')?.scrollIntoView({ block: 'nearest' });
+    }
+    function renderLayers() {
+      const ops = current?.ops || [], selected = selectedLayer();
+      $('.shot-layer-count').textContent = ops.length;
+      $('.shot-layer-image').textContent = current?.name || 'Откройте или сделайте снимок';
+      const key = JSON.stringify([current?.id, selectedNumber, ops.map((o) => [o.number, o.type, o.hidden, o.color, o.text])]);
+      if (key !== layerListKey) {
+        layerListKey = key;
+        const list = $('.shot-layer-list'), scroll = list.scrollTop;
+        list.replaceChildren();
+        for (const o of [...ops].reverse()) {
+          const row = document.createElement('div');
+          row.className = 'shot-layer' + (o === selected ? ' selected' : '') + (o.hidden ? ' is-hidden' : '');
+          const eye = document.createElement('button');
+          eye.className = 'shot-layer-eye';
+          eye.dataset.layerEye = o.number;
+          eye.textContent = o.hidden ? '○' : '◉';
+          eye.title = (o.hidden ? 'Показать' : 'Скрыть') + ' слой № ' + o.number;
+          eye.setAttribute('aria-label', eye.title);
+          eye.setAttribute('aria-pressed', String(!o.hidden));
+          const pick = document.createElement('button');
+          pick.className = 'shot-layer-pick';
+          pick.dataset.layerPick = o.number;
+          pick.setAttribute('aria-pressed', String(o === selected));
+          const swatch = document.createElement('span');
+          swatch.className = 'shot-layer-swatch';
+          swatch.style.backgroundColor = o.type === 'eraser' ? 'transparent' : o.color;
+          const label = document.createElement('span');
+          label.textContent = '№ ' + o.number + ' · ' + (o.type === 'text' ? o.text || 'Текст' : LAYER_NAMES[o.type]);
+          pick.title = label.textContent;
+          pick.append(swatch, label);
+          row.append(eye, pick);
+          list.append(row);
+        }
+        if (!ops.length) {
+          const empty = document.createElement('p');
+          empty.className = 'shot-layer-empty';
+          empty.textContent = 'Каждая новая пометка появится здесь отдельным слоем.';
+          list.append(empty);
+        }
+        list.scrollTop = scroll;
+      }
+      $('.shot-layer-fields').hidden = !selected;
+      $('.shot-layer-hint').hidden = !!selected;
+      $('.shot-layer-title').textContent = selected ? 'Слой № ' + selected.number + (selected.hidden ? ' · скрыт' : '') : 'Выберите слой';
+      if (!selected) return;
+      for (const [field, value] of [['color', selected.color], ['width', selected.width], ['pressure', selected.pressure], ['text', selected.text || '']]) {
+        const input = $('.shot-layer-' + field);
+        if (document.activeElement !== input) input.value = value;
+      }
+      $('.shot-layer-text-label').hidden = selected.type !== 'text';
+      $('.shot-layer-width-label').hidden = ['text', 'focus'].includes(selected.type);
+      $('.shot-layer-color').disabled = selected.type === 'eraser';
+      $('.shot-layer-pressure-label').hidden = selected.type !== 'marker';
+      $('.shot-layer-blur-label').hidden = selected.type !== 'focus';
+      if (document.activeElement !== $('.shot-layer-blur')) $('.shot-layer-blur').value = current.blur;
+      $('.shot-layer-blur-out').textContent = current.blur + '%';
+      $('.shot-layer-width-out').textContent = selected.width;
+      $('.shot-layer-pressure-out').textContent = selected.pressure + '%';
+      const index = ops.indexOf(selected);
+      $('[data-layer-action="up"]').disabled = index === ops.length - 1;
+      $('[data-layer-action="down"]').disabled = index === 0;
+    }
     function render() {
       canvas.hidden = !current;
       $('.shot-empty').hidden = !!current;
@@ -422,14 +550,28 @@
         paint(
           ctx,
           current.image,
-          drawing && drawing.type !== 'crop' ? current.ops.concat(drawing) : current.ops,
+          moving ? current.ops.map((o) => o.number === selectedNumber ? moving.op : o) :
+            drawing && drawing.type !== 'crop' ? current.ops.concat(drawing) : current.ops,
           current.blur,
           current.crop,
         );
         const selection = drawing?.type === 'crop' ? drawing : cropSelection;
         if (selection) cropOverlay(ctx, selection, viewOf(current));
+        const selected = moving?.op || selectedLayer();
+        if (tool === 'select' && selected && !selected.hidden) {
+          const r = layerBounds(selected), view = viewOf(current);
+          const scale = canvas.getBoundingClientRect().width / canvas.width || 1, pad = 4 / scale;
+          ctx.save();
+          ctx.lineWidth = 1 / scale;
+          ctx.strokeStyle = '#ffffff';
+          ctx.strokeRect(r.x - view.x - pad, r.y - view.y - pad, r.w + pad * 2, r.h + pad * 2);
+          ctx.strokeStyle = '#285dce';
+          ctx.setLineDash([5 / scale, 4 / scale]);
+          ctx.strokeRect(r.x - view.x - pad, r.y - view.y - pad, r.w + pad * 2, r.h + pad * 2);
+          ctx.restore();
+        }
       }
-      $('[data-action="undo"]').disabled = !current?.ops.length;
+      $('[data-action="undo"]').disabled = !current || (!current.undo.length && !current.ops.length);
       $('[data-action="redo"]').disabled = !current?.redo.length;
       $('[data-action="copy"]').disabled = !current;
       $('[data-action="export"]').disabled = !current;
@@ -438,6 +580,8 @@
       $('[data-action="reset-crop"]').hidden = !current?.crop;
       $('.shot-pressure-label').hidden = tool !== 'marker';
       $('.shot-blur-label').hidden = tool !== 'focus';
+      canvas.style.cursor = tool === 'select' ? moving ? 'grabbing' : 'default' : 'crosshair';
+      renderLayers();
       updateBrushPreview();
       for (const [id, card] of cards) card.classList.toggle('active', id === current?.id);
     }
@@ -477,6 +621,7 @@
             await api.captureSave(s.id, s.token, {
               revision: s.revision,
               ops: s.ops,
+              nextLayerNumber: s.nextLayerNumber,
               blur: s.blur,
               crop: s.crop,
               thumb,
@@ -525,9 +670,7 @@
       textEdit = null;
       if (!cancel && area.value.trim()) {
         op.text = area.value;
-        current.ops.push(op);
-        current.redo = [];
-        dirty();
+        addLayer(op);
       }
       area.remove();
       render();
@@ -565,6 +708,7 @@
     async function flush() {
       try {
         finishText();
+        finishMove();
         clearTimeout(timer);
         if (drawing) {
           drawing = null;
@@ -587,7 +731,9 @@
         const image = await loadImage(item.url);
         await document.fonts.ready;
         if (seq !== loading || t !== token) return;
-        current = { ...item, image, token: t, redo: [], generation: 0, saved: 0, pending: null };
+        current = { ...item, image, token: t, undo: [], redo: [], generation: 0, saved: 0, pending: null };
+        selectedNumber = null;
+        moving = null;
         cropSelection = null;
         sizeCanvas(current);
         $('.shot-blur').value = item.blur;
@@ -646,7 +792,7 @@
           card.dataset.id = s.id;
           const button = document.createElement('button');
           button.className = 'shot-open';
-          button.innerHTML = '<img alt=""><span></span>';
+          button.innerHTML = '<img alt=""><span></span><small class="shot-card-layers"></small>';
           button.addEventListener('click', () => run(() => open(s.id)));
           card.append(button);
           const copy = document.createElement('button');
@@ -698,6 +844,7 @@
         const img = card.querySelector('img');
         if (img.getAttribute('src') !== s.thumb) img.src = s.thumb;
         card.querySelector('span').textContent = s.name;
+        card.querySelector('.shot-card-layers').textContent = s.layerCount ? 'Слоёв: ' + s.layerCount : '';
         const before = $('.shot-list').children[index++];
         if (before !== card) $('.shot-list').insertBefore(card, before || null);
       }
@@ -747,10 +894,32 @@
         y: view.y + Math.max(0, Math.min(canvas.height, ((e.clientY - r.top) * canvas.height) / r.height)),
       };
     };
+    function finishMove(cancel = false) {
+      if (!moving) return;
+      const move = moving;
+      moving = null;
+      if (!cancel && move.changed && current) {
+        remember();
+        const index = current.ops.findIndex((o) => o.number === selectedNumber);
+        if (index >= 0) current.ops[index] = move.op;
+        dirty();
+      }
+      render();
+    }
     canvas.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || !current || opening) return;
       moveBrushPreview(e);
       finishText();
+      if (tool === 'select') {
+        const p = point(e), tolerance = 6 * canvas.width / canvas.getBoundingClientRect().width;
+        const op = [...current.ops].reverse().find((o) => !o.hidden && hitLayer(o, p, tolerance));
+        selectedNumber = op?.number ?? null;
+        moving = op ? { start: p, original: structuredClone(op), op: structuredClone(op), changed: false } : null;
+        if (moving) canvas.setPointerCapture(e.pointerId);
+        e.preventDefault();
+        render();
+        return;
+      }
       if (tool !== 'crop' && current.ops.length >= 1500) {
         status('На снимке уже много пометок. Скопируйте результат и начните новый снимок.', true);
         return;
@@ -779,6 +948,16 @@
     canvas.addEventListener('pointermove', (e) => {
       overCanvas = true;
       moveBrushPreview(e);
+      if (moving) {
+        const p = point(e), o = moving.original, r = layerBounds(o);
+        const dx = Math.max(-r.x, Math.min(current.width - r.x - r.w, p.x - moving.start.x));
+        const dy = Math.max(-r.y, Math.min(current.height - r.y - r.h, p.y - moving.start.y));
+        const translate = (q) => ({ x: q.x + dx, y: q.y + dy });
+        moving.op = { ...o, ...(o.points ? { points: o.points.map(translate) } : { a: translate(o.a), b: translate(o.b) }) };
+        moving.changed = dx !== 0 || dy !== 0;
+        render();
+        return;
+      }
       if (!drawing) return;
       const p = point(e);
       if (drawing.points) {
@@ -787,6 +966,11 @@
       render();
     });
     canvas.addEventListener('pointerup', (e) => {
+      if (moving && e.button === 0) {
+        finishMove();
+        if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+        return;
+      }
       if (!drawing || e.button !== 0) return;
       const op = drawing;
       drawing = null;
@@ -799,14 +983,13 @@
       } else if (op.type === 'text') beginText(op);
       else {
         if (op.points || (bounds(op).w > 1 && bounds(op).h > 1)) {
-          current.ops.push(op);
-          current.redo = [];
-          dirty();
+          addLayer(op);
         }
       }
       render();
     });
     canvas.addEventListener('pointercancel', () => {
+      finishMove(true);
       drawing = null;
       render();
     });
@@ -814,6 +997,7 @@
       b.addEventListener('click', () => {
         finishText();
         tool = b.dataset.tool;
+        if (tool !== 'select') selectedNumber = null;
         if (tool !== 'crop') cropSelection = null;
         root
           .querySelectorAll('[data-tool]')
@@ -822,7 +1006,9 @@
         // Choosing the pen or the marker shows its size for a moment; other tools have no circle.
         if (tool === 'pen' || tool === 'marker' || tool === 'eraser') showSizing();
         status(
-          tool === 'text'
+          tool === 'select'
+            ? 'Выберите пометку на снимке или в списке справа. Потяните, чтобы переместить.'
+          : tool === 'text'
             ? 'Выделите прямоугольник и введите текст — буквы подстроятся под его размер.'
             : tool === 'crop'
               ? 'Выделите область, которую хотите оставить на снимке.'
@@ -836,6 +1022,7 @@
     );
     async function changeCrop(next) {
       if (!current || !(await flush())) return;
+      remember();
       current.crop = next;
       cropSelection = null;
       sizeCanvas(current);
@@ -878,14 +1065,65 @@
       $('.shot-pressure-out').textContent = pressure + '%';
       showSizing();
     });
-    $('.shot-blur').addEventListener('input', (e) => {
-      $('.shot-blur-out').textContent = e.target.value + '%';
-      if (current) {
-        current.blur = +e.target.value;
-        render();
+    let blurEditing = false;
+    for (const input of [$('.shot-blur'), $('.shot-layer-blur')]) {
+      input.addEventListener('change', () => { blurEditing = false; });
+      input.addEventListener('blur', () => { blurEditing = false; });
+      input.addEventListener('input', (e) => {
+        if (current) {
+          if (!blurEditing) { remember(); blurEditing = true; }
+          current.blur = +e.target.value;
+          $('.shot-blur').value = current.blur;
+          $('.shot-blur-out').textContent = current.blur + '%';
+          render();
+          dirty();
+        }
+      });
+    }
+    $('.shot-layer-list').addEventListener('click', (e) => {
+      const pick = e.target.closest('[data-layer-pick]'), eye = e.target.closest('[data-layer-eye]');
+      if (pick) selectLayer(+pick.dataset.layerPick);
+      if (eye) {
+        selectLayer(+eye.dataset.layerEye);
+        const layer = selectedLayer();
+        if (!layer) return;
+        remember();
+        layer.hidden = !layer.hidden;
         dirty();
+        render();
       }
     });
+    function layerAction(action) {
+      finishText();
+      const layer = selectedLayer();
+      if (!layer) return;
+      const i = current.ops.indexOf(layer), j = i + (action === 'up' ? 1 : -1);
+      if (action !== 'remove' && (j < 0 || j >= current.ops.length)) return;
+      remember();
+      if (action === 'remove') {
+        current.ops.splice(i, 1);
+        selectedNumber = current.ops[Math.min(i, current.ops.length - 1)]?.number ?? null;
+      } else [current.ops[i], current.ops[j]] = [current.ops[j], current.ops[i]];
+      dirty();
+      render();
+    }
+    root.querySelectorAll('[data-layer-action]').forEach((b) =>
+      b.addEventListener('click', () => layerAction(b.dataset.layerAction)),
+    );
+    for (const field of ['color', 'width', 'pressure', 'text']) {
+      const input = $('.shot-layer-' + field);
+      let editing = null;
+      input.addEventListener('blur', () => { editing = null; });
+      if (field !== 'text') input.addEventListener('change', () => { editing = null; });
+      input.addEventListener('input', () => {
+        const layer = selectedLayer();
+        if (!layer) return;
+        if (editing !== layer.number) { remember(); editing = layer.number; }
+        layer[field] = field === 'width' || field === 'pressure' ? +input.value : input.value;
+        dirty();
+        render();
+      });
+    }
     window.SnowShortcut.mount($('.shot-key'), api);
     // Two small pop-ups: «Клавиши» (change the shortcut) and «?» (capture tips and the guide).
     // They close on a click elsewhere and on Esc, but not while a new shortcut is being pressed.
@@ -913,11 +1151,28 @@
     root.querySelectorAll('.shot-help-pop [data-guide]').forEach((b) => b.addEventListener('click', () => closePops()));
     function undo(redo) {
       finishText();
+      finishMove(true);
       if (!current) return;
-      const from = redo ? current.redo : current.ops,
-        to = redo ? current.ops : current.redo;
+      const from = redo ? current.redo : current.undo,
+        to = redo ? current.undo : current.redo;
       if (from.length) {
-        to.push(from.pop());
+        to.push(snapshot());
+        const state = from.pop();
+        current.ops = state.ops;
+        current.crop = state.crop;
+        current.blur = state.blur;
+        selectedNumber = state.selectedNumber;
+        cropSelection = null;
+        $('.shot-blur').value = current.blur;
+        $('.shot-blur-out').textContent = current.blur + '%';
+        sizeCanvas(current);
+        dirty();
+        render();
+      } else if (!redo && current.ops.length) {
+        // Old saved screenshots also allow removing their last mark one by one.
+        current.redo.push(snapshot());
+        current.ops.pop();
+        selectedNumber = null;
         dirty();
         render();
       }
@@ -997,6 +1252,16 @@
     );
     root.addEventListener('keydown', (e) => {
       if (e.target.matches('textarea,input,select')) return;
+      if (e.key === 'Escape' && tool === 'select') {
+        finishMove(true);
+        selectedNumber = null;
+        render();
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && tool === 'select' && selectedLayer()) {
+        e.preventDefault();
+        e.stopPropagation();
+        layerAction('remove');
+      }
       if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
         e.preventDefault();
         e.stopPropagation();

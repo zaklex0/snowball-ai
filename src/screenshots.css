@@ -337,6 +337,7 @@
   display: block;
 }
 .capture-app .shot-work {
+  container: shot-editor / inline-size;
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -422,6 +423,66 @@
   padding: 8px;
   background: var(--bg);
   min-height: 260px;
+}
+/* The toolbar spans the editor; every screenshot has its own layer panel on the right. */
+.capture-app .shot-editor-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 225px;
+  flex: 1;
+  min-height: 0;
+}
+.capture-app .shot-layers {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12px;
+}
+.capture-app .shot-layer-head { padding: 13px 12px 8px; }
+.capture-app .shot-layer-count { margin-left: 5px; color: var(--ink-soft); font-weight: 400; }
+.capture-app .shot-layer-image { margin: 5px 0 0; color: var(--ink-soft); overflow-wrap: anywhere; font-size: 11px; }
+.capture-app .shot-layer-list { flex: 1 1 100px; min-height: 90px; overflow: auto; padding: 5px; }
+.capture-app .shot-layer { display: flex; align-items: center; gap: 2px; border: 1px solid transparent; border-radius: 7px; margin-bottom: 3px; }
+.capture-app .shot-layer.selected { background: var(--surface-2); border-color: var(--accent-strong); }
+.capture-app .shot-layer.is-hidden .shot-layer-pick { opacity: .5; }
+.capture-app .shot-layer button { background: transparent; border: 0; padding: 7px 5px; border-radius: 5px; }
+.capture-app .shot-layer button:hover { background: var(--surface-2); }
+.capture-app .shot-layer-eye { flex: none; width: 30px; font-size: 17px; }
+.capture-app .shot-layer-pick { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; text-align: left; font-size: 12px; }
+.capture-app .shot-layer-pick span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.capture-app .shot-layer-swatch { width: 12px; height: 12px; flex: none; border-radius: 3px; border: 1px solid var(--line); }
+.capture-app .shot-layer-original { padding: 10px 12px; margin: 0; color: var(--ink-soft); border-top: 1px solid var(--line); font-size: 10px; }
+.capture-app .shot-layer-properties { padding: 12px; border-top: 1px solid var(--line); }
+.capture-app .shot-layer-fields { display: grid; gap: 10px; margin-top: 12px; }
+.capture-app .shot-layer-fields label { justify-content: space-between; font-size: 11px; gap: 5px; }
+.capture-app .shot-layer-fields input[type=range] { min-width: 0; width: 85px; }
+.capture-app .shot-layer-fields output { min-width: 25px; text-align: right; }
+.capture-app .shot-layer-fields .shot-layer-text-label { display: flex; flex-direction: column; align-items: stretch; gap: 6px; }
+.capture-app .shot-layer-text { width: 100%; min-height: 62px; resize: vertical; padding: 6px; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.capture-app .shot-layer-order { display: flex; gap: 5px; }
+.capture-app .shot-layer-order button { flex: 1; min-width: 0; font-size: 11px; padding: 6px; }
+.capture-app .shot-layer-remove { width: 100%; color: var(--danger); font-size: 12px; }
+.capture-app .shot-layer-hint, .capture-app .shot-layer-empty { margin: 9px 0 0; color: var(--ink-soft); line-height: 1.6; font-size: 11px; }
+.capture-app .shot-layer-empty { padding: 0 7px; }
+.capture-app .shot-card-layers { display: block; padding: 0 7px 4px; color: var(--ink-soft); font-size: 10px; }
+.capture-app .shot-card-layers:empty { display: none; }
+@media (max-width: 1100px) {
+  .capture-app .shot-layout { grid-template-columns: 145px minmax(0, 1fr); gap: 10px; }
+  .capture-app .shot-editor-body { grid-template-columns: minmax(0, 1fr) 195px; }
+  .capture-app .shot-layer-properties { padding: 9px; }
+  .capture-app .shot-layer-fields input[type=range] { width: 70px; }
+}
+@container shot-editor (max-width: 520px) {
+  .capture-app .shot-editor-body { display: flex; flex-direction: column; overflow: auto; }
+  .capture-app .shot-stage { flex: 1 0 180px; min-height: 180px; }
+  .capture-app .shot-layers { flex: 0 0 240px; border-left: 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .capture-app .shot-layer-head { grid-column: 1; }
+  .capture-app .shot-layer-list { grid-column: 1; min-height: 0; }
+  .capture-app .shot-layer-original { grid-column: 1; }
+  .capture-app .shot-layer-properties { grid-column: 2; grid-row: 1 / 4; border-left: 1px solid var(--line); border-top: 0; overflow: auto; }
 }
 .capture-app canvas {
   display: block;

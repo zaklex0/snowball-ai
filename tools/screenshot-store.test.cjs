@@ -14,7 +14,7 @@ test('immutable originals, atomic revisions, concurrent windows, restart, ZIP re
   const results = await Promise.allSettled([store.save(a.id, { revision: 0, ops, blur: 15 }), store.save(a.id, { revision: 0, ops: [], blur: 0 })]);
   assert.equal(results[0].status, 'fulfilled'); assert.equal(results[1].status, 'rejected');
   assert.deepEqual(await fs.readFile(path.join(store.folder(a.id), 'original.png')), png);
-  const reopened = new ScreenshotStore(dir); assert.deepEqual((await reopened.get(a.id)).ops, ops);
+  const reopened = new ScreenshotStore(dir); assert.deepEqual((await reopened.get(a.id)).ops, annotations(ops, 1, 1));
   const pack = await reopened.backupEntries(); assert.equal(pack.count, 2);
   const zip = path.join(dir, 'copy.snowball'), unpacked = path.join(dir, 'unpacked');
   await writeZip(zip, pack.entries); await extractZip(zip, unpacked);
@@ -22,6 +22,36 @@ test('immutable originals, atomic revisions, concurrent windows, restart, ZIP re
   await target.save(a.id, { revision: 1, ops: [], blur: 20 });
   assert.equal(await target.merge(path.join(unpacked, 'screenshots')), 0); assert.equal((await target.get(a.id)).blur, 20);
   assert.equal((await target.get(b.id)).width, 1);
+});
+
+test('layer numbers, visibility and allocation survive edits, restart, backup and restore', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-shot-layers-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = new ScreenshotStore(dir), added = await store.add(png);
+  const mark = (number, hidden = false) => ({ number, hidden, type: 'pen', color: '#123456', width: 4, points: [{ x: .5, y: .5 }] });
+  await store.save(added.id, { revision: 0, ops: [mark(9, true), mark(2)], blur: 15, nextLayerNumber: 10 });
+  let shot = await new ScreenshotStore(dir).get(added.id);
+  assert.deepEqual(shot.ops.map((o) => [o.number, o.hidden]), [[9, true], [2, false]]);
+  assert.equal(shot.nextLayerNumber, 10);
+  assert.equal((await store.list())[0].layerCount, 2);
+  // Deleting the highest number must not make the next layer reuse it.
+  await store.save(added.id, { revision: shot.revision, ops: [mark(2)], blur: 15 });
+  shot = await store.get(added.id);
+  assert.equal(shot.nextLayerNumber, 10);
+  await assert.rejects(store.save(added.id, { revision: 0, ops: [], blur: 0 }));
+  await store.save(added.id, { revision: shot.revision, ops: [mark(10, true), mark(2)], blur: 15 });
+  const pack = await store.backupEntries(), zip = path.join(dir, 'layers.snowball'), unpacked = path.join(dir, 'unpack');
+  await writeZip(zip, pack.entries); await extractZip(zip, unpacked);
+  const restored = new ScreenshotStore(path.join(dir, 'restored'));
+  await restored.merge(path.join(unpacked, 'screenshots'));
+  assert.deepEqual((await restored.get(added.id)).ops, (await store.get(added.id)).ops);
+  assert.equal((await restored.get(added.id)).nextLayerNumber, 11);
+  // Legacy marks receive stable numbers without rewriting the original image.
+  const legacy = annotations([mark(undefined), mark(undefined)], 1, 1);
+  assert.deepEqual(legacy.map((o) => o.number), [1, 2]);
+  assert.deepEqual(annotations(legacy, 1, 1), legacy);
+  const duplicates = annotations([mark(2), mark(2), mark(-1), mark(3)], 1, 1);
+  assert.equal(new Set(duplicates.map((o) => o.number)).size, 4);
 });
 test('untrusted dimensions, annotation limits and DPI independent crops', () => {
   assert.throws(() => pngSize(Buffer.from('hello')));

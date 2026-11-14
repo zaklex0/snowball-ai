@@ -39,12 +39,15 @@ function annotations(input, w, h) {
   if (!Array.isArray(input) || input.length > 1500)
     throw new Error('Слишком много пометок на одном снимке.');
   let points = 0;
+  const used = new Set();
+  let nextNumber = Math.max(0, ...input.map((o) =>
+    Number.isSafeInteger(o?.number) && o.number > 0 && o.number < 1000000000 ? o.number : 0)) + 1;
   const point = (p) => {
     if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y))
       throw new Error('Некорректная область пометки.');
     return { x: Math.max(0, Math.min(w, p.x)), y: Math.max(0, Math.min(h, p.y)) };
   };
-  return input.map((o) => {
+  return input.map((o, index) => {
     if (
       !o ||
       !['pen', 'marker', 'eraser', 'rect', 'focus', 'text'].includes(o.type) ||
@@ -52,11 +55,16 @@ function annotations(input, w, h) {
     )
       throw new Error('Некорректная пометка.');
     const r = {
+      number: Number.isSafeInteger(o.number) && o.number > 0 && o.number < 1000000000 && !used.has(o.number)
+        ? o.number : !used.has(index + 1) && !input.some((item) => item?.number === index + 1)
+          ? index + 1 : nextNumber++,
+      hidden: o.hidden === true,
       type: o.type,
       color: o.color,
       width: Math.max(1, Math.min(50, Number(o.width) || 5)),
       pressure: Math.max(10, Math.min(100, Number(o.pressure) || 35)),
     };
+    used.add(r.number);
     if (o.type === 'pen' || o.type === 'marker' || o.type === 'eraser') {
       if (!Array.isArray(o.points) || !o.points.length || (points += o.points.length) > 120000)
         throw new Error('Слишком длинный рисунок.');
@@ -85,6 +93,7 @@ function normalizeCrop(crop, width, height) {
 function normalize(m, id) {
   if (!m || !ID.test(id) || m.id !== id || !validSize(m.width, m.height))
     throw new Error('Повреждена запись снимка.');
+  const ops = annotations(m.ops || [], m.width, m.height);
   return {
     format: 'snowball-screenshot',
     version: 1,
@@ -97,7 +106,9 @@ function normalize(m, id) {
     revision: Math.max(0, Math.floor(Number(m.revision) || 0)),
     blur: Math.max(0, Math.min(40, Number(m.blur) || 0)),
     crop: normalizeCrop(m.crop, m.width, m.height),
-    ops: annotations(m.ops || [], m.width, m.height),
+    ops,
+    nextLayerNumber: Math.max(1, ...ops.map((o) => o.number + 1),
+      Number.isSafeInteger(m.nextLayerNumber) && m.nextLayerNumber < 1000000000 ? m.nextLayerNumber : 1),
     thumb:
       typeof m.thumb === 'string' &&
       m.thumb.length < 250000 &&
@@ -154,7 +165,7 @@ class ScreenshotStore {
         const stat = await fsp.stat(path.join(this.folder(id), 'original.png'));
         if (!stat.isFile()) throw new Error('Missing original');
         const { ops, ...summary } = m;
-        out.push(summary);
+        out.push({ ...summary, layerCount: ops.length });
       } catch (e) {
         broken++;
       }
@@ -218,6 +229,7 @@ class ScreenshotStore {
         {
           ...old,
           ops: input.ops,
+          nextLayerNumber: Math.max(old.nextLayerNumber, Number(input.nextLayerNumber) || 1),
           blur: input.blur,
           crop: input.crop,
           thumb: input.thumb,

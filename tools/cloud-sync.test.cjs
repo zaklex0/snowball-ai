@@ -111,9 +111,12 @@ test('screenshots keep original and annotations and deletion is reflected on the
   const shots = new ScreenshotStore(a.dir), shot = await shots.add(png, '');
   await a.engine.sync(); await b.engine.sync();
   const copy = new ScreenshotStore(b.dir); assert.equal((await copy.list()).length, 1);
-  await copy.save(shot.id, { revision: (await copy.read(shot.id)).revision, blur: 3, ops: [] });
+  const ops = [{ number: 8, hidden: true, type: 'pen', color: '#123456', width: 5, pressure: 35, points: [{ x: .5, y: .5 }] }];
+  await copy.save(shot.id, { revision: (await copy.read(shot.id)).revision, blur: 3, ops, nextLayerNumber: 10 });
   await b.engine.sync(); await a.engine.sync();
   assert.equal((await shots.read(shot.id)).blur, 3);
+  assert.deepEqual((await shots.read(shot.id)).ops, ops);
+  assert.equal((await shots.read(shot.id)).nextLayerNumber, 10);
   await shots.remove(shot.id, p => fs.rm(p, { recursive: true, force: true }));
   await a.engine.sync(); await b.engine.sync(); assert.equal((await copy.list()).length, 0);
 });

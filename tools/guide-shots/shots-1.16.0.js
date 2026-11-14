@@ -59,9 +59,16 @@ module.exports = async function ({ main, page, shot }) {
   await page.send('Input.insertText', { text: 'Проверить сегодня' });
   await guideShot('03-text', { text: '.shot-text', tool: '[data-tool=text]' });
   await ev('window.screenshotEditor.flush()');
+  await draw('rect', .64, .35, .91, .73);
+  await ev('window.screenshotEditor.flush()');
+  await click('[data-layer-pick="2"]');
+  await guideShot('10-layers', { list: '.shot-layer-list', selected: '[data-layer-pick="2"]', eye: '[data-layer-eye="2"]', properties: '.shot-layer-properties', text: '.shot-layer-text', order: '.shot-layer-order', remove: '.shot-layer-remove' });
+  await draw('select', .25, .82, .32, .72);
+  await ev('window.screenshotEditor.flush()');
+  await guideShot('11-move-layer', { tool: '[data-tool=select]', image: '.shot-stage canvas', selected: '.shot-layer.selected', undo: '.shot-undo' });
   await draw('focus', .64, .35, .91, .73);
   await ev('window.screenshotEditor.flush()');
-  await guideShot('04-focus', { tool: '[data-tool=focus]', blur: '.shot-blur-label', image: '.shot-stage canvas', copy: '[data-action=copy]', save: '[data-action=export]' });
+  await guideShot('04-focus', { tool: '[data-tool=focus]', blur: '.shot-blur-label', image: '.shot-stage canvas', copy: '.capture-app [data-action=copy]', save: '.capture-app [data-action=export]' });
   // «Отправить в LLM»: the button, then the new LLM tab with the picture in the message box.
   await guideShot('08-llm-button', { llm: '[data-action=llm]' });
   await click('[data-action=llm]');
