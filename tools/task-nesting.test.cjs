@@ -12,6 +12,50 @@ async function setup(t) {
   return new Store(dir).init();
 }
 
+for (const method of ['saveTask', 'moveTasks']) {
+  test(method + ': moving a parent moves its nested tree without exposing old-column cards', async t => {
+    const store = await setup(t);
+    const parent = await store.saveTask({ title: 'Parent' });
+    let child = await store.saveTask({ title: 'Child', note: 'Keep details', subtasks: [{ title: 'Step' }] });
+    let grandchild = await store.saveTask({ title: 'Grandchild' });
+    let completed = await store.saveTask({ title: 'Completed', status: 'done' });
+    child = await store.saveTask({ id: child.id, parentId: parent.id });
+    grandchild = await store.saveTask({ id: grandchild.id, parentId: child.id });
+    completed = await store.saveTask({ id: completed.id, parentId: parent.id });
+    const before = structuredClone(store.tasks);
+    const move = status => method === 'saveTask' ? store.saveTask({ id: parent.id, status }) : store.moveTasks([parent.id], { status });
+    await move('doing');
+    for (const id of [parent.id, child.id, grandchild.id]) {
+      assert.equal(store.findTask(id).status, 'doing');
+      assert.ok(store.findTask(id).startedAt);
+    }
+    assert.equal(store.findTask(child.id).parentId, parent.id);
+    assert.equal(store.findTask(grandchild.id).parentId, child.id);
+    assert.equal(store.findTask(child.id).note, child.note);
+    assert.deepEqual(store.findTask(child.id).subtasks, child.subtasks);
+    assert.deepEqual(store.findTask(completed.id), completed);
+    assert.equal(store.tasks.some(task => task.status === 'todo'), false);
+    const restarted = await new Store(store.dir).init();
+    assert.equal(restarted.findTask(grandchild.id).status, 'doing');
+    const after = structuredClone(store.tasks);
+    await store.restoreTaskChanges([before.filter(task => JSON.stringify(task) !== JSON.stringify(after.find(x => x.id === task.id)))
+      .map(task => ({ id: task.id, before: task, after: after.find(x => x.id === task.id) }))]);
+    for (const task of before) assert.deepEqual(store.findTask(task.id), task);
+    await move('doing');
+    await move('done');
+    for (const id of [parent.id, child.id, grandchild.id]) {
+      assert.equal(store.findTask(id).status, 'done');
+      assert.equal(store.findTask(id).doneFrom, 'doing');
+      assert.ok(store.findTask(id).doneAt);
+    }
+    await move('todo');
+    for (const id of [parent.id, child.id, grandchild.id]) {
+      assert.equal(store.findTask(id).status, 'todo');
+      assert.equal(store.findTask(id).doneAt, 0);
+    }
+  });
+}
+
 test('nesting preserves task details, survives restart and cloud transfer, and can be reversed', async t => {
   const store = await setup(t), other = await setup(t);
   const parent = await store.saveTask({ title: 'Фильм' });

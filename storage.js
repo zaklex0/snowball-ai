@@ -1017,18 +1017,28 @@ class Store {
   }
 
   // A new task (no id or an unknown one) lands at the bottom of its column; a known one changes (only the fields given).
-  moveTaskChildrenGroup(task, prev, now) {
-    if (!prev || task.groupId === prev.groupId) return;
-    const moved = new Set([task.id]);
-    let added = true;
-    while (added) {
-      added = false;
-      this.tasks.forEach(child => {
-        if (!moved.has(child.id) && moved.has(child.parentId) && child.groupId === prev.groupId) {
-          child.groupId = task.groupId; child.updatedAt = now;
+  moveTaskChildren(task, prev, now) {
+    if (!prev) return;
+    // Follow each field independently: a completed child keeps its status, while
+    // children in the parent's old column travel with it through every nesting level.
+    for (const field of ['status', 'groupId']) {
+      if (task[field] === prev[field]) continue;
+      const moved = new Set([task.id]);
+      let added = true;
+      while (added) {
+        added = false;
+        this.tasks.forEach((child, index) => {
+          if (moved.has(child.id) || !moved.has(child.parentId) || child[field] !== prev[field]) return;
+          const merged = { ...child, [field]: task[field], updatedAt: now };
+          if (field === 'status') {
+            merged.archivedAt = 0;
+            if (task.status === 'done') { merged.doneFrom = child.status; merged.doneAt = now; }
+            if (!['todo', 'done'].includes(task.status) && !merged.startedAt) merged.startedAt = now;
+          }
+          this.tasks[index] = normalizeTask(merged);
           moved.add(child.id); added = true;
-        }
-      });
+        });
+      }
     }
   }
   // Moving to another column without an order puts it at the bottom there.
@@ -1073,9 +1083,8 @@ class Store {
       if (!task) throw Object.assign(new Error('bad task'), { userMessage: 'Напишите, что нужно сделать.' });
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task;
       else { if (this.findTask(task.id)) task.id = newId('t'); this.tasks.push(task); }
-      // A category belongs to the nested task tree. Keep children with the moved task,
-      // while preserving children that were explicitly assigned a different category.
-      this.moveTaskChildrenGroup(task, prev, now);
+      // Keep the nested tree together when moving columns or categories.
+      this.moveTaskChildren(task, prev, now);
       await this.writeTasks();
       let n = !prev || (moved && prev.status !== 'done') ? 1 : 0;
       const before = new Map((prev ? prev.subtasks : []).map((s) => [s.id, s]));
@@ -1123,7 +1132,7 @@ class Store {
         }
         const task = this.fitColumn(normalizeTask(merged));
         this.tasks[this.tasks.indexOf(prev)] = task;
-        this.moveTaskChildrenGroup(task, prev, now);
+        this.moveTaskChildren(task, prev, now);
         return task;
       });
       await this.writeTasks(); await this.bump('tasks', count);
@@ -1185,7 +1194,7 @@ class Store {
       if (!task) return null;
       const prev = this.findTask(task.id);
       if (prev) this.tasks[this.tasks.indexOf(prev)] = task; else this.tasks.push(task);
-      this.moveTaskChildrenGroup(task, prev, Date.now());
+      this.moveTaskChildren(task, prev, Date.now());
       await this.writeTasks();
       return task;
     });

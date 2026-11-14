@@ -56,6 +56,14 @@ const { Store } = require('../storage');
     await page.until('document.querySelectorAll(".task").length===1');
     assert.match(await page.ev('document.querySelector(".task").textContent'), /0\/1/);
     assert.doesNotMatch(await page.ev('document.querySelector(".task").textContent'), /Фильм|Монтаж/);
+    // Moving a deep tree keeps one outer card and leaves no children in the old column.
+    await page.ev('dragTask(nestingIds.sibling,null)');
+    await page.until(`!!document.querySelector('.tc-doing .task[data-id="${ids.sibling}"]') && document.querySelectorAll('.task').length===1`);
+    assert.equal(await page.ev('document.querySelectorAll(".tc-todo .task").length'), 0);
+    const movedTasks = (await page.ev('vsApi.load()')).tasks;
+    for (const id of Object.values(ids)) assert.equal(movedTasks.find(t => t.id === id).status, 'doing');
+    await page.ev(`document.querySelector('.task[data-id="${ids.sibling}"]').click();true`);
+    assert.match(await page.ev('document.querySelector("#tpanel").textContent'), /Фильм/);
     if (process.argv[2]) {
       await fs.mkdir(process.argv[2], { recursive: true });
       await page.ev('document.querySelector(".tp-close").click(); true');
