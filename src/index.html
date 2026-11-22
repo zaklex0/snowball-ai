@@ -188,6 +188,7 @@
               <p class="meta" id="meta">Загружаю промты…</p>
             </div>
             <div class="top-actions">
+              <button type="button" class="btn btn-ghost" id="prompts-help" data-guide="prompts">Как пользоваться</button>
               <button type="button" class="btn btn-primary" id="add-btn" hidden>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                 Добавить промт <kbd class="kh">Ctrl + N</kbd>
@@ -267,9 +268,13 @@
             <div class="search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/></svg>
               <label for="search" class="sr-only">Поиск</label>
-              <input class="input" id="search" type="search" autocomplete="off" placeholder="Поиск по названию, тексту и комментарию">
+              <input class="input" id="search" type="search" autocomplete="off" aria-keyshortcuts="ArrowDown" placeholder="Поиск по названию, тексту и комментарию">
             </div>
             <div class="filters" id="filters" role="group" aria-label="Фильтр по типу"></div>
+            <div class="prompt-search-info">
+              <span id="prompt-search-count" role="status" aria-atomic="true"></span>
+              <span id="prompt-search-keys" title="Стрелки переключают результаты, Enter копирует выбранный промт" hidden><kbd>↓</kbd> к результатам</span>
+            </div>
           </section>
 
           <section class="card" id="prompts-card" aria-label="Список промтов">
@@ -323,15 +328,48 @@
           </section>
         </section>
 
-        <section class="view" id="view-home" aria-labelledby="home-title" hidden>
-          <header class="top">
+        <section class="view home-overview" id="view-home" aria-labelledby="home-title" hidden>
+          <header class="top home-heading">
             <div class="top-text">
-              <p class="eyebrow" id="home-date"></p>
+              <time id="home-date"></time>
               <h1 id="home-title">Привет!</h1>
-              <p class="meta">Главная пока простая: отсюда можно перейти в любой раздел. Позже здесь появится сводка дня.</p>
             </div>
+            <button type="button" class="btn btn-primary" id="home-prompts">Открыть промты</button>
           </header>
-          <div class="home-grid" id="home-grid"></div>
+          <section aria-labelledby="home-event-heading">
+            <div class="home-section-head"><h2 id="home-event-heading">Ближайшее дело</h2></div>
+            <div class="home-event" id="home-event">
+              <div class="home-event-time" id="home-event-time" hidden>
+                <time id="home-event-start"></time>
+                <small id="home-event-end"></small>
+              </div>
+              <div class="home-event-body">
+                <p class="home-event-kind" id="home-event-kind" hidden></p>
+                <h3 id="home-event-title">Ближайших дел нет</h3>
+                <p class="home-event-note" id="home-event-note" hidden></p>
+              </div>
+              <button type="button" class="btn btn-ghost" id="home-calendar">В календарь</button>
+            </div>
+          </section>
+          <div class="home-columns">
+            <section aria-labelledby="home-tasks-heading">
+              <div class="home-section-head">
+                <h2 id="home-tasks-heading">Задачи в работе <span class="home-count" id="home-task-count" hidden></span></h2>
+                <button type="button" class="btn btn-ghost" id="home-all-tasks">Все задачи</button>
+              </div>
+              <div class="home-panel">
+                <ul class="home-list" id="home-tasks"></ul>
+                <p class="home-empty" id="home-tasks-empty" hidden>Пока нет задач в работе.</p>
+              </div>
+            </section>
+            <section aria-labelledby="home-recent-heading">
+              <div class="home-section-head"><h2 id="home-recent-heading">Недавние промты</h2></div>
+              <div class="home-panel">
+                <ul class="home-list" id="home-recent"></ul>
+                <p class="home-empty" id="home-recent-empty" hidden>Здесь появятся добавленные и изменённые промты.</p>
+              </div>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="view-transcribe" aria-labelledby="transcribe-title" hidden>
@@ -636,7 +674,11 @@
           <p id="cloud-status" class="set-text" role="status" aria-live="polite"></p>
           <p id="cloud-message" class="form-msg" role="status"></p>
           <div id="cloud-conflicts"></div>
-          <details><summary>Как работает синхронизация</summary><p class="set-text">Изменения проверяются примерно каждые 20 секунд, пока программа открыта. Без интернета работа сохраняется на компьютере. Если одну запись изменили на двух устройствах, выберите нужную версию ниже. Предыдущие версии сохраняются в папке данных, в .cloud-sync/recovery. Полная копия перед первым подключением — в .cloud-sync/backups.</p><p class="set-text">Пароли сервисов ChatGPT и Claude, их API-ключи, вкладки и положение окон между компьютерами не передаются. Синхронизация передаёт сохранённую историю; незаконченный ответ или расшифровка продолжаются на исходном компьютере.</p></details>
+          <details class="cloud-help" id="cloud-help">
+            <summary>Как работает синхронизация</summary>
+            <p class="set-text">Изменения проверяются примерно каждые 20 секунд, пока программа открыта. Без интернета работа сохраняется на компьютере. Если одну запись изменили на двух устройствах, выберите нужную версию ниже. Предыдущие версии сохраняются в папке данных, в .cloud-sync/recovery. Полная копия перед первым подключением — в .cloud-sync/backups.</p>
+            <p class="set-text">Пароли сервисов ChatGPT и Claude, их API-ключи, вкладки и положение окон между компьютерами не передаются. Синхронизация передаёт сохранённую историю; незаконченный ответ или расшифровка продолжаются на исходном компьютере.</p>
+          </details>
         </section>
       </div>
       <div class="sd-sec" data-sec="keys" hidden>
@@ -770,6 +812,7 @@
               <dt><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd></dt><dd>Новый разговор в LLM</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>B</kbd></dt><dd>Свернуть или развернуть левую панель</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>F</kbd></dt><dd>Поиск по промтам</dd>
+              <dt><kbd>↓</kbd> в поиске промтов</dt><dd>Перейти к первому результату. Стрелки переключают результаты, <kbd>Enter</kbd> копирует промт.</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>,</kbd></dt><dd>Настройки</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd></dt><dd>Крупнее, мельче, обычный масштаб</dd>
               <dt><kbd>Ctrl</kbd> + <kbd>Enter</kbd></dt><dd>Сохранить промт в редакторе</dd>
@@ -902,6 +945,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="guides/guides.js"></script>
+<script src="guides/1.24.3/boxes.js"></script>
 <script src="guides/1.23.0/boxes.js"></script>
 <script src="guides/1.21.0/boxes.js"></script>
 <script src="guides/1.22.0/boxes.js"></script>

@@ -17,6 +17,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
+const { isDeepStrictEqual } = require('node:util');
 const { numberedTasks } = require('./src/task-board-model');
 const { pathToFileURL } = require('url');
 const { pipeline } = require('stream/promises');
@@ -434,6 +435,12 @@ function staleAssistantAction() {
   const e = new Error('assistant action is stale');
   e.userMessage = 'Дело или задачу уже изменили. Попросите ассистента проверить её ещё раз.';
   return e;
+}
+function undoConflict() {
+  return Object.assign(new Error('undo conflict'), { userMessage: 'Данные уже изменились после действия ассистента. Отмена остановлена, чтобы сохранить новые изменения.' });
+}
+function recordUndoChange(log, before, after) {
+  if (log && !isDeepStrictEqual(before, after)) log.push(structuredClone({ id: (after ?? before).id, before, after }));
 }
 function normalizeChatImages(list) {
   return (Array.isArray(list) ? list : []).slice(0, CHAT_IMAGES_MAX).map((x) => {
@@ -853,11 +860,11 @@ class Store {
   writeCalendar() { return writeProtectedJson(this.calendarPath, { format: 'snowball-calendar', version: 1, events: this.events }); }
 
   // A new event (no id or an unknown one) or a change to an existing one.
-  saveEvent(input) {
+  saveEvent(input, undoLog) {
     return this.runLists(['events'], async function () {
       const prev = input && input.id ? this.findEvent(input.id) : null;
       const now = Date.now();
-      const sig = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
+      const sig = eventActionSignature;
       if (input && typeof input.expectedAction === 'string' && (!prev || sig(prev) !== input.expectedAction)) throw staleAssistantAction();
       if (input && typeof input.expected === 'string' && (!prev || sig(prev) !== input.expected)) {
         const e = new Error('event changed while editing');
@@ -875,6 +882,7 @@ class Store {
       else { if (this.findEvent(ev.id)) ev.id = newId('e'); this.events.push(ev); }
       await this.writeCalendar();
       await this.bump('calendar', 1);
+      recordUndoChange(undoLog, prev, ev);
       return ev;
     });
   }
@@ -891,14 +899,28 @@ class Store {
     });
   }
 
-  deleteEvent(id, expectedAction) {
+  deleteEvent(id, expectedAction, undoLog) {
     return this.runLists(['events'], async function () {
       const ev = this.findEvent(id);
       if (typeof expectedAction === 'string' && (!ev || eventActionSignature(ev) !== expectedAction)) throw staleAssistantAction();
       if (!ev) return null;
       this.events = this.events.filter((e) => e.id !== id);
       await this.writeCalendar();
+      recordUndoChange(undoLog, ev, null);
       return ev;
+    });
+  }
+
+  restoreEventChanges(changes) {
+    return this.runLists(['events'], async function () {
+      for (const { id, before, after } of changes.slice().reverse()) {
+        const current = this.findEvent(id);
+        if (!isDeepStrictEqual(current, after)) throw undoConflict();
+        if (before && current) this.events[this.events.indexOf(current)] = structuredClone(before);
+        else if (before) this.events.push(structuredClone(before));
+        else this.events = this.events.filter((e) => e.id !== id);
+      }
+      if (changes.length) await this.writeCalendar();
     });
   }
 
@@ -1044,8 +1066,9 @@ class Store {
   // Moving to another column without an order puts it at the bottom there.
   // Statistics: a new task, a move to another column, every new subtask and every subtask ticked off count as actions.
   // Edits, deleting, a move inside the column and taking a tick back (out of «Готово» too) do not.
-  saveTask(input) {
+  saveTask(input, undoLog) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
+      const beforeTasks = undoLog && new Map(this.tasks.map(t => [t.id, t]));
       if (input && input.status && !this.hasColumn(input.status)) input = Object.assign({}, input, { status: 'todo' });
       const prev = input && input.id ? this.findTask(input.id) : null;
       if (input && typeof input.expectedAction === 'string' && (!prev || JSON.stringify(prev) !== input.expectedAction)) throw staleAssistantAction();
@@ -1094,6 +1117,7 @@ class Store {
         else if (s.done && !was.done) n += 1;
       });
       await this.bump('tasks', n);
+      if (beforeTasks) this.tasks.forEach(t => recordUndoChange(undoLog, beforeTasks.get(t.id) || null, t));
       return task;
     });
   }
@@ -1101,8 +1125,14 @@ class Store {
   restoreTaskChanges(batches) {
     return this.runLists(['tasks'], async function () {
       for (const changes of batches) {
-        for (const change of changes) {
-          if (JSON.stringify(this.findTask(change.id) || null) !== JSON.stringify(change.after || null)) throw Object.assign(new Error('undo conflict'), { userMessage: 'Эти задачи уже изменились после действия ассистента. Отмена остановлена, чтобы сохранить новые изменения.' });
+        const removedIds = new Set(changes.filter(change => !change.before).map(change => change.id));
+        const changedIds = new Set(changes.map(change => change.id));
+        if (removedIds.size && (
+          this.tasks.some(t => removedIds.has(t.parentId) && !changedIds.has(t.id)) ||
+          changes.some(change => removedIds.has(change.before?.parentId))
+        )) throw undoConflict();
+        for (const { id, before, after } of changes) {
+          if (!isDeepStrictEqual(this.findTask(id), after) || (before && !this.hasColumn(before.status))) throw undoConflict();
         }
         for (const change of changes) {
           this.tasks = this.tasks.filter(t => t.id !== change.id);
@@ -1114,7 +1144,7 @@ class Store {
   }
 
   // Resolve numbers before calling this method: moving a category can renumber the board.
-  moveTasks(ids, { status = null, groupId = null } = {}) {
+  moveTasks(ids, { status = null, groupId = null } = {}, undoLog) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       if (!Array.isArray(ids) || !ids.length || ids.length > 500 || ids.some(id => typeof id !== 'string' || !this.findTask(id))) throw Object.assign(new Error('missing tasks'), { userMessage: 'Некоторые задачи больше недоступны. Обновите доску.' });
       if (status !== null && !this.hasColumn(status)) throw Object.assign(new Error('missing column'), { userMessage: 'Столбец не найден.' });
@@ -1136,7 +1166,9 @@ class Store {
         return task;
       });
       await this.writeTasks(); await this.bump('tasks', count);
-      return { tasks, before: before.filter(t => JSON.stringify(t) !== JSON.stringify(this.findTask(t.id))) };
+      const previous = before.filter(t => !isDeepStrictEqual(t, this.findTask(t.id)));
+      if (undoLog) previous.forEach(t => recordUndoChange(undoLog, t, this.findTask(t.id)));
+      return { tasks, before: previous };
     });
   }
 
@@ -1144,15 +1176,18 @@ class Store {
   // Done tasks leave the board for the archive: by the «Убрать в архив» button, by the assistant, or by themselves
   // (archiveMode 'day' — everything done before today; 'week' — done more than 7 days ago; 'manual' — never by itself).
   // They stay in tasks.json with archivedAt. Not an action on the statistics page. Returns the ids that moved.
-  archiveDone(ids) {
+  archiveDone(ids, undoLog) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
-      const now = Date.now(), moved = [];
-      this.tasks.forEach((t) => {
+      const now = Date.now(), moved = [], archived = [];
+      this.tasks.forEach((t, index) => {
         if (t.status !== 'done' || t.archivedAt || (ids && !ids.includes(t.id))) return;
-        t.archivedAt = now;
+        const next = { ...t, archivedAt: now };
+        this.tasks[index] = next;
+        recordUndoChange(undoLog && archived, t, next);
         moved.push(t.id);
       });
       if (moved.length) await this.writeTasks();
+      if (undoLog) undoLog.push(...archived);
       return moved;
     });
   }
@@ -1201,13 +1236,14 @@ class Store {
     });
   }
 
-  deleteTask(id, expectedAction) {
+  deleteTask(id, expectedAction, undoLog) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const task = this.findTask(id);
       if (typeof expectedAction === 'string' && (!task || JSON.stringify(task) !== expectedAction)) throw staleAssistantAction();
       if (!task) return null;
       this.tasks = this.tasks.filter((t) => t.id !== id);
       await this.writeTasks();
+      recordUndoChange(undoLog, task, null);
       return task;
     });
   }
@@ -1375,9 +1411,11 @@ class Store {
     });
   }
   // Changes only the fields passed: title, type, desc (with descBy, descCost, descAt). Not counted in the statistics.
-  saveSkill(input) {
+  saveSkill(input, { expectedAction, expectedUndo } = {}) {
     return this.run(async () => {
       const s = this.findSkill(input && input.id);
+      if (expectedAction && !isDeepStrictEqual(s, expectedAction)) throw staleAssistantAction();
+      if (expectedUndo && !isDeepStrictEqual(s, expectedUndo)) throw undoConflict();
       if (input && input.expectedFields && typeof input.expectedFields === 'object') {
         const fields = Object.keys(input.expectedFields);
         if (!s || fields.some((key) => JSON.stringify(s[key]) !== input.expectedFields[key])) {
@@ -1401,9 +1439,10 @@ class Store {
     });
   }
   // The record goes at once; its folder goes to the Recycle Bin.
-  deleteSkill(id) {
+  deleteSkill(id, expectedUndo) {
     return this.run(async () => {
       const s = this.findSkill(id);
+      if (expectedUndo && !isDeepStrictEqual(s, expectedUndo)) throw undoConflict();
       if (!s) return null;
       const draft = Object.create(this);
       draft.skills = this.skills.filter((x) => x !== s);
@@ -1633,7 +1672,7 @@ class Store {
     prompt.files = keep;
   }
 
-  savePrompt(input) {
+  savePrompt(input, undoLog) {
     return this.run(async () => {
       const item = (input && input.item) || {};
       const errors = [];
@@ -1673,6 +1712,7 @@ class Store {
       if (previous && removed.length) await this.removeCommittedFiles(Object.assign({}, previous, { files: previous.files.slice() }), removed);
       await this.bump(isNew ? 'created' : 'edited', 1);
       await this.bump('files', prompt.files.length - kept);
+      recordUndoChange(undoLog, previous, prompt);
       return { id: prompt.id, errors };
     });
   }
@@ -1705,9 +1745,10 @@ class Store {
     });
   }
 
-  deletePrompt(id) {
+  deletePrompt(id, expectedUndo) {
     return this.run(async () => {
       const prompt = this.find(id);
+      if (expectedUndo && !isDeepStrictEqual(prompt, expectedUndo)) throw undoConflict();
       if (!prompt) return;
       const data = Object.assign({}, this.data, { prompts: this.data.prompts.filter((p) => p.id !== id) });
       await this.write({ data });

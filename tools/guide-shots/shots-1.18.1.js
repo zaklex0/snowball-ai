@@ -48,7 +48,7 @@ module.exports = async function ({ main, page, shot }) {
   await until("document.documentElement.dataset.theme === 'macos' && document.documentElement.dataset.accent === 'peach'");
   await closeMenu();
   await sleep(500);
-  await shot('01b-result', { side: '.side', tab: '.tab.on', tiles: '.home-grid', qa: '#qa-btn' });
+  await shot('01b-result', { side: '.side', tab: '.tab.on', overview: '.home-overview', qa: '#qa-btn' });
   // Step 2, first frame: «macOS ›» with the look and the accent colours.
   await openTheme(true);
   await shot('02-sub', { macos: '.has-sub[data-sub="macos"]', look: '.mac-look', accents: '.mac-sub [aria-label="Акцент"]', help: '.mac-sub [data-guide="theme"]' });

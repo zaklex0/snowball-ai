@@ -33,3 +33,37 @@ test('conflicts and disk errors keep the tasks and history untouched', async t =
   assert.deepEqual(s.tasks, current); assert.equal(h2.state().count, 1);
   await h2.undo(s); assert.deepEqual(s.tasks, before);
 });
+
+test('card undo protects later nested edits and restores exact dates and columns', async t => {
+  const store = await setup(t);
+  const added = [];
+  const parent = await store.saveTask({ title: 'Основная задача' }, added);
+  const child = await store.saveTask({ title: 'Подзадача' });
+  await store.saveTask({ id: child.id, parentId: parent.id });
+  await assert.rejects(store.restoreTaskChanges([added]), /undo conflict/);
+
+  const initial = structuredClone(store.tasksView());
+  const first = [];
+  await store.saveTask({ id: parent.id, status: 'doing' }, first);
+  assert.equal(first.length, 2);
+  await store.restoreTaskChanges([first]);
+  assert.deepEqual(store.tasksView(), initial);
+
+  const second = [];
+  await store.saveTask({ id: parent.id, status: 'doing' }, second);
+  await store.saveTask({ id: child.id, note: 'Новая заметка' });
+  await assert.rejects(store.restoreTaskChanges([second]), /undo conflict/);
+  assert.equal(store.findTask(child.id).note, 'Новая заметка');
+  assert.equal(store.findTask(parent.id).status, 'doing');
+});
+
+test('task undo does not merge across a manual edit during one assistant request', async t => {
+  const store = await setup(t), history = new TaskUndoHistory(), changes = [];
+  const task = await store.saveTask({ title: 'Задача' });
+  await store.saveTask({ id: task.id, status: 'doing' }, changes);
+  await store.saveTask({ id: task.id, note: 'Недавняя правка' });
+  await store.saveTask({ id: task.id, status: 'done' }, changes);
+  history.record(changes, 'Два действия', store);
+  await assert.rejects(history.undo(store), /undo conflict/);
+  assert.equal(store.findTask(task.id).note, 'Недавняя правка');
+});

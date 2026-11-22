@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="ru" data-accent="blue">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Главная Snowball.ai — интерактивный макет</title>
+<script>
+  const windowTheme = new URLSearchParams(location.search).get("window");
+  if (windowTheme) {
+    document.documentElement.classList.add("window-preview");
+    if (windowTheme === "macos") document.documentElement.dataset.theme = "macos";
+  }
+</script>
+<link rel="stylesheet" href="../src/fonts.css">
+<link rel="stylesheet" href="../src/styles.css">
+<link rel="stylesheet" href="../src/screenshots.css">
+<link rel="stylesheet" href="../src/theme-macos.css">
+<style>
+  /* The viewer sets the embedded window's size and preferred color scheme. */
+  #preview { height: 100%; overflow: auto; background: #eef0f3; color: #242730; color-scheme: light; }
+  .window-preview #preview, html:not(.window-preview) #snowball { display: none; }
+  .preview-head { background: #f8f9fb; border-bottom: 1px solid #d7dbe2; }
+  .preview-bar { max-width: 1260px; margin: auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+  .preview-title { flex: 1; min-width: 185px; }
+  .preview-title b { display: block; font-size: 15px; }
+  .preview-title span { display: block; margin-top: 2px; font-size: 12px; color: #535b69; }
+  .preview-options { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
+  .preview-options fieldset {
+    display: flex; align-items: center; gap: 2px; position: relative;
+    margin: 0; padding: 3px; border: 1px solid #d7dbe2; border-radius: 9px; background: #edf0f4;
+  }
+  .preview-options legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .preview-options button { border: 0; border-radius: 6px; padding: 5px 9px; background: transparent; font-size: 12px; }
+  .preview-options button:hover { background: #e1e5ed; }
+  .preview-options button[aria-pressed="true"] { background: #fff; box-shadow: 0 1px 3px #22293624; font-weight: 600; }
+  #preview :focus-visible { outline-color: #315fc4; }
+  .preview-stage { margin: 0 auto; padding: 24px; }
+  #mock-window {
+    display: block; width: 1180px; max-width: 100%; height: 742px; margin: 0 auto;
+    border: 1px solid #c6cbd4; border-radius: 12px; background: #fceee4; box-shadow: 0 12px 32px #23293820;
+  }
+  #preview.narrow #mock-window { width: 520px; }
+  @media (max-width: 600px) {
+    .preview-bar { padding: 12px; }
+    .preview-stage { padding: 10px 4px; }
+    .preview-options { gap: 6px; }
+  }
+
+  /* Keep the app's chrome, color variables and fonts. The agenda is the focal point. */
+  #snowball { --panel-radius: 16px; --control-radius: 10px; }
+  [data-theme="macos"] #snowball { --panel-radius: 10px; --control-radius: 6px; }
+  #snowball svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .home-icons { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .mock-top { display: flex; min-width: 0; align-items: center; height: 40px; }
+  .mock-top .tabs { align-self: flex-end; overflow-x: auto; scrollbar-width: none; }
+  [data-theme="macos"] .mock-top .tabs { align-self: center; }
+  .mock-top .tab { width: 156px; flex: 0 0 156px; text-align: left; cursor: pointer; }
+  .mock-top .tab .tab-t { min-width: 76px; }
+  .window-controls { margin-left: auto; align-self: stretch; display: flex; align-items: center; color: var(--ink-soft); }
+  .window-controls svg { width: 40px; height: 13px; }
+  .mock-profile .profile-btn { cursor: default; }
+  .mock-profile .profile-btn:hover { background: var(--surface); border-color: var(--line); }
+  .mock-profile .profile-btn .avatar { width: 30px; height: 30px; }
+  .mock-timer { cursor: default; }
+  .mock-timer:hover { background: none; }
+  .mock-timer svg { width: 18px; height: 18px; }
+  .mock-quick { min-height: 40px; place-items: center; }
+  .mock-quick:hover { background: var(--accent); }
+  .home-page {
+    max-width: 1050px; margin: auto; padding: 34px clamp(20px, 3.7vw, 44px) 44px;
+    display: grid; gap: 28px;
+  }
+  .home-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; }
+  .home-date { display: block; margin: 0 0 6px; font-size: 13px; color: var(--ink-soft); }
+  .home-page h1 { font-size: clamp(23px, 3.1vw, 35px); }
+  .home-page h2, .home-page h3 { margin: 0; line-height: 1.25; }
+  .home-page h2 { font-size: 17px; font-weight: 650; }
+  .home-action, .home-text-button {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 36px; border: 1px solid transparent; border-radius: var(--control-radius); padding: 6px 11px;
+    font-size: 13px; font-weight: 600; line-height: 1.25; white-space: nowrap;
+  }
+  .home-action { background: var(--accent); color: var(--accent-ink); }
+  [data-theme="macos"] .home-action { background: var(--accent-strong); }
+  .home-action:hover { background: var(--accent-hover); }
+  [data-theme="macos"] .home-action:hover { background: color-mix(in srgb, var(--accent-strong) 92%, #000); }
+  .home-action svg, .home-text-button svg { width: 16px; height: 16px; }
+  .home-text-button { color: var(--ink); background: var(--surface); border-color: var(--line); }
+  .home-text-button:hover { background: var(--surface-2); }
+  .home-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 7px 12px; margin-bottom: 10px; }
+  .home-section-head .home-text-button { min-height: 32px; background: transparent; border-color: transparent; }
+  .home-section-head .home-text-button:hover { background: var(--surface-2); border-color: var(--line); }
+  .home-task-count {
+    display: inline-block; margin-left: 4px; min-width: 23px; padding: 1px 5px; border-radius: 6px;
+    text-align: center; font-size: 12px; background: var(--surface-2); color: var(--ink-soft); vertical-align: 1px;
+  }
+  .next-event {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: clamp(14px, 2.2vw, 26px);
+    padding: 20px 22px; border: 1px solid var(--line); border-left: 4px solid var(--ev-meet); border-radius: var(--panel-radius);
+    background: var(--surface); box-shadow: var(--shadow);
+  }
+  .next-time {
+    display: grid; justify-items: start; align-content: center; gap: 1px; min-width: 108px; padding: 13px 15px 12px;
+    color: var(--cat-video-ink); background: var(--cat-video-bg); border-radius: calc(var(--panel-radius) - 3px);
+    font-variant-numeric: tabular-nums;
+  }
+  .next-time strong { font-family: var(--font-display); font-size: 26px; font-weight: 550; line-height: 1.15; letter-spacing: -.035em; }
+  .next-time small { font-size: 12px; }
+  .next-event h3 { font-size: clamp(19px, 2.3vw, 25px); font-weight: 650; letter-spacing: -.022em; }
+  .next-event p { margin: 5px 0 0; font-size: 13px; color: var(--ink-soft); }
+  .event-kind { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px; font-weight: 600; color: var(--cat-video-ink); }
+  .event-kind::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: var(--ev-meet); }
+  .home-columns { display: grid; grid-template-columns: minmax(0, 1.43fr) minmax(0, 1fr); align-items: start; gap: 20px; }
+  .home-columns .home-section-head { min-height: 32px; }
+  .home-panel { border: 1px solid var(--line); border-radius: var(--panel-radius); background: var(--surface); overflow: hidden; }
+  .home-list { list-style: none; margin: 0; padding: 0; }
+  .home-list > li + li { border-top: 1px solid var(--line); }
+  .home-row {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px;
+    width: 100%; min-height: 62px; padding: 9px 13px; border: 0; background: transparent; text-align: left;
+  }
+  .home-row:hover, .home-row[aria-expanded="true"] { background: var(--row-hover); }
+  .home-row:focus-visible { outline-offset: -3px; }
+  .home-row strong { display: block; font-size: 14px; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+  .home-row small { display: block; margin-top: 3px; color: var(--ink-soft); font-size: 12px; }
+  .home-row .row-chevron { width: 15px; height: 15px; color: var(--ink-soft); }
+  .task-mark {
+    width: 21px; height: 21px; display: grid; place-items: center; border-radius: 50%;
+    color: var(--cat-text-ink); border: 1px solid color-mix(in srgb, var(--cat-text-dot) 55%, var(--line));
+    background: var(--cat-text-bg);
+  }
+  .task-mark svg { width: 13px; height: 13px; }
+  .prompt-mark {
+    width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px;
+    background: var(--chip-bg); color: var(--chip-ink);
+  }
+  .prompt-mark svg { width: 17px; height: 17px; }
+  .home-detail { padding: 12px 16px 15px; border-top: 1px solid var(--line); background: var(--surface); font-size: 14px; }
+  .home-detail p { margin: 0; overflow-wrap: anywhere; }
+  .home-detail p + p { margin-top: 6px; }
+  .home-detail .home-meta { color: var(--ink-soft); font-size: 13px; }
+  .home-route { display: grid; gap: 17px; max-width: 760px; }
+  .home-route-group { display: grid; gap: 8px; }
+  .home-route .home-text-button { justify-self: start; }
+  .home-route h1:focus { outline: none; }
+  .home-search { display: grid; gap: 5px; font-size: 13px; }
+  .home-search input { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--surface); }
+  .home-empty { margin: 0; padding: 15px; color: var(--ink-soft); font-size: 14px; }
+  .home-back { transform: rotate(180deg); }
+  .mock-more {
+    position: fixed; inset: var(--pop-top) auto auto var(--pop-left); margin: 0;
+    min-width: 0; width: 218px; padding: 4px 8px;
+  }
+  .mock-more:not(:popover-open) { display: none; }
+  .mock-more .menu-item { min-height: 34px; }
+  @media (max-width: 740px) {
+    .home-page { gap: 17px; padding-top: 22px; }
+    .home-heading { gap: 12px; }
+    .home-columns { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+    .next-event { grid-template-columns: auto minmax(0, 1fr); padding: 12px 14px; row-gap: 8px; }
+    .next-event .home-text-button { grid-column: 2; justify-self: start; min-height: 31px; }
+    .next-time { min-width: 85px; padding: 11px 10px; }
+    .next-time strong { font-size: 21px; }
+    .home-row { min-height: 51px; padding-block: 7px; }
+  }
+  @media (max-width: 440px) {
+    .home-page { padding-inline: 12px; }
+    .home-heading { gap: 11px; }
+    .next-event { column-gap: 10px; padding-inline: 10px; }
+    .next-event h3 { font-size: 17px; }
+    .window-controls svg { width: 22px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #snowball *, #snowball *::before, #snowball *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="preview">
+  <header class="preview-head">
+    <div class="preview-bar">
+      <div class="preview-title"><b>Главная Snowball.ai</b><span>Интерактивный макет с примером рабочего дня</span></div>
+      <div class="preview-options">
+        <fieldset>
+          <legend>Тема</legend>
+          <button type="button" data-preview-theme="light" aria-pressed="true">Светлая</button>
+          <button type="button" data-preview-theme="dark" aria-pressed="false">Тёмная</button>
+          <button type="button" data-preview-theme="macos" aria-pressed="false">macOS</button>
+        </fieldset>
+        <fieldset>
+          <legend>Размер окна</legend>
+          <button type="button" data-width="regular" aria-pressed="true">Обычное окно</button>
+          <button type="button" data-width="narrow" aria-pressed="false">Узкое окно</button>
+        </fieldset>
+      </div>
+    </div>
+  </header>
+  <main class="preview-stage">
+    <iframe id="mock-window" title="Интерактивное окно Snowball.ai"></iframe>
+  </main>
+</div>
+
+<div class="app" id="snowball">
+  <!-- Shared Snowball.ai glyphs from the application's navigation and tabs. -->
+  <svg class="home-icons" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <defs fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.5 12 4l8 6.5V19a1.5 1.5 0 0 1-1.5 1.5H15v-6h-6v6H5.5A1.5 1.5 0 0 1 4 19Z"/></symbol>
+      <symbol id="i-prompts" viewBox="0 0 24 24"><rect x="4.5" y="3.5" width="15" height="17" rx="2.5"/><path d="M8.5 8h7M8.5 12h7M8.5 16h4"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+      <symbol id="i-tasks" viewBox="0 0 24 24"><rect x="3.5" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="16.5" y="4" width="4" height="7" rx="1.5"/></symbol>
+      <symbol id="i-assistant" viewBox="0 0 24 24"><path d="M5 5.5h14a1.5 1.5 0 0 1 1.5 1.5v9a1.5 1.5 0 0 1-1.5 1.5h-7l-4.5 3.5v-3.5H5A1.5 1.5 0 0 1 3.5 16V7A1.5 1.5 0 0 1 5 5.5Z"/></symbol>
+      <symbol id="i-transcribe" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3"/></symbol>
+      <symbol id="i-generator" viewBox="0 0 24 24"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5L4.5 11 10 9ZM18.5 3.5v3M17 5h3"/></symbol>
+      <symbol id="i-screenshots" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></symbol>
+      <symbol id="i-stats" viewBox="0 0 24 24"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="4" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/></symbol>
+      <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+      <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+      <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+      <symbol id="i-maximize" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    </defs>
+  </svg>
+  <div class="shell">
+    <aside class="side" aria-label="Боковая панель">
+      <div class="side-head">
+        <img src="../assets/icon.png" alt=""><span>Snowball.ai</span>
+        <button type="button" class="side-toggle" id="side-toggle" aria-label="Свернуть панель" aria-expanded="true">
+          <svg aria-hidden="true"><use href="#i-panel"/></svg>
+        </button>
+      </div>
+      <div class="side-top">
+        <nav class="side-icons" id="nav-open" aria-label="Разделы"></nav>
+        <button type="button" class="capture-nav" data-page="screenshots" aria-label="Снимки" title="Снимки">
+          <svg aria-hidden="true"><use href="#i-screenshots"/></svg><span>Снимки</span><kbd>Alt + Z</kbd>
+        </button>
+        <div class="upcoming" aria-labelledby="upcoming-title">
+          <p class="side-h" id="upcoming-title">Ближайшие дела</p>
+          <div class="up-list" id="up-list"></div>
+        </div>
+      </div>
+      <div class="side-group side-bottom">
+        <div class="nav-item mock-timer" aria-hidden="true"><svg><use href="#i-clock"/></svg><span>Таймер</span></div>
+        <button type="button" class="nav-item" data-page="stats" aria-label="Статистика" title="Статистика">
+          <svg aria-hidden="true"><use href="#i-stats"/></svg><span>Статистика</span>
+        </button>
+        <div class="profile-row mock-profile">
+          <div class="profile-wrap"><div class="profile-btn"><span class="avatar" aria-hidden="true">А</span><span class="profile-name">Алексей</span></div></div>
+          <button type="button" class="qa-btn mock-quick" data-page="assistant" aria-label="Ассистент" title="Ассистент">
+            <svg aria-hidden="true"><use href="#i-generator"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+    <div class="main-col">
+      <header class="titlebar mock-top">
+        <nav class="tabs" id="mock-tabs" aria-label="Открытые вкладки"></nav>
+        <button type="button" class="tab-plus" popovertarget="mock-more" aria-label="Новая вкладка" title="Новая вкладка">
+          <svg aria-hidden="true"><use href="#i-plus"/></svg>
+        </button>
+        <div class="window-controls" aria-hidden="true">
+          <svg><use href="#i-minimize"/></svg><svg><use href="#i-maximize"/></svg><svg><use href="#i-close"/></svg>
+        </div>
+      </header>
+      <div class="menu mock-more" id="mock-more" popover></div>
+      <main class="scroller" id="mock-scroll">
+        <div class="home-page" id="mock-page"></div>
+      </main>
+    </div>
+  </div>
+</div>
+<script>
+  const select = (selector) => document.querySelector(selector);
+  const all = (selector) => [...document.querySelectorAll(selector)];
+
+  if (!windowTheme) {
+    const frame = select("#mock-window");
+    frame.style.colorScheme = "light";
+    frame.src = "?window=light";
+    const themeButtons = all("[data-preview-theme]");
+    const widthButtons = all("[data-width]");
+    for (const button of themeButtons) {
+      button.addEventListener("click", () => {
+        const theme = button.dataset.previewTheme;
+        themeButtons.forEach(item => item.setAttribute("aria-pressed", item === button));
+        frame.style.colorScheme = theme === "dark" ? "dark" : "light";
+        frame.contentWindow.postMessage({ snowballTheme: theme }, "*");
+      });
+    }
+    frame.addEventListener("load", () => {
+      const active = select('[data-preview-theme][aria-pressed="true"]').dataset.previewTheme;
+      frame.contentWindow.postMessage({ snowballTheme: active }, "*");
+    });
+    for (const button of widthButtons) {
+      button.addEventListener("click", () => {
+        widthButtons.forEach(item => item.setAttribute("aria-pressed", item === button));
+        select("#preview").classList.toggle("narrow", button.dataset.width === "narrow");
+      });
+    }
+  } else {
+    runWindow();
+  }
+
+  function runWindow() {
+    const icon = (name, css = "") =>
+      `<svg class="${css}" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><use href="#i-${name}"/></svg>`;
+    const names = {
+      home: "Главная", prompts: "Промты", calendar: "Календарь", tasks: "Задачи", assistant: "LLM",
+      transcribe: "Транскрибация", generator: "Генератор", screenshots: "Снимки", stats: "Статистика"
+    };
+    const events = [
+      { id: "storyboard", time: "15:30", end: "16:15", title: "Разбор раскадровки", kind: "Встреча", color: "meet", meta: "Проект «Север», онлайн", note: "Посмотреть варианты первого кадра и согласовать порядок сцен." },
+      { id: "teaser", time: "17:00", end: "18:00", title: "Монтаж тизера", kind: "Монтаж", color: "edit", meta: "Проект «Север»", note: "Собрать черновой монтаж и проверить стык со звуком." },
+      { id: "call", time: "18:30", end: "19:00", title: "Созвон по курсу", kind: "Звонок", color: "call", meta: "Курс", note: "Сверить сроки и план следующего занятия." }
+    ];
+    const tasks = [
+      { id: "cut", title: "Собрать черновой монтаж", meta: "Проект «Север»", note: "Подобрать дубли и собрать первую минуту тизера." },
+      { id: "refs", title: "Подобрать референсы света", meta: "Проект «Север»", note: "Сравнить три вечерние сцены и собрать подборку для встречи." },
+      { id: "captions", title: "Вычитать субтитры к уроку", meta: "Курс", note: "Проверить имена, термины и переносы строк в последней главе." }
+    ];
+    const taskGroups = [
+      { heading: "В процессе", items: tasks },
+      { heading: "Предстоит", items: [{ id: "sound", title: "Записать голос для тизера", meta: "Проект «Север»", icon: "tasks", note: "Подготовить текст и записать два варианта начитки." }] }
+    ];
+    const prompts = [
+      { id: "shore", title: "Северный берег на рассвете", meta: "Картинка", color: "static", note: "Широкий кадр каменистого берега. Холодный утренний свет, низкий туман над водой, едва различимый силуэт маяка." },
+      { id: "dolly", title: "Проезд вдоль витрин", meta: "Видео", color: "video", note: "Камера плавно движется вдоль мокрых витрин. Отражения фар проходят по стеклу, прохожие остаются вне резкости." },
+      { id: "summary", title: "Заметки после созвона", meta: "Текст", color: "text", note: "Собери из расшифровки принятые решения и задачи. Для каждой задачи укажи исполнителя и срок, если они названы." }
+    ];
+    const summaries = {
+      assistant: "В истории 8 разговоров.", transcribe: "В истории 4 расшифровки.", generator: "Генерация изображений и видео появится позже.",
+      screenshots: "В истории 12 снимков.", stats: "Сегодня изменено 2 промта."
+    };
+    const doc = document.documentElement;
+    const page = select("#mock-page");
+    const scroller = select("#mock-scroll");
+    const compact = matchMedia("(max-width: 899px)");
+    const tabs = ["home"];
+    let folded = compact.matches;
+
+    addEventListener("message", event => {
+      if (event.source !== parent || parent === window) return;
+      const theme = event.data?.snowballTheme;
+      if (["light", "dark", "macos"].includes(theme)) doc.dataset.theme = theme;
+    });
+    const toggle = select("#side-toggle");
+    function setFolded(value) {
+      folded = value;
+      doc.classList.toggle("side-mini", folded);
+      toggle.setAttribute("aria-expanded", !folded);
+      toggle.setAttribute("aria-label", folded ? "Развернуть панель" : "Свернуть панель");
+    }
+    setFolded(folded);
+    compact.addEventListener("change", event => setFolded(event.matches));
+    toggle.addEventListener("click", () => setFolded(!folded));
+
+    const badgeCounts = { calendar: events.length, tasks: taskGroups.reduce((total, group) => total + group.items.length, 0) };
+    select("#nav-open").innerHTML = Object.keys(names).slice(0, 7).map(name => {
+      const badge = badgeCounts[name] ? `<span class="nav-badge" aria-hidden="true">${badgeCounts[name]}</span>` : "";
+      return `<button type="button" class="nav-icon" data-page="${name}" title="${names[name]}" aria-label="${names[name]}">${icon(name)}${badge}</button>`;
+    }).join("");
+    select("#up-list").innerHTML = '<p class="up-day">Сегодня</p>' + events.map(event =>
+      `<button type="button" class="up-ev ev-${event.color}" data-page="calendar" data-entry="${event.id}">
+        <i aria-hidden="true"></i><span class="tt">${event.title}</span><time class="tm">${event.time}</time>
+      </button>`).join("");
+    select("#mock-more").innerHTML = Object.keys(names).map(name =>
+      `<button type="button" class="menu-item" data-page="${name}">${icon(name)}${names[name]}</button>`).join("");
+    const plus = select(".tab-plus");
+    select("#mock-more").addEventListener("beforetoggle", event => {
+      if (event.newState !== "open") return;
+      const box = plus.getBoundingClientRect();
+      event.target.style.setProperty("--pop-top", `${box.bottom + 3}px`);
+      event.target.style.setProperty("--pop-left", `${Math.max(8, Math.min(box.left, innerWidth - 230))}px`);
+    });
+
+    function row(item, kind, detailView = false, selected = "") {
+      const active = selected === item.id;
+      const mark = kind === "prompts"
+        ? `<span class="prompt-mark cat-${item.color}">${icon("prompts")}</span>`
+        : kind === "tasks"
+          ? `<span class="task-mark">${icon(item.icon ?? "clock")}</span>`
+          : `<time class="home-meta">${item.time}</time>`;
+      const action = detailView
+        ? `data-detail="${item.id}" aria-expanded="${active}" aria-controls="detail-${item.id}"`
+        : `data-page="${kind}" data-entry="${item.id}"`;
+      const detail = detailView ? `<div class="home-detail" id="detail-${item.id}" ${active ? "" : "hidden"}>
+        <p>${item.note}</p>${item.end ? `<p class="home-meta">До ${item.end}. ${item.meta}</p>` : ""}
+      </div>` : "";
+      return `<li data-match="${item.id}"><button type="button" class="home-row" ${action}>
+        ${mark}<span><strong>${item.title}</strong><small>${item.kind ?? item.meta}</small></span>${icon("chevron", "row-chevron")}
+      </button>${detail}</li>`;
+    }
+
+    function home() {
+      const event = events[0];
+      return `<header class="home-heading">
+        <div><time class="home-date" datetime="2026-11-22">Воскресенье, 22 ноября</time><h1>Добрый день, Алексей!</h1></div>
+        <button type="button" class="home-action" data-page="prompts">${icon("prompts")}Открыть промты</button>
+      </header>
+      <section aria-labelledby="next-heading">
+        <div class="home-section-head"><h2 id="next-heading">Ближайшее дело</h2></div>
+        <div class="next-event">
+          <div class="next-time"><strong><time>${event.time}</time></strong><small>до <time>${event.end}</time></small></div>
+          <div><span class="event-kind">${event.kind}</span><h3>${event.title}</h3><p>${event.meta}</p></div>
+          <button type="button" class="home-text-button" data-page="calendar" data-entry="${event.id}">В календарь ${icon("arrow")}</button>
+        </div>
+      </section>
+      <div class="home-columns">
+        <section aria-labelledby="tasks-heading">
+          <div class="home-section-head">
+            <h2 id="tasks-heading">Задачи в работе <span class="home-task-count">${tasks.length}</span></h2>
+            <button type="button" class="home-text-button" data-page="tasks">Все задачи ${icon("arrow")}</button>
+          </div>
+          <ul class="home-panel home-list">${tasks.map(item => row(item, "tasks")).join("")}</ul>
+        </section>
+        <section aria-labelledby="recent-heading">
+          <div class="home-section-head"><h2 id="recent-heading">Недавние промты</h2></div>
+          <ul class="home-panel home-list">${prompts.slice(0, 2).map(item => row(item, "prompts")).join("")}</ul>
+        </section>
+      </div>`;
+    }
+
+    function section(name, selected) {
+      const groups = {
+        calendar: [{ heading: "Воскресенье, 22 ноября", items: events }],
+        tasks: taskGroups,
+        prompts: [{ items: prompts }]
+      }[name];
+      const search = name === "prompts"
+        ? '<label class="home-search">Поиск промтов<input type="search" id="prompt-search" placeholder="Название или тип"></label>'
+        : "";
+      const list = groups
+        ? groups.map(group => `<div class="home-route-group">${group.heading ? `<h2>${group.heading}</h2>` : ""}
+            <ul class="home-panel home-list">${group.items.map(item => row(item, name, true, selected)).join("")}</ul>
+          </div>`).join("")
+        : `<div class="home-panel"><p class="home-empty">${summaries[name]}</p></div>`;
+      return `<div class="home-route">
+        <button type="button" class="home-text-button" data-page="home">${icon("arrow", "home-back")}Главная</button>
+        <h1 tabindex="-1">${names[name]}</h1>${search}${list}
+        ${name === "prompts" ? '<p class="home-empty" id="no-prompts" role="status" hidden>Промты не найдены. Попробуйте другой запрос.</p>' : ""}
+      </div>`;
+    }
+
+    function open(name, selected = "", focus = true) {
+      if (!tabs.includes(name)) tabs.push(name);
+      page.innerHTML = name === "home" ? home() : section(name, selected);
+      select("#mock-tabs").innerHTML = tabs.map(tab =>
+        `<button type="button" class="tab ${tab === name ? "on" : ""}" data-page="${tab}" ${tab === name ? 'aria-current="page"' : ""}>
+          <span class="tab-ico">${icon(tab)}</span><span class="tab-t">${names[tab]}</span>
+        </button>`).join("");
+      select(".tab.on").scrollIntoView({ block: "nearest", inline: "nearest" });
+      for (const item of all(".side [data-page]:not([data-entry])")) {
+        if (item.dataset.page === name) item.setAttribute("aria-current", "page");
+        else item.removeAttribute("aria-current");
+      }
+      scroller.scrollTop = 0;
+      if (focus) {
+        const target = selected ? select(`[data-detail="${selected}"]`) : page.querySelector("h1");
+        target.focus({ preventScroll: true });
+      }
+    }
+
+    select("#snowball").addEventListener("click", event => {
+      const link = event.target.closest("[data-page]");
+      if (link) {
+        if (link.closest("#mock-more")) select("#mock-more").hidePopover();
+        open(link.dataset.page, link.dataset.entry);
+        return;
+      }
+      const button = event.target.closest("[data-detail]");
+      if (button) {
+        const content = document.getElementById(button.getAttribute("aria-controls"));
+        content.hidden = !content.hidden;
+        button.setAttribute("aria-expanded", !content.hidden);
+      }
+    });
+    page.addEventListener("input", event => {
+      if (event.target.id !== "prompt-search") return;
+      const query = event.target.value.trim().toLocaleLowerCase("ru");
+      let any = false;
+      for (const item of prompts) {
+        const match = `${item.title} ${item.meta}`.toLocaleLowerCase("ru").includes(query);
+        select(`[data-match="${item.id}"]`).hidden = !match;
+        any ||= match;
+      }
+      select("#no-prompts").hidden = any;
+      page.querySelector(".home-list").hidden = !any;
+    });
+    open("home", "", false);
+  }
+</script>
+</body>
+</html>

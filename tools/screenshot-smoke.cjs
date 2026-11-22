@@ -3,9 +3,10 @@
 const fs = require('fs'), path = require('path'), os = require('os'), assert = require('node:assert/strict'), { spawn } = require('child_process');
 const { connect } = require('./guide-shots/cdp');
 const root = path.resolve(__dirname, '..'), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'snowball-shot-smoke-')), profile = path.join(tmp, 'profile'), data = path.join(tmp, 'data');
-fs.mkdirSync(profile); fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ dataDir: data, theme: 'light', lastVersion: '1.16.3', bounds: { width: 1280, height: 900 } }));
+fs.mkdirSync(profile); fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ dataDir: data, theme: 'light', lastVersion: '1.16.3', captureShortcut: 'Alt+F9', bounds: { width: 1280, height: 900 } }));
 const appPath = process.argv[3] ? path.resolve(process.argv[3]) : root;
-const child = spawn(require('electron'), [appPath, '--inspect=9245', '--remote-debugging-port=9345', '--user-data-dir=' + profile], { cwd: root, stdio: 'ignore', windowsHide: true });
+const installed = /\.exe$/i.test(appPath);
+const child = spawn(installed ? appPath : require('electron'), [...(installed ? [] : [appPath]), '--inspect=9245', '--remote-debugging-port=9345', '--user-data-dir=' + profile], { cwd: root, stdio: 'ignore', windowsHide: true });
 process.on('exit', () => { try { child.kill(); } catch {} });
 let main;
 async function mouse(page, type, x, y, extra = {}) { await page.send('Input.dispatchMouseEvent', { type, x, y, ...extra }); }
@@ -21,7 +22,7 @@ async function draw(page, tool, from, to) {
   assert.equal(path.resolve(await main.ev("process.mainModule.require('electron').app.getPath('userData')")), profile);
   await main.ev("global.shotTestElectron=process.mainModule.require('electron'); global.shotOldClipboard={text:shotTestElectron.clipboard.readText(),html:shotTestElectron.clipboard.readHTML(),image:shotTestElectron.clipboard.readImage()}; true");
   const page = await connect(9345, t => t.type === 'page' && /index\.html/.test(t.url));
-  await page.until("!!window.vsApi && !!document.querySelector('.capture-nav')");
+  await page.until("!!window.vsApi && !!document.querySelector('#view-home:not([hidden])')");
   await page.ev("document.querySelectorAll('dialog[open]').forEach(d=>d.close());document.querySelector('.capture-nav').click()");
   await page.until('!!window.screenshotEditor');
   const initial = await page.ev('window.vsApi.captureList()'); assert.equal(initial.ok, true); assert.equal(initial.items.length, 0);
@@ -119,15 +120,55 @@ async function draw(page, tool, from, to) {
   await page.ev(`window.screenshotEditor.open(${JSON.stringify(ids[0])})`);
   assert.equal((await page.ev(`window.vsApi.captureGet(${JSON.stringify(ids[0])},${JSON.stringify(list.token)})`)).item.ops.length, 5);
   // Key choice persists and the old shortcut is released.
-  const alt = await page.ev("window.vsApi.captureShortcut('Alt+B')"); assert.equal(alt.ok, true, alt.error);
-  assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+B')"), true);
-  assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+Z')"), false);
-  assert.equal(await page.ev("document.querySelector('#capture-settings-key').textContent"), 'Alt + B');
-  await main.ev("shotTestElectron.globalShortcut.register('Alt+V',()=>{});true");
-  assert.equal((await page.ev("window.vsApi.captureShortcut('Alt+V')")).ok, false);
-  assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+B')"), true);
-  await main.ev("shotTestElectron.globalShortcut.unregister('Alt+V');true");
-  // Use synthetic screen sources in this regression suite: user activity must never enter artifacts.
+  const alt = await page.ev("window.vsApi.captureShortcut('Alt+F10')"); assert.equal(alt.ok, true, alt.error);
+  assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+F10')"), true);
+  assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+F9')"), false);
+  assert.equal(await page.ev("document.querySelector('#capture-settings-key').textContent"), 'Alt + F10');
+  assert.equal(await main.ev("shotTestElectron.globalShortcut.register('Alt+F11',()=>{})"), true);
+  assert.equal((await page.ev("window.vsApi.captureShortcut('Alt+F11')")).ok, false);
+  assert.equal(await main.ev("shotTestElectron.globalShortcut.isRegistered('Alt+F10')"), true);
+  await main.ev("shotTestElectron.globalShortcut.unregister('Alt+F11');true");
+  if (process.argv.includes('--real-displays')) {
+    const colors = [[46, 139, 87], [123, 63, 161], [32, 112, 200]];
+    const displays = await main.ev(`(async () => {
+      global.realTestDisplays = shotTestElectron.screen.getAllDisplays();
+      global.realTestCovers = [];
+      const colors = ${JSON.stringify(colors)};
+      for (const [index, display] of realTestDisplays.entries()) {
+        const color = 'rgb(' + colors[index % colors.length].join(',') + ')';
+        const cover = new shotTestElectron.BrowserWindow({ ...display.bounds, frame: false, skipTaskbar: true,
+          alwaysOnTop: true, enableLargerThanScreen: true, webPreferences: { sandbox: true } });
+        cover.__snowCapture = 'fixture';
+        cover.setAlwaysOnTop(true, 'screen-saver');
+        await cover.loadURL('data:text/html,' + encodeURIComponent('<body style="margin:0;background:' + color + '">'));
+        cover.setBounds(display.bounds);
+        cover.show();
+        realTestCovers.push(cover);
+      }
+      return realTestDisplays.length;
+    })()`);
+    try {
+      await page.sleep(350);
+      const real = await page.ev('window.vsApi.captureStart()');
+      assert.equal(real.ok, true, real.error);
+      const frames = await main.ev(`Promise.all(realTestDisplays.map(display => {
+        const overlay = shotTestElectron.BrowserWindow.getAllWindows().find(w => w.__snowCapture === 'overlay' &&
+          w.isVisible() && shotTestElectron.screen.getDisplayMatching(w.getBounds()).id === display.id);
+        return overlay?.webContents.executeJavaScript(\"(() => {const c=document.querySelector('#screen'); return Array.from(c.getContext('2d').getImageData(Math.floor(c.width/2),Math.floor(c.height/2),1,1).data);})()\");
+      }))`);
+      assert.equal(frames.length, displays);
+      for (const [index, pixel] of frames.entries()) {
+        assert.ok(pixel?.slice(0, 3).every((value, channel) => Math.abs(value - colors[index % colors.length][channel]) <= 8), `Display ${index + 1} did not capture its fixture`);
+      }
+      const realOverlay = await connect(9345, t => /capture-overlay\.html/.test(t.url));
+      await realOverlay.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+      realOverlay.close();
+      console.log('PASS: real Windows capture on ' + displays + ' displays; no desktop image was saved');
+    } finally {
+      await main.ev('realTestCovers.forEach(w => w.destroy()); true');
+    }
+  }
+  // Use synthetic screen sources in the remaining tests so no desktop pixels enter artifacts.
   // The overlay, cropping, multi-monitor geometry and window lifecycle still run in real Electron.
   await main.ev(`shotTestElectron.desktopCapturer.getSources=async()=>shotTestElectron.screen.getAllDisplays().map(d=>({display_id:String(d.id),thumbnail:shotTestElectron.nativeImage.createFromPath(${JSON.stringify(path.join(tmp,'fixture-0.png'))}).resize({width:Math.round(d.size.width*d.scaleFactor),height:Math.round(d.size.height*d.scaleFactor)})}));true`);
   await main.ev("(async()=>{global.shotCovers=[];for(const d of shotTestElectron.screen.getAllDisplays()){const w=new shotTestElectron.BrowserWindow({...d.bounds,frame:false,skipTaskbar:true,alwaysOnTop:true,enableLargerThanScreen:true,webPreferences:{sandbox:true}});w.__snowCapture='fixture';await w.loadURL('data:text/html,<body style=\"margin:0;background:rgb(45,105,85);color:white;font:48px sans-serif;padding:70px\">Snowball capture test</body>');w.setBounds(d.bounds);w.show();shotCovers.push(w);}return true;})()");

@@ -161,12 +161,6 @@ async function customShortcuts() {
       await page.ev("document.querySelector('#capture-settings-key').textContent"),
       'Ctrl + Shift + S',
     );
-    assert.ok(
-      await page.ev(
-        "document.querySelector('#view-home').textContent.includes('Ctrl + Shift + S')",
-      ),
-      'Home tile updates immediately',
-    );
     await page.ev("document.querySelector('.capture-nav').click()");
     await page.until(
       "!!window.screenshotEditor && document.querySelector('.shot-empty-key').textContent.includes('Ctrl + Shift + S')",

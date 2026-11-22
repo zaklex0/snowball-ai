@@ -54,5 +54,9 @@
   $('cloud-signup').onclick = () => auth('signup');
   $('cloud-now').onclick = () => action(() => api.cloudSync());
   $('cloud-out').onclick = () => action(() => api.cloudAuth('signout'));
+  const help = $('cloud-help');
+  help.querySelector('summary').addEventListener('click', event => {
+    help.toggleAttribute('data-pointer-open', !help.open && event.detail > 0);
+  });
   api.onCloudState(paint); api.cloudState().then(r => paint(r.state));
 })();

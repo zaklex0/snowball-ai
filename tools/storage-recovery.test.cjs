@@ -42,6 +42,55 @@ test('an old assistant card cannot change or delete a newer event or task', asyn
   assert.equal(store.findTask(task.id), null);
 });
 
+test('calendar assistant undo is atomic, checks recaps and can retry after a disk error', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-calendar-undo-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = await new Store(dir).init();
+  const event = await store.saveEvent({ date: '2026-11-22', title: 'Встреча' });
+  const changes = [];
+  await store.saveEvent({ ...event, title: 'Перенос встречи' }, changes);
+  const other = await store.saveEvent({ date: event.date, title: 'Новая встреча' }, changes);
+  const before = await fs.readFile(store.calendarPath, 'utf8');
+  const rename = fs.rename;
+  fs.rename = async (from, to) => {
+    if (to === store.calendarPath) throw new Error('disk full');
+    return rename(from, to);
+  };
+  try { await assert.rejects(store.restoreEventChanges(changes), /disk full/); }
+  finally { fs.rename = rename; }
+  assert.equal(await fs.readFile(store.calendarPath, 'utf8'), before);
+  assert.deepEqual(store.findEvent(other.id), other);
+  await store.restoreEventChanges(changes);
+  assert.deepEqual(store.findEvent(event.id), event);
+  assert.equal(store.findEvent(other.id), null);
+
+  const stale = [];
+  await store.saveEvent({ ...event, title: 'Новый заголовок' }, stale);
+  const later = await store.saveEvent({ date: event.date, title: 'Другое дело' }, stale);
+  await store.setRecap(event.id, { text: 'Новые итоги созвона' });
+  await assert.rejects(store.restoreEventChanges(stale), /undo conflict/);
+  assert.deepEqual(store.findEvent(later.id), later);
+  assert.equal(store.findEvent(event.id).recap.text, 'Новые итоги созвона');
+});
+
+test('undoing prompt creation never removes a newer edit queued by another window', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-prompt-undo-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const store = await new Store(dir).init();
+  const changes = [];
+  const { id } = await store.savePrompt({ item: { title: 'Промт ассистента' } }, changes);
+  const update = store.savePrompt({ item: { id, title: 'Моя версия', comment: 'Сохранить' } });
+  const undo = store.deletePrompt(id, changes[0].after);
+  await assert.rejects(undo, /undo conflict/);
+  await update;
+  assert.equal(store.find(id).comment, 'Сохранить');
+
+  const clean = [];
+  const created = await store.savePrompt({ item: { title: 'Промт для отмены' } }, clean);
+  await store.deletePrompt(created.id, clean[0].after);
+  assert.equal(store.find(created.id), null);
+});
+
 test('failed list saves keep both the old file and the visible data', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'snowball-list-write-failure-'));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));

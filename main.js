@@ -1687,6 +1687,9 @@ function claudeError(e) {
 }
 const modelError = (e) => openaiError(e) || claudeError(e);
 function userError(text) { const e = new Error(text); e.userMessage = text; return e; }
+function requireAssistantStore(owner) {
+  if (owner !== store) throw userError('Папка с данными сменилась. Попросите ассистента выполнить действие заново.');
+}
 
 // OpenAI counts cached tokens inside input_tokens, and thinking inside output_tokens.
 function openaiUsage(response) {
@@ -1719,26 +1722,39 @@ async function* openaiSource(model, messages, signal, opts) {
     }, { signal });
     let refused = false;
     let final = null;
-    for await (const event of stream) {
-      if (event.type === 'response.output_item.added' && event.item && event.item.type === 'message' && wrote) yield { type: 'text', text: '\n\n' };
-      else if (event.type === 'response.output_text.delta' && event.delta) { wrote = true; yield { type: 'text', text: event.delta }; }
-      else if (event.type === 'response.refusal.delta') refused = true;
-      else if (event.type === 'response.completed') { final = event.response; recordSpend(model, openaiUsage(event.response), signal); }
-      else if (event.type === 'response.incomplete') {
-        recordSpend(model, openaiUsage(event.response), signal);
-        const reason = event.response && event.response.incomplete_details && event.response.incomplete_details.reason;
-        if (reason === 'content_filter') throw userError('ChatGPT отказался отвечать на этот запрос. Попробуйте сформулировать иначе.');
-        throw userError('Ответ получился слишком длинным и оборвался. Попросите продолжить или сократить.');
-      } else if (event.type === 'response.failed' || event.type === 'error') {
-        const err = event.type === 'error' ? event : (event.response && event.response.error) || {};
-        console.error('openai stream', err.code);
-        if (/rate_limit/.test(err.code || '')) throw userError('Слишком много запросов подряд. Подождите минуту и попробуйте ещё раз.');
-        if (OPENAI_BILLING.includes(err.code)) throw userError('На счёте OpenAI закончились деньги или достигнут лимит трат. Проверьте баланс на platform.openai.com в разделе Billing.');
-        throw userError('ChatGPT не смог ответить. Попробуйте ещё раз.');
+    const interrupted = () => userError(wrote ? 'Ответ ChatGPT оборвался. Полученная часть осталась в чате.' : 'Связь с ChatGPT прервалась до начала ответа. Попробуйте ещё раз.');
+    try {
+      for await (const event of stream) {
+        if (event.type === 'response.output_item.added' && event.item && event.item.type === 'message' && wrote) yield { type: 'text', text: '\n\n' };
+        else if (event.type === 'response.output_text.delta' && event.delta) { wrote = true; yield { type: 'text', text: event.delta }; }
+        else if (event.type === 'response.refusal.delta') refused = true;
+        else if (event.type === 'response.completed') {
+          final = event.response;
+          recordSpend(model, openaiUsage(final), signal);
+          break;
+        } else if (event.type === 'response.incomplete') {
+          recordSpend(model, openaiUsage(event.response), signal);
+          const reason = event.response && event.response.incomplete_details && event.response.incomplete_details.reason;
+          if (reason === 'content_filter') throw userError('ChatGPT отказался отвечать на этот запрос. Попробуйте сформулировать иначе.');
+          if (reason !== 'max_output_tokens') throw interrupted();
+          throw userError('Ответ получился слишком длинным и оборвался. Попросите продолжить или сократить.');
+        } else if (event.type === 'response.failed' || event.type === 'error') {
+          const err = event.type === 'error' ? event : (event.response && event.response.error) || {};
+          console.error('openai stream', err.code);
+          if (/rate_limit/.test(err.code || '')) throw userError('Слишком много запросов подряд. Подождите минуту и попробуйте ещё раз.');
+          if (OPENAI_BILLING.includes(err.code)) throw userError('На счёте OpenAI закончились деньги или достигнут лимит трат. Проверьте баланс на platform.openai.com в разделе Billing.');
+          throw userError('ChatGPT не смог ответить. Попробуйте ещё раз.');
+        }
       }
+    } catch (e) {
+      if (signal.aborted) return;
+      if (e.userMessage || (e instanceof OpenAI.APIError && !(e instanceof OpenAI.APIConnectionError))) throw e;
+      throw interrupted();
     }
+    if (signal.aborted) return;
     if (refused) throw userError('ChatGPT отказался отвечать на этот запрос. Попробуйте сформулировать иначе.');
-    const calls = ((final && final.output) || []).filter((item) => item.type === 'function_call');
+    if (!final) throw interrupted();
+    const calls = (final.output || []).filter((item) => item.type === 'function_call');
     if (!calls.length) return;
     // Nothing is stored on OpenAI's side, so the whole turn (thinking, calls) goes back together with the results.
     input = input.concat(final.output);
@@ -1881,6 +1897,7 @@ async function docText(d) {
 const IMAGE_ONLY_TEXT = 'Посмотри на картинку.';
 
 async function runAssistant(id, messages, controller, quick) {
+  const owner = store;
   const source = pickSource(quick);
   let full = '';
   try {
@@ -1889,6 +1906,7 @@ async function runAssistant(id, messages, controller, quick) {
       if (controller.signal.aborted) break;
       if (piece.type === 'text') { full += piece.text; sendAssistant({ id, kind: 'delta', text: piece.text }); }
       else if (piece.type === 'action') {
+        requireAssistantStore(owner);
         const action = Object.assign({ id: 'a' + (++actionSeq) }, piece.action);
         let data = null;
         if (settings.confirm === false) {
@@ -1904,7 +1922,7 @@ async function runAssistant(id, messages, controller, quick) {
             action.error = e.userMessage || 'Не получилось.';
           }
         }
-        pending.set(action.id, action);
+        pending.set(action.id, { ...action, owner });
         const shown = Object.assign({}, action, { undo: undefined, undoable: !!action.undo });
         sendAssistant({ id, kind: 'action', action: shown, data });
       } else if (piece.type === 'open') sendAssistant({ id, kind: 'open', tabs: piece.tabs });
@@ -2264,63 +2282,52 @@ const TASK_TOOLS = [
   }
 ];
 
-// Every change goes through here and is remembered in log, so «Отменить» can put the tasks back.
-async function loggedTask(log, id, fn) {
-  const before = structuredClone(store.tasks);
-  const r = await fn();
-  const old = new Map(before.map(t => [t.id, t]));
-  const current = new Map(store.tasks.map(t => [t.id, t]));
-  for (const key of new Set([...old.keys(), ...current.keys()])) {
-    const prev = old.get(key) || null, after = current.get(key) || null;
-    if (JSON.stringify(prev) !== JSON.stringify(after)) log.push({ id: key, before: prev, after: structuredClone(after) });
-  }
-  return r;
+function editAssistantTask(previous, fields, log) {
+  return store.saveTask({ ...fields, id: previous.id, expectedAction: JSON.stringify(previous) }, log);
 }
 async function runTaskTool(name, input, log) {
   const a = input && typeof input === 'object' ? input : {};
   if (name === 'tasks_move') {
-    const result = await store.moveTasks(a.ids, { status: a.status, groupId: a.groupId });
-    result.before.forEach(before => log.push({ id: before.id, before, after: structuredClone(store.findTask(before.id)) }));
+    const result = await store.moveTasks(a.ids, { status: a.status, groupId: a.groupId }, log);
     return 'Перемещено задач: ' + result.tasks.length + '.';
   }
   if (name === 'tasks_list') return tasksForModel();
   if (name === 'tasks_archive_search') return archiveForModel(a.query);
   if (name === 'tasks_archive_done') {
-    const ids = store.tasks.filter((t) => t.status === 'done' && !t.archivedAt).map((t) => t.id);
-    for (const id of ids) await loggedTask(log, id, async () => { await store.archiveDone([id]); return store.findTask(id); });
+    const ids = await store.archiveDone(null, log);
     return ids.length ? 'Убрано в архив: ' + ids.length + '.' : 'В «Готово» нечего убирать.';
   }
   if (name === 'task_add') {
     const t = normalizeTask(Object.assign({ title: a.title, status: a.status, subtasks: (Array.isArray(a.subtasks) ? a.subtasks : []).map((s) => ({ title: s })) }, taskFields(a)));
     if (!t) return 'Ошибка: нужно название задачи.';
-    const saved = await loggedTask(log, null, () => store.saveTask(Object.assign({}, t, { id: undefined, order: undefined, createdAt: undefined })));
+    const saved = await store.saveTask({ ...t, id: undefined, order: undefined, createdAt: undefined }, log);
     return 'Добавлено: ' + taskLine(saved) + ', id ' + saved.id;
   }
   const prev = findToolTask(a.id);
   if (!prev) return 'Задачи с таким id нет. Найди её через tasks_list.';
   if (name === 'task_update') {
-    const saved = await loggedTask(log, prev.id, () => store.saveTask(Object.assign({ id: prev.id, title: a.title || prev.title, status: store.hasColumn(a.status) ? a.status : prev.status }, taskFields(a))));
+    const saved = await editAssistantTask(prev, { title: a.title || prev.title, status: store.hasColumn(a.status) ? a.status : prev.status, ...taskFields(a) }, log);
     return 'Изменено: ' + taskLine(saved);
   }
   if (name === 'task_delete') {
-    await loggedTask(log, prev.id, () => store.deleteTask(prev.id));
+    await store.deleteTask(prev.id, JSON.stringify(prev), log);
     return 'Удалено.';
   }
   if (name === 'subtasks_add') {
     const titles = (Array.isArray(a.titles) ? a.titles : []).map((s) => ({ title: s }));
-    const saved = await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.concat(titles) }));
+    const saved = await editAssistantTask(prev, { subtasks: prev.subtasks.concat(titles) }, log);
     return 'Шаги добавлены, теперь их ' + saved.subtasks.length + '.';
   }
   if (name === 'subtask_done') {
     if (!prev.subtasks.some((s) => s.id === a.subtask_id)) return 'Такого шага нет: возьми subtask_id из tasks_list.';
-    await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.map((s) => (s.id === a.subtask_id ? Object.assign({}, s, { done: !!a.done }) : s)) }));
+    await editAssistantTask(prev, { subtasks: prev.subtasks.map(s => s.id === a.subtask_id ? { ...s, done: !!a.done } : s) }, log);
     return 'Отмечено.';
   }
   if (name === 'subtask_delete') {
     const ids = new Set((Array.isArray(a.subtask_ids) ? a.subtask_ids : []).map(String));
     const gone = prev.subtasks.filter((s) => ids.has(s.id));
     if (!gone.length) return 'Таких шагов нет: возьми subtask_ids из tasks_list.';
-    await loggedTask(log, prev.id, () => store.saveTask({ id: prev.id, subtasks: prev.subtasks.filter((s) => !ids.has(s.id)) }));
+    await editAssistantTask(prev, { subtasks: prev.subtasks.filter(s => !ids.has(s.id)) }, log);
     return 'Удалено шагов: ' + gone.length + '.';
   }
   return 'Такого инструмента нет.';
@@ -2516,11 +2523,11 @@ async function stubTasksAssistant(text, log) {
     t = lookup.task;
     const edit = numberedTaskEdit(text, t);
     if (edit?.remove) {
-      await loggedTask(log, t.id, () => store.deleteTask(t.id));
+      await store.deleteTask(t.id, JSON.stringify(t), log);
       return 'Удалена задача № ' + refs[0] + ' «' + t.title + '».';
     }
     if (edit?.fields) {
-      const saved = await loggedTask(log, t.id, () => store.saveTask({ id: t.id, ...edit.fields }));
+      const saved = await editAssistantTask(t, edit.fields, log);
       return 'Изменена задача ' + taskLine(saved) + '.';
     }
     if (!/разб(ей|ить)|на шаги|на подзадачи|на этапы/.test(low)) {
@@ -2533,8 +2540,7 @@ async function stubTasksAssistant(text, log) {
     return found.length ? 'В архиве: ' + found.slice(0, 8).map((x) => '«' + x.title + '» (' + humanDay(dayKeyOf(new Date(x.doneAt))) + ')').join(', ') + '.' : 'В архиве такого нет.';
   }
   if (/в архив|очисти готово|убери (все )?(выполненные|готовые|сделанные)/.test(low)) {
-    const ids = store.tasks.filter((x) => x.status === 'done' && !x.archivedAt).map((x) => x.id);
-    for (const id of ids) await loggedTask(log, id, async () => { await store.archiveDone([id]); return store.findTask(id); });
+    const ids = await store.archiveDone(null, log);
     return ids.length ? 'Убрал в архив ' + ids.length + ' ' + (ids.length === 1 ? 'задачу' : ids.length < 5 ? 'задачи' : 'задач') + ' из «Готово».' : 'В «Готово» нечего убирать.';
   }
   if (/^\s*(что|какие|покажи|сколько)/.test(low) || /\?\s*$/.test(text)) {
@@ -2555,17 +2561,17 @@ async function stubTasksAssistant(text, log) {
     const have = t.subtasks.map((s) => s.title.toLowerCase());
     const steps = (TASK_STEPS[t.tags[0]] || TASK_STEPS['']).filter((s) => !have.includes(s.toLowerCase()));
     if (!steps.length) return 'У «' + t.title + '» эти шаги уже есть.';
-    await loggedTask(log, t.id, () => store.saveTask({ id: t.id, subtasks: t.subtasks.concat(steps.map((s) => ({ title: s }))) }));
+    await editAssistantTask(t, { subtasks: t.subtasks.concat(steps.map(s => ({ title: s }))) }, log);
     return 'Разбил «' + t.title + '» на шаги: добавил ' + steps.length + '. Лишнее можно убрать в задаче.';
   }
   if (/^\s*(удали|убери|удалить)/.test(low)) {
     if (!(t = stubFindTask(text))) return STUB_NOT_FOUND;
-    await loggedTask(log, t.id, () => store.deleteTask(t.id));
+    await store.deleteTask(t.id, JSON.stringify(t), log);
     return 'Удалил «' + t.title + '».';
   }
   if (/\s(сделал[аи]?|готово|готова|выполнил[аи]?|отметь|закрой)\s/.test(low)) {
     if (!(t = stubFindTask(text, true))) return STUB_NOT_FOUND;
-    await loggedTask(log, t.id, () => store.saveTask({ id: t.id, status: 'done' }));
+    await editAssistantTask(t, { status: 'done' }, log);
     return 'Отметил «' + t.title + '» сделанной — она в «Готово».';
   }
   if (/^\s*(перенеси|сдвинь|передвинь|перенести)/.test(low)) {
@@ -2578,19 +2584,19 @@ async function stubTasksAssistant(text, log) {
     });
     if (target) {
       if (!(t = stubFindTask(rest))) return STUB_NOT_FOUND;
-      await loggedTask(log, t.id, () => store.saveTask({ id: t.id, status: target }));
+      await editAssistantTask(t, { status: target }, log);
       return 'Перенёс «' + t.title + '» в «' + columnName(target) + '».';
     }
     const p = stubTaskParse(text);
     if (!p.due) return 'Не понял, на когда перенести. Например: «перенеси вёрстку сайта на понедельник».';
     if (!(t = stubFindTask(p.title))) return STUB_NOT_FOUND;
-    const saved = await loggedTask(log, t.id, () => store.saveTask({ id: t.id, due: p.due, time: p.time || t.time }));
+    const saved = await editAssistantTask(t, { due: p.due, time: p.time || t.time }, log);
     return 'Перенёс «' + t.title + '» на ' + taskDue(saved) + '.';
   }
   if (/^\s*(сделай|поставь)\s.*(срочн|важн|обычн)/.test(low)) {
     const level = /срочн/.test(low) ? 2 : /важн/.test(low) ? 1 : 0;
     if (!(t = stubFindTask(text))) return STUB_NOT_FOUND;
-    await loggedTask(log, t.id, () => store.saveTask({ id: t.id, priority: level }));
+    await editAssistantTask(t, { priority: level }, log);
     return 'Теперь «' + t.title + '» — ' + PRIORITY_NAMES[level] + '.';
   }
   const body = text.replace(/^\s*(добавь|добавить|запиши|создай|новая задача|напомни)\s*(задачу|задачи)?[:\s,]*/i, '');
@@ -2598,7 +2604,7 @@ async function stubTasksAssistant(text, log) {
   const made = [];
   for (const part of parts) {
     const p = stubTaskParse(part);
-    if (p.title) made.push(await loggedTask(log, null, () => store.saveTask(p)));
+    if (p.title) made.push(await store.saveTask(p, log));
   }
   if (!made.length) return 'Не понял, что добавить. Напишите, что нужно сделать.';
   return made.length === 1 ? 'Добавил ' + stubTaskWords(made[0]) + ' в «Предстоит».'
@@ -2613,6 +2619,7 @@ handle('tasks-assistant', text => taskHistory.run(async () => {
     await taskHistory.undo(store, { count: undoCount });
     return ok({ reply: 'Отменено действий ассистента: ' + undoCount + '.', changed: [], cost: 0 });
   }
+  const owner = store;
   store.recordAssistant();
   const model = quickModel();
   const log = [];
@@ -2622,14 +2629,20 @@ handle('tasks-assistant', text => taskHistory.run(async () => {
     const numeric = await numericTaskMove(msg, log);
     if (numeric !== null) reply = numeric;
     else if (!model) reply = await stubTasksAssistant(msg, log);
-    else reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal);
+    else {
+      const config = { ...TASKS_CFG, run(name, input, changes) {
+        requireAssistantStore(owner);
+        return runTaskTool(name, input, changes);
+      } };
+      reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal, config);
+    }
   } catch (e) {
     if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('tasks assistant', e.status, e.code || e.type);
     else if (!e.userMessage) console.error('tasks assistant', e);
     reply = e.userMessage || modelError(e) || 'Ассистент не ответил. Попробуйте ещё раз.';
     failed = true;
   }
-  const undoId = taskHistory.record(log, msg);
+  const undoId = owner === store ? taskHistory.record(log, msg, owner) : null;
   const changed = Array.from(new Set(log.map((x) => x.id).filter((id) => id && store.findTask(id))));
   return ok({ reply: reply || 'Готово.', failed, undoId, changed, cost: runCost.get(controller.signal) || 0, info: info() });
 }));
@@ -2656,12 +2669,6 @@ const CAL_TOOLS = [
   sameTool('calendar_update', 'Меняет дело сразу: перенос на другой день или время, название, тип, заметка, напоминание. Передай все поля; то, что не меняется, — как было в calendar_list.'),
   sameTool('calendar_delete', 'Удаляет дело из календаря сразу.')
 ];
-async function loggedEvent(log, id, fn) {
-  const before = id ? store.findEvent(id) : null;
-  const r = await fn();
-  log.push({ before: before ? JSON.parse(JSON.stringify(before)) : null, id: r ? r.id : id });
-  return r;
-}
 async function runCalTool(name, input, log) {
   const a = input && typeof input === 'object' ? input : {};
   if (name === 'calendar_list') {
@@ -2676,23 +2683,22 @@ async function runCalTool(name, input, log) {
   const fields = () => ({ date: a.date, from: a.from, to: a.to, who: a.who, title: a.title, kind: a.kind, note: a.note, remind: a.remind });
   if (name === 'calendar_add') {
     if (!DATE_ONLY.test(a.date || '') || !normalizeEvent(fields())) return 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.';
-    const saved = await loggedEvent(log, null, () => store.saveEvent(fields()));
+    const saved = await store.saveEvent(fields(), log);
     return 'Добавлено: ' + eventLine(saved) + ', id ' + saved.id;
   }
   const prev = store.findEvent(String(a.id || ''));
   if (!prev) return 'Дела с таким id нет. Найди его через calendar_list.';
   if (name === 'calendar_update') {
     if (!DATE_ONLY.test(a.date || '')) return 'Ошибка: нужна дата YYYY-MM-DD и время HH:MM.';
-    const saved = await loggedEvent(log, prev.id, () => store.saveEvent(Object.assign(fields(), { id: prev.id })));
+    const saved = await store.saveEvent({ ...fields(), id: prev.id, expectedAction: eventActionSignature(prev) }, log);
     return 'Изменено: ' + eventLine(saved);
   }
   if (name === 'calendar_delete') {
-    await loggedEvent(log, prev.id, () => store.deleteEvent(prev.id));
+    await store.deleteEvent(prev.id, eventActionSignature(prev), log);
     return 'Удалено.';
   }
   return 'Такого инструмента нет.';
 }
-const CAL_CFG = { prompt: CAL_PROMPT, tools: CAL_TOOLS, run: runCalTool };
 const calUndos = new Map();
 let calUndoSeq = 0;
 handle('cal-assistant', async function (text) {
@@ -2700,12 +2706,17 @@ handle('cal-assistant', async function (text) {
   if (!msg) return { ok: false, error: 'Напишите, что сделать с календарём.' };
   const model = quickModel();
   if (!model) return { ok: false, error: 'Ассистенту календаря нужен ключ ChatGPT или Claude: «Настройки» → «API-ключи».' };
+  const owner = store;
   store.recordAssistant();
   const log = [];
   const controller = new AbortController();
   let reply = '', failed = false;
   try {
-    reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal, CAL_CFG);
+    const config = { prompt: CAL_PROMPT, tools: CAL_TOOLS, run(name, input, changes) {
+      requireAssistantStore(owner);
+      return runCalTool(name, input, changes);
+    } };
+    reply = await (model.provider === 'openai' ? tasksOpenai : tasksClaude)(model, msg, log, controller.signal, config);
   } catch (e) {
     if (e instanceof OpenAI.APIError || e instanceof Anthropic.APIError) console.error('calendar assistant', e.status, e.code || e.type);
     else if (!e.userMessage) console.error('calendar assistant', e);
@@ -2713,23 +2724,25 @@ handle('cal-assistant', async function (text) {
     failed = true;
   }
   let undoId = null;
-  if (log.length) {
+  if (log.length && owner === store) {
     undoId = 'c' + (++calUndoSeq);
-    calUndos.set(undoId, log);
+    calUndos.set(undoId, { owner, changes: log });
     if (calUndos.size > 20) calUndos.delete(calUndos.keys().next().value);
   }
   const changed = Array.from(new Set(log.map((x) => x.id).filter((id) => id && store.findEvent(id))));
   return ok({ reply: reply || 'Готово.', failed, undoId, changed, cost: runCost.get(controller.signal) || 0, info: info() });
 });
 handle('cal-assistant-undo', async (undoId) => {
-  const log = calUndos.get(undoId);
-  if (!log) return { ok: false, error: 'Отменить уже нельзя.' };
-  calUndos.delete(undoId);
-  for (const x of log.slice().reverse()) {
-    if (x.before) await store.putEvent(x.before);
-    else if (x.id) await store.deleteEvent(x.id);
-  }
-  return ok();
+  const undo = calUndos.get(undoId);
+  if (!undo) return { ok: false, error: 'Отменить уже нельзя.' };
+  if (undo.busy) return { ok: false, error: 'Отмена уже выполняется.' };
+  requireAssistantStore(undo.owner);
+  undo.busy = true;
+  try {
+    await undo.owner.restoreEventChanges(undo.changes);
+    calUndos.delete(undoId);
+    return ok();
+  } finally { undo.busy = false; }
 });
 
 /* ---------- call summaries in the calendar ---------- */
@@ -3154,51 +3167,52 @@ handle('chat-file-save', async (chatId, name, bytes) => {
 // Makes the change a card describes. Returns what is needed to undo it.
 const eventActionSignature = (e) => JSON.stringify([e.date, e.from, e.to, e.who, e.title, e.kind, e.note, e.remind]);
 async function applyAction(action) {
+  const changes = [];
   if (action.kind === 'create-prompt') {
-    const r = await store.savePrompt({ item: { title: action.title, type: action.category, text: action.text } });
-    return { undo: { promptId: r.id }, extra: r };
+    const r = await store.savePrompt({ item: { title: action.title, type: action.category, text: action.text } }, changes);
+    return { undo: { prompt: changes[0].after }, extra: r };
   }
   if (action.kind === 'calendar-add') {
-    const ev = await store.saveEvent(Object.assign({}, action.event, { id: undefined }));
-    return { undo: { eventId: ev.id }, extra: { eventId: ev.id, date: ev.date } };
+    const ev = await store.saveEvent({ ...action.event, id: undefined }, changes);
+    return { undo: { events: changes }, extra: { eventId: ev.id, date: ev.date } };
   }
   if (action.kind === 'calendar-update') {
     if (!store.findEvent(action.prev.id)) throw userError('Этого дела уже нет в календаре.');
-    const ev = await store.saveEvent(Object.assign({}, action.event, { id: action.prev.id, expectedAction: eventActionSignature(action.prev) }));
-    return { undo: { restore: action.prev }, extra: { date: ev.date } };
+    const ev = await store.saveEvent({ ...action.event, id: action.prev.id, expectedAction: eventActionSignature(action.prev) }, changes);
+    return { undo: changes.length ? { events: changes } : undefined, extra: { date: ev.date } };
   }
   if (action.kind === 'calendar-delete') {
-    const gone = await store.deleteEvent(action.event.id, eventActionSignature(action.event));
+    const gone = await store.deleteEvent(action.event.id, eventActionSignature(action.event), changes);
     if (!gone) throw userError('Этого дела уже нет в календаре.');
-    return { undo: { restore: gone }, extra: { date: gone.date } };
+    return { undo: { events: changes }, extra: { date: gone.date } };
   }
   if (action.kind === 'task-add') {
-    const t = await store.saveTask(Object.assign({}, action.task, { id: undefined, order: undefined }));
-    return { undo: { taskId: t.id }, extra: { taskId: t.id } };
+    const t = await store.saveTask({ ...action.task, id: undefined, order: undefined }, changes);
+    return { undo: { tasks: changes }, extra: { taskId: t.id } };
   }
   if (action.kind === 'task-update') {
     if (!store.findTask(action.prevTask.id)) throw userError('Этой задачи уже нет на доске.');
-    const t = await store.saveTask(Object.assign({ id: action.prevTask.id, title: action.task.title, status: action.task.status, expectedAction: JSON.stringify(action.prevTask) }, taskFields(action.task)));
-    return { undo: { restoreTask: action.prevTask }, extra: { taskId: t.id } };
+    const t = await editAssistantTask(action.prevTask, { title: action.task.title, status: action.task.status, ...taskFields(action.task) }, changes);
+    return { undo: changes.length ? { tasks: changes } : undefined, extra: { taskId: t.id } };
   }
   if (action.kind === 'task-delete') {
-    const gone = await store.deleteTask(action.task.id, JSON.stringify(action.task));
+    const gone = await store.deleteTask(action.task.id, JSON.stringify(action.task), changes);
     if (!gone) throw userError('Этой задачи уже нет на доске.');
-    return { undo: { restoreTask: gone }, extra: {} };
+    return { undo: { tasks: changes }, extra: {} };
   }
   if (action.kind === 'skill-add') {
     const file = chatFileOf(action.attachment);
     if (!file || !fs.existsSync(file)) throw userError('Файла скилла уже нет в разговоре.');
     const skill = await store.addSkill({ path: file, name: action.fileName, title: action.title, type: action.category, desc: action.text, descBy: action.model || 'manual' });
-    return { undo: { skillId: skill.id }, extra: { skillId: skill.id } };
+    return { undo: { skill }, extra: { skillId: skill.id } };
   }
   if (action.kind === 'skill-set-type') {
     const s = store.findSkill(action.skillId);
     if (!s) throw userError('Этого скилла уже нет.');
     if (s.updatedAt !== action.revision || s.type !== action.prevCategory) throw userError('Скилл изменился. Попросите ассистента перепроверить его ещё раз.');
     if (!SKILL_TYPES.includes(action.category)) throw userError('Такой категории скиллов нет.');
-    const saved = await store.saveSkill({ id: s.id, type: action.category });
-    return { undo: { skillType: { id: s.id, before: s.type, revision: saved.updatedAt } }, extra: { skillId: s.id } };
+    const saved = await store.saveSkill({ id: s.id, type: action.category }, { expectedAction: s });
+    return { undo: { skillType: { before: s.type, after: saved } }, extra: { skillId: s.id } };
   }
   throw userError('Такое действие ассистент пока не умеет.');
 }
@@ -3209,6 +3223,7 @@ handle('assistant-decide', async (actionId, accept) => {
   if (!action) return { ok: false, error: 'Эта карточка устарела. Попросите ассистента ещё раз.' };
   if (action.busy) return { ok: false, error: 'Действие уже выполняется.' };
   if (!accept) { pending.delete(actionId); return { ok: true }; }
+  requireAssistantStore(action.owner);
   action.busy = true;
   try {
     const r = await applyAction(action);
@@ -3222,22 +3237,20 @@ handle('assistant-undo', async (actionId) => {
   const action = pending.get(actionId);
   if (!action || !action.undo) return { ok: false, error: 'Отменить уже нельзя: карточка устарела.' };
   if (action.busy) return { ok: false, error: 'Отмена уже выполняется.' };
+  requireAssistantStore(action.owner);
   action.busy = true;
   try {
-  const u = action.undo;
-  if (u.promptId) await store.deletePrompt(u.promptId);
-  if (u.eventId) await store.deleteEvent(u.eventId);
-  if (u.restore) await store.saveEvent(u.restore);   // puts the old version back under the same id
-  if (u.taskId) await store.deleteTask(u.taskId);
-  if (u.restoreTask) await store.putTask(u.restoreTask);   // exactly as it was, not counted again
-  if (u.skillId) await store.deleteSkill(u.skillId);
-  if (u.skillType) {
-    const s = store.findSkill(u.skillType.id);
-    if (!s || s.updatedAt !== u.skillType.revision) throw userError('Скилл уже изменился. Верните прежнюю категорию вручную, если нужно.');
-    await store.saveSkill({ id: s.id, type: u.skillType.before });
-  }
-  pending.delete(actionId);
-  return ok({ date: u.restore ? u.restore.date : undefined });
+    const u = action.undo, owner = action.owner;
+    if (u.prompt) await owner.deletePrompt(u.prompt.id, u.prompt);
+    if (u.events) await owner.restoreEventChanges(u.events);
+    if (u.tasks) await owner.restoreTaskChanges([u.tasks]);
+    if (u.skill) await owner.deleteSkill(u.skill.id, u.skill);
+    if (u.skillType) {
+      const { before, after } = u.skillType;
+      await owner.saveSkill({ id: after.id, type: before }, { expectedUndo: after });
+    }
+    pending.delete(actionId);
+    return ok({ date: u.events?.[0].before?.date });
   } finally { action.busy = false; }
 });
 

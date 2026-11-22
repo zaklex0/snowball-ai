@@ -26,11 +26,11 @@ module.exports = async function ({ main, page, shot, demo }) {
   await until('!!document.querySelector(".nav-icon[data-page=transcribe]")');
   await ev(`(() => { const d = document.getElementById('profile-dlg'); if (d && d.open) d.close(); return 1; })()`);
 
-  // 1. Where it is: the icon, the «+» menu open, the tile on «Главная».
+  // 1. Where it is: the sidebar icon and the open «+» menu.
   await click('.nav-icon[data-page=home]');
   await sleep(300);
   await click('#tab-plus');
-  await shot('01-where', { icon: '.nav-icon[data-page=transcribe]', menuItem: { sel: '#tab-menu button', text: 'Транскрибация' }, homeTile: { sel: '.home-tile', text: 'Транскрибация' } });
+  await shot('01-where', { icon: '.nav-icon[data-page=transcribe]', menuItem: { sel: '#tab-menu button', text: 'Транскрибация' } });
   await ev(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })), document.body.click(), 1`);
   await click('.nav-icon[data-page=transcribe]');
   await sleep(400);

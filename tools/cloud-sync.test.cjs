@@ -43,6 +43,163 @@ test('two devices exchange independent tasks and offline edits without replacing
   assert.deepEqual(a.state.conflicts, {}); assert.deepEqual(b.state.conflicts, {});
 });
 
+test('groups, nested tasks, checklist and column numbers survive two-device sync and restart', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const youtube = await a.store.addTaskGroup('YouTube'), course = await a.store.addTaskGroup('Курс');
+  const parent = await a.store.saveTask({ title: 'Снять ролик', groupId: youtube.id, note: 'Детали', subtasks: [{ id: 'check1', title: 'Камера', done: true }] });
+  const child = await a.store.saveTask({ title: 'Монтаж', groupId: youtube.id });
+  await a.store.saveTask({ id: child.id, parentId: parent.id });
+  await a.store.saveTask({ title: 'Урок', groupId: course.id, status: 'doing' });
+  await a.engine.sync(); await b.engine.sync();
+  assert.deepEqual(b.store.groupsView(), a.store.groupsView());
+  assert.deepEqual(b.store.tasksView(), a.store.tasksView());
+  const restarted = await new Store(b.dir).init();
+  assert.deepEqual(restarted.tasksView(), a.store.tasksView());
+  assert.deepEqual(restarted.groupsView(), a.store.groupsView());
+  await b.store.saveTask({ id: parent.id, status: 'doing' });
+  await b.engine.sync(); await a.engine.sync();
+  assert.equal(a.store.findTask(child.id).parentId, parent.id);
+  assert.equal(a.store.findTask(child.id).status, 'doing');
+  assert.deepEqual(a.store.tasksView(), b.store.tasksView());
+  assert.deepEqual(a.state.conflicts, {}); assert.deepEqual(b.state.conflicts, {});
+});
+
+test('first connection merges independent group catalogs instead of leaving tasks without names', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const ga = await a.store.addTaskGroup('Работа'), gb = await b.store.addTaskGroup('Курс');
+  const ta = await a.store.saveTask({ title: 'Рабочая задача', groupId: ga.id });
+  const tb = await b.store.saveTask({ title: 'Урок', groupId: gb.id });
+  await a.engine.sync(); await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(a.store.groupsView(), b.store.groupsView());
+  for (const d of [a, b]) {
+    assert.deepEqual(new Set(d.store.groupsView().map(g => g.id)), new Set([ga.id, gb.id]));
+    assert.equal(d.store.findTask(ta.id).groupId, ga.id);
+    assert.equal(d.store.findTask(tb.id).groupId, gb.id);
+    assert.deepEqual(d.state.conflicts, {});
+  }
+});
+
+test('offline group additions and independent renames merge with the saved common version', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const ga = await a.store.addTaskGroup('Работа'), gb = await a.store.addTaskGroup('Курс');
+  await a.engine.sync(); await b.engine.sync();
+  await a.store.renameTaskGroup(ga.id, 'Проекты', ga.name);
+  await b.store.renameTaskGroup(gb.id, 'Обучение', gb.name);
+  await a.store.addTaskGroup('YouTube'); await b.store.addTaskGroup('Личное');
+  await a.engine.sync(); await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(a.store.groupsView(), b.store.groupsView());
+  assert.deepEqual(new Set(a.store.groupsView().map(g => g.name)), new Set(['Проекты', 'Обучение', 'YouTube', 'Личное']));
+  assert.deepEqual(a.state.conflicts, {}); assert.deepEqual(b.state.conflicts, {});
+});
+
+test('legacy config hashes and existing compatible conflicts recover group names after an upgrade', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  // Old apps stored config without the groups field; their checkpoints contain only a hash.
+  const legacy = { value: { columns: [], archiveMode: 'manual' }, assets: [] };
+  const first = await remote.put('config:tasks', 0, legacy);
+  await a.engine.sync(); await b.engine.sync();
+  b.state.base['config:tasks'] = { version: first.record.version, hash: digest(legacy) };
+  const group = await a.store.addTaskGroup('YouTube');
+  const task = await a.store.saveTask({ title: 'Видео', groupId: group.id });
+  await a.engine.sync();
+  b.state.conflicts['config:tasks'] = { local: (await b.local.snapshot())['config:tasks'], remote: remote.records['config:tasks'].payload, version: remote.records['config:tasks'].version };
+  await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(b.store.groupsView(), [group]);
+  assert.equal(b.store.findTask(task.id).groupId, group.id);
+  assert.deepEqual(b.state.conflicts, {});
+  assert.deepEqual((await new Store(b.dir).init()).groupsView(), [group]);
+});
+
+test('a simultaneous rename of the same group still preserves both versions for manual choice', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const group = await a.store.addTaskGroup('Работа'); await a.engine.sync(); await b.engine.sync();
+  await a.store.renameTaskGroup(group.id, 'Проекты', group.name);
+  await b.store.renameTaskGroup(group.id, 'Клиенты', group.name);
+  await a.engine.sync(); await b.engine.sync();
+  assert.equal(b.state.conflicts['config:tasks'].local.value.groups[0].name, 'Клиенты');
+  assert.equal(b.state.conflicts['config:tasks'].remote.value.groups[0].name, 'Проекты');
+  await b.engine.resolve('config:tasks', 'remote');
+  assert.deepEqual(b.store.groupsView(), a.store.groupsView());
+});
+
+test('an interrupted download installs board settings before tasks and retries after restart', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const column = await a.store.addColumn('Проверить'), group = await a.store.addTaskGroup('Работа');
+  const task = await a.store.saveTask({ title: 'Проверка', status: column.id, groupId: group.id });
+  await a.engine.sync();
+  const apply = b.local.apply.bind(b.local), applied = [];
+  b.local.apply = async (key, ...args) => {
+    applied.push(key);
+    if (key === 'task:' + task.id) throw Error('connection interrupted');
+    return apply(key, ...args);
+  };
+  await assert.rejects(b.engine.sync(), /connection interrupted/);
+  assert.equal(applied[0], 'config:tasks');
+  const store = await new Store(b.dir).init();
+  const state = JSON.parse(await fs.readFile(path.join(b.dir, 'test-sync-state.json')));
+  const local = new CloudLocal(store, { remote }); local.manifests = state.manifests;
+  const restarted = new CloudSync({ remote, local, state, save: async () => {} });
+  await restarted.sync();
+  assert.equal(store.findTask(task.id).status, column.id);
+  assert.deepEqual(store.groupsView(), [group]);
+  assert.deepEqual((await new Store(b.dir).init()).tasksView(), a.store.tasksView());
+});
+
+test('a network failure during a group merge retries without losing either catalog or resending forever', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const ga = await a.store.addTaskGroup('Работа'), gb = await b.store.addTaskGroup('Курс');
+  await a.engine.sync();
+  const put = remote.put; remote.put = async () => { throw Error('offline'); };
+  await assert.rejects(b.engine.sync(), /offline/);
+  assert.deepEqual(new Set(b.store.groupsView().map(g => g.id)), new Set([ga.id, gb.id]));
+  remote.put = put;
+  await b.engine.sync(); await a.engine.sync();
+  const version = remote.records['config:tasks'].version;
+  await b.engine.sync(); await a.engine.sync();
+  assert.equal(remote.records['config:tasks'].version, version);
+  assert.deepEqual(a.store.groupsView(), b.store.groupsView());
+  assert.deepEqual(a.state.conflicts, {}); assert.deepEqual(b.state.conflicts, {});
+});
+
+test('a local group edit during merging is not overwritten', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  await a.store.addTaskGroup('Работа'); const course = await b.store.addTaskGroup('Курс');
+  await a.engine.sync();
+  const download = b.local.download.bind(b.local);
+  b.local.download = async (...args) => {
+    await b.store.renameTaskGroup(course.id, 'Обучение', course.name);
+    b.local.download = download;
+    return download(...args);
+  };
+  await b.engine.sync();
+  assert.deepEqual(b.store.groupsView(), [{ id: course.id, name: 'Обучение' }]);
+  assert.equal(b.state.base['config:tasks'], undefined);
+  await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(a.store.groupsView(), b.store.groupsView());
+  assert.deepEqual(new Set(a.store.groupsView().map(g => g.name)), new Set(['Работа', 'Обучение']));
+});
+
+test('a newer server version during merging is preserved and the next pass includes all groups', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  await a.store.addTaskGroup('Работа'); await b.store.addTaskGroup('Курс');
+  await a.engine.sync();
+  const put = remote.put;
+  remote.put = async (key, expected, payload) => {
+    remote.put = put;
+    const newer = structuredClone(remote.records[key].payload);
+    newer.value.groups.push({ id: 'thirdGroup', name: 'Личное' });
+    await put(key, expected, newer);
+    return put(key, expected, payload);
+  };
+  await b.engine.sync();
+  assert.ok(b.state.conflicts['config:tasks']);
+  assert.ok(remote.records['config:tasks'].payload.value.groups.some(g => g.id === 'thirdGroup'));
+  await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(new Set(a.store.groupsView().map(g => g.name)), new Set(['Работа', 'Курс', 'Личное']));
+  assert.deepEqual(a.store.groupsView(), b.store.groupsView());
+  assert.deepEqual(b.state.conflicts, {});
+});
+
 test('concurrent edits preserve both versions, persist across restart and can be resolved', async t => {
   const remote = server(), a = await device(t, remote), b = await device(t, remote);
   const task = await a.store.saveTask({ title: 'Исходная' }); await a.engine.sync(); await b.engine.sync();

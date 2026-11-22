@@ -73,7 +73,7 @@ const { Store } = require('../storage');
     }
     await page.ev(`document.querySelector('button[data-look="light"]').click();true`);
     await page.sleep(200);
-    const image = await page.send('Page.captureScreenshot', { format: 'png' }); await fs.writeFile(path.join(root, 'mockups/tasks-implemented-macos.png'), Buffer.from(image.result.data, 'base64'));
+    const image = await page.send('Page.captureScreenshot', { format: 'png' }); await fs.writeFile(path.join(process.env.SNOWBALL_TEST_OUTPUT || path.join(root, 'mockups'), 'tasks-implemented-macos.png'), Buffer.from(image.result.data, 'base64'));
     await page.ev('document.querySelector("button[data-guide=tasks]").click();true');
     await page.until('!!document.querySelector("dialog.guide-dlg[open]")');
     assert.equal(await page.ev('document.querySelectorAll(".gd-dots button").length'), 10);
@@ -84,7 +84,7 @@ const { Store } = require('../storage');
     }
     await page.ev('document.querySelector(".gd-dots button").click();true');
     await page.until('document.querySelector(".gd-shot img")?.complete');
-    const guideImage = await page.send('Page.captureScreenshot', { format: 'png' }); await fs.writeFile(path.join(root, 'mockups/task-groups-guide-preview.png'), Buffer.from(guideImage.result.data, 'base64'));
+    const guideImage = await page.send('Page.captureScreenshot', { format: 'png' }); await fs.writeFile(path.join(process.env.SNOWBALL_TEST_OUTPUT || path.join(root, 'mockups'), 'task-groups-guide-preview.png'), Buffer.from(guideImage.result.data, 'base64'));
     console.log('PASS: real board groups, source-scoped assistant references, renumbering, move/nesting separation, group/task creation, retained details, canvas numbers and macOS light/dark.');
   } finally {
     if (page) page.close(); if (main) main.close(); child.kill();

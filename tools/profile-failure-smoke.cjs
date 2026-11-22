@@ -1,6 +1,7 @@
 'use strict';
 // Profile tests use only temporary folders, a synthetic avatar and isolated app profiles.
 const { spawn } = require('node:child_process');
+const { once } = require('node:events');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
@@ -19,14 +20,20 @@ const { writeZip } = require('../archive');
   let child;
   const launch = (dir, inspect, debug) => spawn(require('electron'), ['.', '--inspect=' + inspect, '--remote-debugging-port=' + debug, '--user-data-dir=' + dir],
     { cwd: root, stdio: 'ignore', windowsHide: true });
-  const stop = async () => { if (!child) return; child.kill(); await new Promise((resolve) => child.exitCode !== null ? resolve() : child.once('exit', resolve)); child = null; };
+  const stop = async () => {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      const exited = once(child, 'exit'); child.kill(); await exited;
+    }
+    child = null;
+  };
   try {
     let [inspectPort, debugPort] = await Promise.all([freePort(), freePort()]);
     child = launch(profile, inspectPort, debugPort);
     const main = await connect(inspectPort, (t) => t.type === 'node');
-    assert.equal(path.resolve(await main.ev("process.mainModule.require('electron').app.getPath('userData')")), path.resolve(profile));
     const first = await connect(debugPort, (t) => /index\.html/.test(t.url));
+    // The debugger can connect before Electron initializes its main module.
     await first.until('!!window.vsApi && document.readyState === "complete"');
+    assert.equal(path.resolve(await main.ev("process.mainModule.require('electron').app.getPath('userData')")), path.resolve(profile));
     const firstId = (await (await fetch('http://127.0.0.1:' + debugPort + '/json/list')).json()).find((t) => /index\.html/.test(t.url)).id;
     await main.ev(`(() => {
       const fs=process.mainModule.require('fs').promises,electron=process.mainModule.require('electron');
@@ -109,9 +116,9 @@ const { writeZip } = require('../archive');
     [inspectPort, debugPort] = await Promise.all([freePort(), freePort()]);
     child = launch(profile2, inspectPort, debugPort);
     const main2 = await connect(inspectPort, (t) => t.type === 'node');
-    assert.equal(path.resolve(await main2.ev("process.mainModule.require('electron').app.getPath('userData')")), path.resolve(profile2));
     const page2 = await connect(debugPort, (t) => /index\.html/.test(t.url));
     await page2.until(`!!document.querySelector('#profile-dlg[open]')`);
+    assert.equal(path.resolve(await main2.ev("process.mainModule.require('electron').app.getPath('userData')")), path.resolve(profile2));
     await main2.ev(`(() => {const fs=process.mainModule.require('fs').promises;global.snowWelcomeRename=fs.rename;
       fs.rename=async(from,to)=>{if(to===${JSON.stringify(path.join(data2, 'profile.json'))}){const e=new Error('disk full');e.code='ENOSPC';throw e}return global.snowWelcomeRename(from,to)};return true;})()`);
     await page2.ev(`document.querySelector('#pd-cancel').click(); true`);
@@ -135,9 +142,9 @@ const { writeZip } = require('../archive');
     [inspectPort, debugPort] = await Promise.all([freePort(), freePort()]);
     child = launch(profile3, inspectPort, debugPort);
     const main3 = await connect(inspectPort, (t) => t.type === 'node');
-    assert.equal(path.resolve(await main3.ev("process.mainModule.require('electron').app.getPath('userData')")), path.resolve(profile3));
     const page3 = await connect(debugPort, (t) => /index\.html/.test(t.url));
     await page3.until(`!!document.querySelector('#profile-dlg[open]')`);
+    assert.equal(path.resolve(await main3.ev("process.mainModule.require('electron').app.getPath('userData')")), path.resolve(profile3));
     await main3.ev(`(() => {const d=process.mainModule.require('electron').dialog;
       d.showOpenDialog=async()=>({canceled:false,filePaths:[${JSON.stringify(archive)}]});d.showMessageBox=async()=>({response:0});return true;})()`);
     await page3.ev(`document.querySelector('#pd-restore-btn').click(); true`);

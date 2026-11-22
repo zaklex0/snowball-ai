@@ -76,11 +76,12 @@
     fTitle: $("f-title"), fCat: $("f-cat"), fText: $("f-text"), fComment: $("f-comment"), fFiles: $("f-files"),
     saveBtn: $("save-btn"), cancelBtn: $("cancel-btn"), formMsg: $("form-msg"),
     toolbar: $("toolbar"), search: $("search"), filters: $("filters"),
+    promptSearchCount: $("prompt-search-count"), promptSearchKeys: $("prompt-search-keys"),
     table: $("table"), rows: $("rows"), stateBox: $("state"), toast: $("toast"),
     viewer: $("viewer"), viewerTitle: $("viewer-title"), viewerBody: $("viewer-body"),
     viewerOpen: $("viewer-open"), viewerShow: $("viewer-show"), viewerClose: $("viewer-close"),
     navItems: Array.prototype.slice.call(document.querySelectorAll(".side [data-page]")),
-    badges: Array.prototype.slice.call(document.querySelectorAll(".nav-badge[data-badge]")), homeGrid: $("home-grid"), homeTitle: $("home-title"), homeDate: $("home-date"),
+    badges: Array.prototype.slice.call(document.querySelectorAll(".nav-badge[data-badge]")),
     views: {
       prompts: $("view-prompts"), generator: $("view-generator"), calendar: $("view-calendar"), assistant: $("view-assistant"),
       tasks: $("view-tasks"), stats: $("view-stats"), home: $("view-home"), transcribe: $("view-transcribe"), screenshots: $("view-screenshots")
@@ -132,6 +133,7 @@
     play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
     left: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>',
     right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15m-6-6 6 6-6 6"/></svg>',
     user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
     calendar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>',
     trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/></svg>',
@@ -213,15 +215,52 @@
   function sortItems(list) {
     return list.slice().sort(function (a, b) { return (b.createdAt - a.createdAt) || a.title.localeCompare(b.title, "ru"); });
   }
-  function matches(item) {
+  function matches(item, q = norm(state.query)) {
     if (state.type !== "all" && norm(item.type) !== state.type) return false;
-    var q = norm(state.query);
     if (!q) return true;
     return norm(item.title).indexOf(q) !== -1 || norm(item.text).indexOf(q) !== -1 || norm(item.type).indexOf(q) !== -1 ||
       norm(item.comment).indexOf(q) !== -1 ||
       item.files.some(function (f) { return norm(f.name).indexOf(q) !== -1; });
   }
   function findItem(id) { return state.items.find(function (i) { return i.id === id; }) || null; }
+
+  function promptMatch(text, query) {
+    if (!query || !text) return null;
+    var folded = text.toLowerCase(), start = folded.indexOf(query);
+    if (start === -1) return null;
+    var end = start + query.length;
+    if (folded.length === text.length) return [start, end];
+    // Some letters expand when lowercased (e.g. İ). Map the folded offsets back to the original text.
+    var offset = 0, from = 0, to = 0;
+    for (var letter of text) {
+      if (offset <= start) from = to;
+      offset += letter.toLowerCase().length;
+      to += letter.length;
+      if (offset >= end) break;
+    }
+    return [from, to];
+  }
+  function markedPromptText(text, match) {
+    if (!match) return text;
+    var [from, to] = match;
+    return [text.slice(0, from), h("mark", { class: "prompt-highlight", text: text.slice(from, to) }), text.slice(to)];
+  }
+  function promptExcerpt(text, match, label, kind, hidden) {
+    if (!match) return null;
+    var [from, to] = match;
+    var start = Math.max(0, from - 22), end = Math.min(text.length, to + 38, from + 78);
+    if (start && !/\s/.test(text[start - 1])) {
+      var space = text.slice(start, from).search(/\s/);
+      if (space !== -1) start += space + 1;
+    }
+    // Keep surrogate pairs together where the excerpt starts and ends.
+    if (start && text.charCodeAt(start) >= 0xDC00 && text.charCodeAt(start) <= 0xDFFF) start--;
+    if (end < text.length && text.charCodeAt(end) >= 0xDC00 && text.charCodeAt(end) <= 0xDFFF) end++;
+    return h("p", { class: "prompt-match prompt-match-" + kind, hidden: hidden },
+      h("span", { class: "prompt-match-label", text: label }), " ",
+      h("span", { class: "prompt-match-excerpt" }, start ? "…" : "",
+        markedPromptText(text.slice(start, end), [from - start, Math.min(to, end) - start]), end < text.length ? "…" : ""));
+  }
 
   /* ---------- dates ---------- */
   function pad2(n) { return String(n).padStart(2, "0"); }
@@ -402,8 +441,14 @@
       btn.setAttribute("aria-expanded", String(!!value));
       btn.querySelector(".lbl").textContent = value ? "Свернуть" : "Развернуть";
     }
+    if (box.querySelector("mark")) queueMeasure();
+  }
+  function showClippedPromptMatch(box, excerpt, clipped, fade) {
+    if (!excerpt) return;
+    excerpt.hidden = !clipped || box.querySelector("mark").getBoundingClientRect().bottom <= box.getBoundingClientRect().bottom - fade;
   }
   function measure() {
+    if (!els.table.getClientRects().length) return;
     var list = els.rows.querySelectorAll(".prompt");
     for (var i = 0; i < list.length; i++) {
       var p = list[i];
@@ -413,6 +458,7 @@
       var over = t.scrollHeight > t.clientHeight + 4;
       if (wasOpen) t.classList.remove("is-collapsed");
       p.classList.toggle("can-toggle", over);
+      showClippedPromptMatch(t, p.querySelector(".prompt-match-text"), over && !wasOpen, 18);
       // A comment longer than three lines folds; a short one stays as it is.
       var n = p.querySelector(".prompt-note");
       if (!n) continue;
@@ -422,6 +468,7 @@
       var noteOver = nt.scrollHeight > nt.clientHeight + 4;
       if (noteOpen) n.classList.add("open");
       n.classList.toggle("can-toggle", noteOver);
+      showClippedPromptMatch(nt, p.querySelector(".prompt-match-comment"), noteOver && !noteOpen, nt.clientHeight * .28);
       if (noteOver) { n.setAttribute("role", "button"); n.tabIndex = 0; n.setAttribute("aria-expanded", String(noteOpen)); }
       else { n.removeAttribute("role"); n.removeAttribute("tabindex"); n.removeAttribute("aria-expanded"); }
     }
@@ -726,7 +773,7 @@
       var saved = findItem(r.id);
       if (saved && !matches(saved)) { state.type = "all"; state.query = ""; els.search.value = ""; }
       if (saved) {
-        var index = sortItems(state.items).filter(matches).findIndex(function (item) { return item.id === saved.id; });
+        var index = sortItems(state.items).filter(function (item) { return matches(item); }).findIndex(function (item) { return item.id === saved.id; });
         if (index >= 0) state.promptPage = Math.floor(index / PROMPT_PAGE_SIZE);
       }
       closeEditor(false);
@@ -781,11 +828,24 @@
     return Array.from(map.values());
   }
 
-  function typeChip(type) {
+  function selectPromptType(type) {
+    state.type = type;
+    state.promptPage = 0;
+    render();
+  }
+  function focusPromptFilter(type, preventScroll) {
+    var button = Array.from(els.filters.children).find(function (b) { return b.dataset.promptType === type; });
+    if (button) button.focus({ preventScroll: preventScroll });
+  }
+  function typeChip(type, query) {
     return h("button", {
       type: "button", class: "chip " + catClass(type), title: "Показать только «" + type + "»",
-      onclick: function () { state.type = norm(type); state.promptPage = 0; render(); }
-    }, type);
+      onclick: function (e) {
+        var key = norm(type);
+        selectPromptType(key);
+        if (!e.detail) focusPromptFilter(key, false);
+      }
+    }, h("span", null, markedPromptText(type, promptMatch(type, query))));
   }
 
   function actions(item) {
@@ -805,9 +865,12 @@
     );
   }
 
-  function promptBlock(item) {
+  function promptBlock(item, query) {
     var open = state.expanded.has(item.id);
-    var box = h("div", { class: "prompt-text" + (open ? "" : " is-collapsed"), id: "pt-" + item.id }, item.text);
+    var match = promptMatch(item.text, query);
+    var commentMatch = promptMatch(item.comment, query);
+    var box = h("div", { class: "prompt-text" + (open ? "" : " is-collapsed"), id: "pt-" + item.id },
+      markedPromptText(item.text, match));
     box.addEventListener("click", function () {
       var wrap = box.parentNode;
       if (!wrap.classList.contains("can-toggle") || !box.classList.contains("is-collapsed")) return;
@@ -823,30 +886,31 @@
       icon("note"), h("span", { text: "Комментарий" }));
     var attach = h("button", { type: "button", class: "btn-mini", title: "Прикрепить файлы к этому промту", onclick: function () { pickForPrompt(item); } },
       icon("clip"), h("span", { text: "Файл" }));
-    var copy = h("button", {
-      type: "button", class: "btn-mini copy", "aria-label": "Копировать промт «" + item.title + "»",
-      onclick: function (e) { copyPrompt(item, e.currentTarget); }
-    }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
     var count = item.text.length;
     var files = item.files.length ? h("div", { class: "files" }, item.files.map(function (f) { return rowTile(item, f); })) : null;
-    var comment = item.comment ? commentBlock(item) : null;
-    return h("div", { class: "prompt" }, box, comment,
+    var comment = item.comment ? commentBlock(item, commentMatch) : null;
+    var file = query && item.files.find(function (f) { return norm(f.name).indexOf(query) !== -1; });
+    return h("div", { class: "prompt" },
+      box, promptExcerpt(item.text, match, "В промте", "text", true),
+      comment, promptExcerpt(item.comment, commentMatch, "В комментарии", "comment", true),
+      file ? promptExcerpt(file.name, promptMatch(file.name, query), "В названии файла", "file", false) : null,
       h("div", { class: "prompt-bar" }, toggle,
         h("span", { class: "chars", text: fmtNum(count) + " " + plural(count, "символ", "символа", "символов") }),
-        h("span", { class: "spacer" }), note, attach, copy),
+        h("span", { class: "spacer" }), note, attach),
       files);
   }
 
   // Shows three lines of the comment; a click (or Enter) opens the rest and closes it again.
-  function commentBlock(item) {
+  function commentBlock(item, match) {
     var el = h("div", { class: "prompt-note" + (state.notesOpen.has(item.id) ? " open" : ""), title: "Нажмите, чтобы развернуть или свернуть комментарий" },
-      icon("note"), h("div", { class: "prompt-note-text", text: item.comment }));
+      icon("note"), h("div", { class: "prompt-note-text" }, markedPromptText(item.comment, match)));
     var toggleNote = function () {
       if (!el.classList.contains("can-toggle")) return;
       var open = !state.notesOpen.has(item.id);
       if (open) state.notesOpen.add(item.id); else state.notesOpen.delete(item.id);
       el.classList.toggle("open", open);
       el.setAttribute("aria-expanded", String(open));
+      if (match) queueMeasure();
     };
     el.addEventListener("click", function () {
       var sel = window.getSelection && window.getSelection();
@@ -859,17 +923,23 @@
     return el;
   }
 
-  function row(item) {
+  function row(item, query) {
     if (item.id === state.editingId) {
       return h("tr", { class: "editing", "data-id": item.id }, h("td", { colspan: "3", id: "edit-cell" }));
     }
+    var copy = h("button", {
+      type: "button", class: "btn-mini copy", "aria-label": "Копировать промт «" + (item.title || "Без названия") + "»",
+      "aria-keyshortcuts": "ArrowUp ArrowDown",
+      onclick: function (e) { copyPrompt(item, e.currentTarget); }
+    }, icon("copy"), h("span", { class: "lbl", text: "Копировать" }));
     return h("tr", { "data-id": item.id, class: state.dropRowId === item.id ? "drop-target" : null },
       h("td", { class: "c-name" },
-        h("div", { class: "name", text: item.title || "Без названия" }),
+        h("div", { class: "name" }, item.title ? markedPromptText(item.title, promptMatch(item.title, query)) : "Без названия"),
         whenLine(item),
+        copy,
         actions(item)),
-      h("td", { class: "c-type" }, item.type ? typeChip(item.type) : h("span", { class: "muted", text: "—" })),
-      h("td", { class: "c-prompt" }, promptBlock(item))
+      h("td", { class: "c-type" }, item.type ? typeChip(item.type, query) : h("span", { class: "muted", text: "—" })),
+      h("td", { class: "c-prompt" }, promptBlock(item, query))
     );
   }
 
@@ -886,8 +956,12 @@
 
   function render() {
     var focus = captureFocus();
+    var active = document.activeElement;
+    var focusedFilter = els.filters.contains(active) ? active.dataset.promptType : null;
+    var focusedCopy = active && active.matches("#rows .copy") ? active.closest("tr").dataset.id : null;
     var loading = !state.loaded;
     var total = state.items.length;
+    var query = norm(state.query), found = 0;
     var stats = typeStats();
 
     if (state.editingId && !findItem(state.editingId)) {
@@ -909,14 +983,15 @@
     if (state.type !== "all" && !stats.some(function (s) { return s.key === state.type; })) state.type = "all";
     els.toolbar.hidden = loading || total === 0;
     var chips = [h("button", {
-      type: "button", class: "fchip", "aria-pressed": String(state.type === "all"),
-      onclick: function () { state.type = "all"; state.promptPage = 0; render(); }
+      type: "button", class: "fchip", "data-prompt-type": "all", "aria-pressed": String(state.type === "all"),
+      onclick: function () { selectPromptType("all"); }
     }, "Все", h("span", { class: "n", text: String(total) }))];
     stats.forEach(function (s) {
       chips.push(h("button", {
-        type: "button", class: "fchip " + s.cls, "aria-pressed": String(state.type === s.key),
-        onclick: function () { state.type = state.type === s.key ? "all" : s.key; state.promptPage = 0; render(); }
-      }, h("span", { class: "dot", "aria-hidden": "true" }), s.label, h("span", { class: "n", text: String(s.count) })));
+        type: "button", class: "fchip " + s.cls, "data-prompt-type": s.key, "aria-pressed": String(state.type === s.key),
+        onclick: function () { selectPromptType(state.type === s.key ? "all" : s.key); }
+      }, h("span", { class: "dot", "aria-hidden": "true" }), h("span", { class: "fchip-label", text: s.label }),
+        h("span", { class: "n", text: String(s.count) })));
     });
     els.filters.replaceChildren.apply(els.filters, chips);
 
@@ -933,7 +1008,11 @@
         "Добавьте первый промт из урока: название, тип и сам текст. Длинный текст свернётся, а скопировать его можно одной кнопкой.",
         !state.editorOpen ? h("button", { type: "button", class: "btn btn-primary", onclick: function () { openEditor(null); } }, "Добавить первый промт") : null);
     } else {
-      var visible = sortItems(state.items).filter(function (i) { return matches(i) || i.id === state.editingId; });
+      var visible = sortItems(state.items).filter(function (i) {
+        if (!matches(i, query)) return i.id === state.editingId;
+        found++;
+        return true;
+      });
       if (!visible.length) {
         setState("Ничего не нашлось", "Попробуйте другое слово или сбросьте фильтр по типу.",
           h("button", { type: "button", class: "btn btn-ghost", onclick: function () {
@@ -949,7 +1028,7 @@
           if (editingIndex !== -1) state.promptPage = Math.floor(editingIndex / perPage);
         }
         var from = state.promptPage * perPage, to = Math.min(from + perPage, visible.length);
-        var rows = visible.slice(from, to).map(row);
+        var rows = visible.slice(from, to).map(function (item) { return row(item, query); });
         if (lastPage > 0) {
           var goPage = function (next) {
             if (state.editorOpen) { toast("Сначала сохраните или отмените правку промта.", true); return; }
@@ -967,12 +1046,24 @@
         queueMeasure();
       }
     }
+    var searchCount = !els.toolbar.hidden && (query || state.type !== "all")
+      ? "Найдено " + fmtNum(found) + " из " + fmtNum(total) : "";
+    if (els.promptSearchCount.textContent !== searchCount) els.promptSearchCount.textContent = searchCount;
+    els.promptSearchKeys.hidden = !searchCount || !found;
 
     placeEditor();
     renderSkills();
     restoreFocus(focus);
     if (viewerState) renderViewerIfChanged();
     renderChrome();
+    if (focusedFilter) {
+      focusPromptFilter(stats.some(function (s) { return s.key === focusedFilter; }) ? focusedFilter : "all", true);
+    } else if (focusedCopy && !els.toolbar.hidden) {
+      var copy = !els.table.hidden && Array.from(els.rows.querySelectorAll(".copy")).find(function (button) {
+        return button.closest("tr").dataset.id === focusedCopy;
+      });
+      (copy || els.search).focus({ preventScroll: !!copy });
+    }
     if (state.page === "stats") renderStats();
     if (state.page === "calendar") renderCalendar();
     if (state.page === "tasks") renderTasks();
@@ -1029,6 +1120,7 @@
     btn.title = label + " (Ctrl + B)";
     btn.setAttribute("aria-label", label);
     btn.setAttribute("aria-expanded", String(!folded));
+    if (!els.menu.hidden) layoutProfileMenu();
   }
   function toggleSide() {
     if (SIDE_NARROW.matches) side.narrowOpen = !side.narrowOpen;
@@ -1364,7 +1456,7 @@
     });
     Object.keys(els.views).forEach(function (k) { els.views[k].hidden = k !== state.page; });
     renderTabs();
-    renderUpcoming();
+    refreshAgenda();
     renderBadges();
     if (state.page === "home") renderHome();
     if (state.page === "screenshots" && window.SnowCapture && !window.screenshotEditor) window.screenshotEditor = window.SnowCapture.mount($("screenshots-root"), api);
@@ -1385,7 +1477,7 @@
     if (notice) { notice.hidden = !(state.info && state.info.captureNotice); notice.querySelector('span').textContent = (state.info && state.info.captureNotice) || ''; }
   }
   window.SnowShortcut.mount($('capture-settings-control'), api);
-  api.onCaptureChanged(function (value) { if (value && state.info) { state.info.captureShortcut = value.shortcut; state.info.captureNotice = value.shortcutNotice; } renderCaptureKey(); if (state.page === 'home') renderHome(); });
+  api.onCaptureChanged(function (value) { if (value && state.info) { state.info.captureShortcut = value.shortcut; state.info.captureNotice = value.shortcutNotice; } renderCaptureKey(); });
   function badgeCounts() {
     var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
     return {
@@ -1404,45 +1496,117 @@
       b.textContent = v > 9 ? "9+" : String(v);
     });
   }
-  // Home: a greeting and a tile for every section with what is there now.
+  // The home tab shows the next calendar event, work in progress and the latest edited or added prompts.
+  function renderHomeAgenda(now, event) {
+    var hr = now.getHours(), name = state.profile && state.profile.name;
+    var day = dayKey(now), date = $("home-date");
+    $("home-title").textContent = (hr < 5 ? "Доброй ночи" : hr < 12 ? "Доброе утро" : hr < 18 ? "Добрый день" : "Добрый вечер") + (name ? ", " + name : "") + "!";
+    date.dateTime = day;
+    date.textContent = longDay(day);
+
+    var kind = event ? kindOfEvent(event) : null;
+    var card = $("home-event"), start = $("home-event-start"), end = $("home-event-end");
+    card.className = "home-event" + (kind ? " ev-" + kind.id : " home-event-empty");
+    $("home-event-time").hidden = !event;
+    $("home-event-kind").hidden = !event;
+    $("home-event-kind").textContent = kind ? (isNowEvent(event, now) ? "Сейчас · " : "") + kind.label : "";
+    start.textContent = event ? event.from : "";
+    start.dateTime = event ? event.date + "T" + event.from : "";
+    end.textContent = event && event.to ? "до " + event.to : "";
+    end.hidden = !end.textContent;
+    $("home-event-title").textContent = event ? evName(event) : "Ближайших дел нет";
+
+    var note = $("home-event-note"), eventDay = "";
+    if (event && event.date !== day) {
+      eventDay = event.date === dayKey(addDays(now, 1)) ? "Завтра, " + fmtDay(keyToDate(event.date)) : longDay(event.date);
+    }
+    note.textContent = event ? [eventDay, event.note].filter(Boolean).join(" · ") : "";
+    note.hidden = !note.textContent;
+    $("home-calendar").onclick = function () {
+      if (event) openCalendarDay(event.date, event.id);
+      else setPage("calendar");
+    };
+  }
+
+  function openHomePrompts() {
+    setPage("prompts");
+    if (state.lib !== "prompts") setLib("prompts");
+  }
+  function openHomePrompt(item) {
+    openHomePrompts();
+    if (state.editorOpen && state.editingId !== item.id) {
+      if (editorDirty()) { toast("Сначала сохраните или отмените правку промта.", true); return; }
+      closeEditor(false);
+    }
+    if (!matches(item)) {
+      state.query = ""; state.type = "all"; els.search.value = "";
+    }
+    var index = sortItems(state.items).filter(function (p) { return matches(p); }).findIndex(function (p) { return p.id === item.id; });
+    if (index === -1) return;
+    state.promptPage = Math.floor(index / PROMPT_PAGE_SIZE);
+    state.expanded.add(item.id);
+    render();
+    var row = els.rows.querySelector('tr[data-id="' + CSS.escape(item.id) + '"]');
+    if (!row) return;
+    row.scrollIntoView({ block: "start" });
+    (row.querySelector(".edit-btn") || els.fText).focus({ preventScroll: true });
+  }
+  function homeRow(title, meta, mark, open) {
+    return h("li", {}, h("button", { type: "button", class: "home-row", onclick: open }, mark,
+      h("span", {}, h("strong", { text: title }), meta ? h("small", { text: meta }) : null), icon("right")));
+  }
   function renderHome() {
-    var hr = new Date().getHours(), name = state.profile && state.profile.name;
-    els.homeTitle.textContent = (hr < 5 ? "Доброй ночи" : hr < 12 ? "Доброе утро" : hr < 18 ? "Добрый день" : "Добрый вечер") + (name ? ", " + name : "") + "!";
-    els.homeDate.textContent = longDay(dayKey(new Date()));
-    var n = badgeCounts(), items = state.items.length, doing = (state.tasks || []).filter(function (t) { return t.status === "doing"; }).length;
-    var tiles = [
-      { page: "prompts", title: "Промты", text: items ? items + " " + plural(items, "промт", "промта", "промтов") + " в базе" : "Пока пусто: добавьте первый" },
-      { page: "calendar", title: "Календарь", text: n.calendar ? "Сегодня ещё " + n.calendar + " " + plural(n.calendar, "дело", "дела", "дел") : "На сегодня дел больше нет" },
-      { page: "tasks", title: "Задачи", text: n.tasks ? n.tasks + " " + plural(n.tasks, "задача не готова", "задачи не готовы", "задач не готово") + (doing ? ", в процессе " + doing : "") : "Все задачи готовы" },
-      { page: "assistant", title: "LLM", text: n.assistant ? "Новых ответов: " + n.assistant : hist.list.length + " " + plural(hist.list.length, "разговор", "разговора", "разговоров") + " в истории" },
-      { page: "transcribe", title: "Транскрибация", text: tr.busy ? "Идёт расшифровка…" : tr.list.length ? tr.list.length + " " + plural(tr.list.length, "расшифровка", "расшифровки", "расшифровок") + " в истории" : "Текст и субтитры из аудио и видео" },
-      { page: "screenshots", title: "Снимки", text: window.SnowShortcut.format(state.info && state.info.captureShortcut) + " · Захват экрана, пометки и история" },
-      { page: "generator", title: "Генератор", text: "Картинки и видео — скоро" }
-    ];
-    els.homeGrid.replaceChildren.apply(els.homeGrid, tiles.map(function (t) {
-      return h("button", { type: "button", class: "home-tile", onclick: function () { setPage(t.page); } },
-        h("span", { class: "ico", html: ICONS[TABS[t.page].icon], "aria-hidden": "true" }), h("b", { text: t.title }), h("span", { text: t.text }));
+    var tasks = taskRoots(state.tasks.filter(function (t) { return t.status === "doing" && !t.archivedAt; }))
+      .sort(function (a, b) { return a.order - b.order; });
+    var count = $("home-task-count");
+    count.textContent = fmtNum(tasks.length);
+    count.hidden = !tasks.length;
+    $("home-tasks-empty").hidden = !!tasks.length;
+    $("home-tasks").replaceChildren(...tasks.slice(0, 3).map(function (t) {
+      return homeRow(t.title, t.groupId ? taskGroupName(t.groupId) : "",
+        h("span", { class: "home-task-mark", html: TICONS.clock, "aria-hidden": "true" }),
+        function () { setPage("tasks"); openTask(t.id); });
+    }));
+    var recent = state.items.slice().sort(function (a, b) {
+      return Math.max(b.updatedAt, b.createdAt) - Math.max(a.updatedAt, a.createdAt);
+    }).slice(0, 2);
+    $("home-recent-empty").hidden = !!recent.length;
+    $("home-recent").replaceChildren(...recent.map(function (item) {
+      return homeRow(item.title || "Без названия", item.type,
+        h("span", { class: "home-prompt-mark " + catClass(item.type) }, icon("prompts")),
+        function () { openHomePrompt(item); });
     }));
   }
+  $("home-prompts").prepend(icon("prompts"));
+  $("home-prompts").addEventListener("click", openHomePrompts);
+  ["home-calendar", "home-all-tasks"].forEach(function (id) { $(id).append(icon("arrow")); });
+  $("home-all-tasks").addEventListener("click", function () {
+    setPage("tasks");
+    if (tf.view === "archive") setTaskView("board");
+  });
 
   // "Ближайшие дела" in the sidebar: what is going on now and next, by day. The current one pulses in its colour.
   var UP_MAX = 6;
-  function renderUpcoming() {
+  function refreshAgenda() {
     var now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
-    var tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    var list = (state.events || []).filter(function (e) {
+    var list = state.events.filter(function (e) {
       if (e.date !== today) return e.date > today;
       var end = e.to ? minutesOf(e.to) : minutesOf(e.from) + 30;
       return end > mins;
-    }).sort(function (a, b) { return (a.date + a.from).localeCompare(b.date + b.from); }).slice(0, UP_MAX);
+    }).sort(function (a, b) { return (a.date + a.from).localeCompare(b.date + b.from); });
+    renderUpcoming(list.slice(0, UP_MAX), now);
+    if (state.page === "home") renderHomeAgenda(now, list[0]);
+  }
+  function renderUpcoming(list, now) {
+    var today = dayKey(now), tomorrow = dayKey(addDays(now, 1));
     var kids = [], lastDay = null;
     list.forEach(function (e) {
       if (e.date !== lastDay) {
         lastDay = e.date;
-        var label = e.date === today ? "Сегодня" : e.date === dayKey(tomorrow) ? "Завтра" : shortDayLabel(e.date);
+        var label = e.date === today ? "Сегодня" : e.date === tomorrow ? "Завтра" : shortDayLabel(e.date);
         kids.push(h("p", { class: "up-day", text: label }));
       }
-      var on = isNowEvent(e);
+      var on = isNowEvent(e, now);
       kids.push(h("button", { type: "button", class: "up-ev ev-" + kindOfEvent(e).id + (on ? " now" : ""),
         title: (on ? "Идёт сейчас: " : "") + timeRange(e) + " " + evName(e) + (e.note ? " — " + e.note : ""), onclick: function () { openCalendarDay(e.date); } },
         h("i", { "aria-hidden": "true" }), h("span", { class: "tt", text: evName(e) }), h("span", { class: "tm", text: on ? "сейчас" : e.from })));
@@ -1455,7 +1619,7 @@
     var d = keyToDate(k);
     return ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][d.getDay()] + ", " + d.getDate() + " " + MONTHS[d.getMonth()];
   }
-  setInterval(function () { renderUpcoming(); renderBadges(); }, 30 * 1000);
+  setInterval(function () { refreshAgenda(); renderBadges(); }, 30 * 1000);
 
   /* ---------- statistics ---------- */
   function dayTotal(day) {
@@ -1672,29 +1836,56 @@
   }
 
   /* ---------- menu ---------- */
+  // Use one panel when the full three-level cascade cannot fit comfortably.
+  var PROFILE_MENU_COMPACT = window.matchMedia("(max-width: 840px), (max-height: 545px)");
+  var subTimer = null;
+  function layoutProfileMenu() {
+    var compact = PROFILE_MENU_COMPACT.matches, focused = document.activeElement;
+    if (compact !== els.menu.classList.contains("profile-menu-compact")) clearTimeout(subTimer);
+    els.menu.classList.toggle("profile-menu-compact", compact);
+    if (compact) {
+      var space = els.menuBtn.parentElement.getBoundingClientRect().top - 16;
+      els.menu.style.setProperty("--profile-menu-height", Math.max(0, space) + "px");
+    } else {
+      els.menu.querySelectorAll(".sub-wrap.open > .submenu").forEach(fitSubmenu);
+    }
+    if (els.menu.contains(focused) && !focused.getClientRects().length) {
+      var open = openSubWrap();
+      if (open) focusSubItem(open);
+    }
+  }
   function setMenu(open) {
     els.menu.hidden = !open;
     els.menuBtn.setAttribute("aria-expanded", String(open));
-    if (!open) openSub(null);
-    if (open) { var f = els.menu.querySelector("button"); if (f) f.focus(); }
+    if (!open) { openSub(null); return; }
+    layoutProfileMenu();
+    els.menu.querySelector("button").focus();
   }
-  // "Тема ›" and "Промты ›" open a second list to the right: on hover, on click or with the right arrow.
-  // Inside "Тема" the "macOS ›" item opens a third list (accent and light/dark); opening it keeps "Тема" open.
+  window.addEventListener("resize", function () { if (!els.menu.hidden) layoutProfileMenu(); });
+
   function subWrap(name) { var b = name && els.menu.querySelector(".has-sub[data-sub=\"" + name + "\"]"); return b ? b.closest(".sub-wrap") : null; }
   function parentSub(w) { var p = w && w.parentElement.closest(".sub-wrap"); return p ? p.querySelector(".has-sub").dataset.sub : null; }
+  function focusSubItem(w) {
+    var list = w.querySelector(".submenu");
+    var f = list.querySelector(":scope > button[aria-checked=\"true\"], :scope > .sub-wrap > .has-sub[aria-checked=\"true\"], :scope > [role=\"group\"] > button[aria-checked=\"true\"]")
+      || list.querySelector("button:not(.profile-sub-back)");
+    if (f) f.focus();
+  }
   function openSub(name, focusFirst) {
-    var target = subWrap(name);
+    clearTimeout(subTimer);
+    var target = subWrap(name), compact = els.menu.classList.contains("profile-menu-compact");
     els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
       var btn = w.querySelector(".has-sub"), on = !!target && w.contains(target), was = w.classList.contains("open");
       w.classList.toggle("open", on);
       btn.setAttribute("aria-expanded", String(on));
-      if (on && !was) fitSubmenu(w.querySelector(".submenu"));
+      if (!compact && on && !was) fitSubmenu(w.querySelector(".submenu"));
     });
-    if (target && focusFirst) {
-      var list = target.querySelector(".submenu");
-      var f = list.querySelector(":scope > button[aria-checked=\"true\"], :scope > .sub-wrap > .has-sub[aria-checked=\"true\"], :scope > [role=\"group\"] > button[aria-checked=\"true\"]") || list.querySelector("button");
-      if (f) f.focus();
-    }
+    if (compact) els.menu.scrollTop = 0;
+    if (target && focusFirst) focusSubItem(target);
+  }
+  function backFromSub(w) {
+    openSub(parentSub(w));
+    w.querySelector(".has-sub").focus();
   }
   // The profile menu sits at the bottom of the window, so a list opened downwards could go under the Windows
   // taskbar. After opening, a list that does not fit moves up (or down) just enough to be fully visible.
@@ -1711,27 +1902,34 @@
   }
   // The mouse travels from "Тема" to its list across other items and a small gap, so a list closes or switches
   // only after a short pause: on the way it stays open. A hidden bridge in styles.css covers the gap.
-  var subTimer = null;
   function subLater(fn, ms) { clearTimeout(subTimer); subTimer = setTimeout(fn, ms); }
   // The deepest open list (the third one when "macOS ›" is open).
   function openSubWrap() { var all = els.menu.querySelectorAll(".sub-wrap.open"); return all.length ? all[all.length - 1] : null; }
   els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
-    var name = w.querySelector(".has-sub").dataset.sub;
+    var button = w.querySelector(".has-sub"), name = button.dataset.sub;
+    w.querySelector(".submenu").prepend(h("button", {
+      type: "button", role: "menuitem", class: "profile-sub-back", onclick: function () { backFromSub(w); }
+    }, h("span", { "aria-hidden": "true", html: ICONS.left }), "Назад"));
     w.addEventListener("mouseenter", function () {
+      if (PROFILE_MENU_COMPACT.matches || els.menu.hidden) return;
       var open = openSubWrap();
       // A list inside the open one (or the open one itself) opens at once; a list elsewhere waits a moment.
-      if (!open || open === w || open.contains(w)) { clearTimeout(subTimer); openSub(name); }
+      if (!open || open === w || open.contains(w)) openSub(name);
       else subLater(function () { openSub(name); }, 260);
     });
     // Leaving a list goes back to the list it sits in (or closes all for a top one).
-    w.addEventListener("mouseleave", function () { subLater(function () { if (!w.contains(document.activeElement)) openSub(parentSub(w)); }, 350); });
-    w.querySelector(".has-sub").addEventListener("click", function () { clearTimeout(subTimer); openSub(name, true); });
+    w.addEventListener("mouseleave", function () {
+      if (!PROFILE_MENU_COMPACT.matches && !els.menu.hidden) subLater(function () { if (!w.contains(document.activeElement)) openSub(parentSub(w)); }, 350);
+    });
+    button.addEventListener("click", function () { openSub(name, true); });
   });
   // Plain items of a list close the lists opened from it.
   [els.menu].concat(Array.prototype.slice.call(els.menu.querySelectorAll(".submenu"))).forEach(function (list) {
     var own = list === els.menu ? null : list.closest(".sub-wrap").querySelector(".has-sub").dataset.sub;
     list.querySelectorAll(":scope > button, :scope > hr, :scope > p, :scope > [role=\"group\"]").forEach(function (b) {
-      b.addEventListener("mouseenter", function () { subLater(function () { openSub(own); }, 260); });
+      b.addEventListener("mouseenter", function () {
+        if (!PROFILE_MENU_COMPACT.matches && !els.menu.hidden) subLater(function () { openSub(own); }, 260);
+      });
     });
   });
   els.menuBtn.addEventListener("click", function () { setMenu(els.menu.hidden); });
@@ -1739,15 +1937,22 @@
     if (!els.menu.hidden && !els.menu.contains(e.target) && !els.menuBtn.contains(e.target)) setMenu(false);
   });
   els.menu.addEventListener("keydown", function (e) {
-    var sub = document.activeElement && document.activeElement.closest(".submenu");
+    clearTimeout(subTimer);
+    if (e.key === "Tab") {
+      // Let the browser move focus before deciding whether it left the menu.
+      setTimeout(function () { if (!els.menu.hidden && !els.menu.contains(document.activeElement)) setMenu(false); }, 0);
+      return;
+    }
+    var sub = e.target.closest(".submenu");
     var scope = sub || els.menu;
-    var items = Array.prototype.slice.call(scope.querySelectorAll(":scope > button, :scope > .sub-wrap > .has-sub, :scope > [role=\"group\"] > button"));
+    var items = Array.from(scope.querySelectorAll(":scope > button, :scope > .sub-wrap > .has-sub, :scope > [role=\"group\"] > button"))
+      .filter(function (button) { return button.getClientRects().length; });
     var i = items.indexOf(document.activeElement);
-    if (e.key === "Escape") { e.preventDefault(); setMenu(false); els.menuBtn.focus(); }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setMenu(false); els.menuBtn.focus(); }
     else if (e.key === "ArrowDown") { e.preventDefault(); items[(i + 1) % items.length].focus(); }
     else if (e.key === "ArrowUp") { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
     else if (e.key === "ArrowRight" && document.activeElement.classList.contains("has-sub")) { e.preventDefault(); openSub(document.activeElement.dataset.sub, true); }
-    else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); var w = sub.closest(".sub-wrap"); openSub(parentSub(w)); w.querySelector(".has-sub").focus(); }
+    else if (e.key === "ArrowLeft" && sub) { e.preventDefault(); backFromSub(sub.closest(".sub-wrap")); }
   });
   var THEME_NAMES = { system: "Как в Windows", light: "Светлая", dark: "Тёмная", white: "Белая", black: "Чёрная", macos: "macOS", "codex-absolutely": "Codex · Absolutely", "codex-everforest": "Codex · Everforest" };
   // info: theme, and for "macos" its accent colour (macAccent), light/dark (macLook) and whether the window is glass.
@@ -1770,6 +1975,7 @@
     if (t === "macos") root.dataset.accent = info.macAccent || "peach";
     else delete root.dataset.accent;
     root.classList.toggle("glass", !!(info && info.glass));
+    if (!els.menu.hidden) layoutProfileMenu();
   }
   // Theme items keep the menu open, so the change can be seen right away.
   els.menu.addEventListener("click", function (e) {
@@ -2166,15 +2372,15 @@
     els.calMeta.textContent = count ? "В этом месяце " + count + " " + plural(count, "дело", "дела", "дел") : "В этом месяце дел нет";
   }
   // The event that is going on right now (one without an end counts as half an hour).
-  function isNowEvent(e) {
-    var now = new Date();
+  function isNowEvent(e, now) {
+    now = now || new Date();
     if (e.date !== dayKey(now) || !e.from) return false;
     var m = now.getHours() * 60 + now.getMinutes(), s0 = minutesOf(e.from), s1 = e.to ? minutesOf(e.to) : s0 + 30;
     return m >= s0 && m < s1;
   }
   function eventBlock(e) {
     var k = kindOfEvent(e), now = isNowEvent(e);
-    return h("button", { type: "button", class: "cal-ev ev-" + k.id + (now ? " now" : ""), title: now ? "Идёт сейчас. Изменить дело" : "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
+    return h("button", { type: "button", class: "cal-ev ev-" + k.id + (now ? " now" : ""), "data-event-id": e.id, title: now ? "Идёт сейчас. Изменить дело" : "Изменить дело", onclick: function (x) { x.stopPropagation(); openEventForm(e); } },
       h("span", { class: "row1" }, e.recap ? h("span", { class: "flag", html: ICONS.doc, title: "Есть итоги созвона" }) : null, h("span", { class: "tm", text: timeRange(e) }), h("span", { class: "ttl", text: evName(e) }), h("span", { class: "kind", text: k.label })),
       e.note ? h("span", { class: "note", text: e.note }) : null,
       e.remind ? h("span", { class: "bell", text: "Напомнить " + (REMIND_LABELS[e.remind] || "") }) : null);
@@ -2304,10 +2510,17 @@
     cal.view = new Date(d.getFullYear(), d.getMonth(), 1);
     renderCalendar();
   }
-  function openCalendarDay(k) {
+  function openCalendarDay(k, eventId) {
     ensureCal();
     setPage("calendar");
     selectDay(k);
+    if (!eventId) return;
+    var buttons = els.views.calendar.querySelectorAll('[data-event-id="' + CSS.escape(eventId) + '"]');
+    var target = Array.prototype.find.call(buttons, function (button) { return button.getClientRects().length; });
+    if (target) {
+      target.scrollIntoView({ block: "nearest" });
+      target.focus({ preventScroll: true });
+    }
   }
   function stepCalendar(dir) {
     ensureCal();
@@ -4002,7 +4215,7 @@
     var kids;
     if (st === "idle") {
       kids = [h("button", { type: "button", class: "nav-item timer-main", title: "Таймер для фокуса", "aria-expanded": String(tm.pop),
-        onclick: function () { setTimerPop(!tm.pop); } }, h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: "Таймер" }))];
+         onclick: toggleTimerPop }, h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: "Таймер" }))];
     } else if (st === "ringing") {
       kids = [h("button", { type: "button", class: "nav-item timer-main", title: "Выключить мелодию", onclick: function () { timerCmd("stop"); } },
         h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: "Время вышло!" }), h("span", { class: "timer-time", text: "Выключить" }))];
@@ -4011,7 +4224,7 @@
       fill.style.width = (tm.duration ? Math.min(100, (1 - left / tm.duration) * 100) : 0) + "%";
       kids = [
         h("button", { type: "button", class: "nav-item timer-main", title: st === "paused" ? "Таймер на паузе" : "Идёт таймер", "aria-expanded": String(tm.pop),
-          onclick: function () { setTimerPop(!tm.pop); } },
+           onclick: toggleTimerPop },
           h("span", { class: "ico", html: TICONS.clock, "aria-hidden": "true" }), h("span", { text: st === "paused" ? "Пауза" : "Фокус" }),
           h("span", { class: "timer-time", text: fmtLeft(left) })),
         h("button", { type: "button", class: "timer-ico", title: st === "paused" ? "Продолжить" : "Пауза", "aria-label": st === "paused" ? "Продолжить" : "Пауза",
@@ -4044,9 +4257,10 @@
     els.timerPop.replaceChildren.apply(els.timerPop, kids);
   }
   function timeOf(d) { return pad2(d.getHours()) + ":" + pad2(d.getMinutes()); }
-  function setTimerPop(open) {
+  function toggleTimerPop(event) { setTimerPop(!tm.pop, event.detail > 0); }
+  function setTimerPop(open, fromPointer) {
     tm.pop = open;
-    els.timerPop.hidden = !open;
+    els.timerPop.toggleAttribute("data-pointer-open", open && fromPointer);
     renderTimer();
     if (open) { var b = els.timerPop.querySelector(".timer-presets button"); if (b) b.focus(); }
   }
@@ -6307,7 +6521,7 @@
   }
   els.trSearch.addEventListener("input", function () { tr.q = els.trSearch.value; trHistory(); });
   $("tr-new").addEventListener("click", trNew);
-  function refreshTranscripts() { api.transcriptList().then(function (r) { if (r && r.ok) { tr.list = r.transcripts; if (state.page === "transcribe" || state.page === "home") render(); } }, function () {}); }
+  function refreshTranscripts() { api.transcriptList().then(function (r) { if (r && r.ok) { tr.list = r.transcripts; if (state.page === "transcribe") render(); } }, function () {}); }
   refreshTranscripts();
 
   /* ---------- guides «Как пользоваться» ----------
@@ -6505,6 +6719,18 @@
   });
   els.fTitle.addEventListener("input", function () { if (els.formMsg.textContent) setMsg(""); });
   els.search.addEventListener("input", function () { state.query = els.search.value; state.promptPage = 0; render(); });
+  els.views.prompts.addEventListener("keydown", function (e) {
+    if (e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || els.table.hidden) return;
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    var fromSearch = e.target === els.search;
+    if (fromSearch ? e.key !== "ArrowDown" : !e.target.matches("#rows .copy")) return;
+    var buttons = Array.from(els.rows.querySelectorAll(".copy"));
+    if (!buttons.length) return;
+    var index = buttons.indexOf(e.target);
+    var next = e.key === "ArrowDown" ? buttons[index + 1] : (buttons[index - 1] || els.search);
+    e.preventDefault();
+    if (next) next.focus();
+  });
   document.addEventListener("keydown", function (e) {
     if (els.viewer.open || els.profileDlg.open || els.calDialog.open || els.settingsDlg.open || document.querySelector("dialog.guide-dlg[open]")) return;
     var mod = e.ctrlKey || e.metaKey;
@@ -6541,8 +6767,15 @@
       els.search.value = ""; state.query = ""; state.promptPage = 0; render();
     }
   });
-  var resizeTimer = null;
-  window.addEventListener("resize", function () { clearTimeout(resizeTimer); resizeTimer = setTimeout(queueMeasure, 120); });
+  if (window.ResizeObserver) {
+    var promptListWidth = 0;
+    new ResizeObserver(function (entries) {
+      var width = entries[0].contentRect.width;
+      if (width === promptListWidth) return;
+      promptListWidth = width;
+      if (width) queueMeasure();
+    }).observe(els.table.parentElement);
+  } else window.addEventListener("resize", queueMeasure);
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(queueMeasure);
 
   /* ---------- start ---------- */

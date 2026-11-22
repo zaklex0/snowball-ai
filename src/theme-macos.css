@@ -150,7 +150,7 @@
 :where(html[data-theme="macos"]) h1 { font-weight: 600; letter-spacing: -.03em; }
 :where(html[data-theme="macos"]) h1 .brand { color: var(--ink-soft); }
 :where(html[data-theme="macos"]) :is(.editor h2, .state h2, .chat-empty h2, .card-title, .sd-head h2, .cal-dialog h2, .profile-dlg h2,
-  .cal-month-title, .cal-day-title, .stats-name, .home-tile b, .gen-name, .gd-head-row h2) { font-weight: 600; letter-spacing: -.02em; }
+  .cal-month-title, .cal-day-title, .stats-name, .gen-name, .gd-head-row h2) { font-weight: 600; letter-spacing: -.02em; }
 :where(html[data-theme="macos"]) .eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 :where(html[data-theme="macos"]) :is(.side-h, .field-label, .menu-label, .table th, .mm-label, .ch-title, .cal-wd, .cw-day .wd,
   .tp-block-h, .tcol-pop-h, .tr-sum h4, .tr-tip b) { font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
@@ -339,28 +339,14 @@
 :where(html[data-theme="macos"]) .set-check-row input { accent-color: var(--mac-acc); }
 
 /* ---------- cards ---------- */
-:where(html[data-theme="macos"]) :is(.card, .editor, .chat-empty, .home-tile, .gen-card) { border-color: var(--line); border-radius: 10px; }
+:where(html[data-theme="macos"]) :is(.card, .editor, .chat-empty, .gen-card) { border-color: var(--line); border-radius: 10px; }
 :where(html[data-theme="macos"]) .editor.drop-over { border-color: var(--accent); }
 :where(html[data-theme="macos"]) .table th { background: transparent; }
 :where(html[data-theme="macos"]) .table tbody tr.editing td { background: var(--row-hover); }
 :where(html[data-theme="macos"]) .prompt-note { border-left: 0; background: color-mix(in srgb, #FFCC00 13%, var(--surface)); box-shadow: inset 0 0 0 .5px color-mix(in srgb, #FFCC00 35%, transparent); }
 :where(html[data-theme="macos"]) .prompt-note svg { color: #E08A00; }
 :where(html[data-theme="macos"]) .prompt-note.can-toggle:hover { background: color-mix(in srgb, #FFCC00 20%, var(--surface)); }
-/* Home: section tiles look like app icons, each in its own colour; hover deepens the shadow instead of lifting the tile */
-:where(html[data-theme="macos"]) .home-tile { border-radius: 10px; transition: box-shadow .15s cubic-bezier(.25, .46, .45, .94); }
-:where(html[data-theme="macos"]) .home-tile:hover { transform: none; box-shadow: 0 0 0 .5px var(--line), 0 4px 16px rgba(0, 0, 0, .10); }
-:where(html[data-theme="macos"]) .home-tile .ico {
-  --c: var(--mac-acc); width: 42px; height: 42px; border-radius: 9px; color: #fff;
-  background: var(--c); box-shadow: 0 0 0 .5px rgba(0, 0, 0, .1), 0 1px 3px rgba(0, 0, 0, .12);
-}
-:where(html[data-theme="macos"]) .home-tile:nth-child(1) .ico { --c: #FF9500; }
-:where(html[data-theme="macos"]) .home-tile:nth-child(2) .ico { --c: #FF3B30; }
-:where(html[data-theme="macos"]) .home-tile:nth-child(3) .ico { --c: #34C759; }
-:where(html[data-theme="macos"]) .home-tile:nth-child(4) .ico { --c: #AF52DE; }
-:where(html[data-theme="macos"]) .home-tile:nth-child(5) .ico { --c: #007AFF; }
-:where(html[data-theme="macos"]) .home-tile:nth-child(6) .ico { --c: #30B0C7; }
-:where(html[data-theme="macos"]) .home-tile:nth-child(7) .ico { --c: #FF2D55; }
-:where(html[data-theme="macos"]) .home-tile b { font-size: 16px; }
+:where(html[data-theme="macos"]) .home-overview { --home-radius: 10px; --home-button-radius: 6px; }
 
 /* ---------- statistics ---------- */
 :where(html[data-theme="macos"]) .metric { background: var(--mac-fill); }
