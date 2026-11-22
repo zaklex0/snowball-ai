@@ -6,6 +6,7 @@
 // 3. Saves the pictures as WebP into src/guides/<version>/ and the boxes of the buttons into src/guides/<version>/boxes.js.
 // Still images are encoded by Chromium. Audio/video guides also need make-demo.ps1 run once.
 const { spawn } = require('child_process');
+const { once } = require('node:events');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -28,15 +29,21 @@ function stopAll() { kids.forEach((k) => { try { k.kill(); } catch (e) { /* alre
 process.on('exit', stopAll);
 
 (async () => {
-  kids.push(spawn(process.execPath, [path.join(__dirname, 'fake-openai.js')], { env: Object.assign({}, process.env, { FAKE_DELAY: '1800' }), stdio: 'inherit' }));
+  const fake = spawn(process.execPath, [path.join(__dirname, 'fake-openai.js')], {
+    env: { ...process.env, FAKE_DELAY: '1800', SNOWBALL_FAKE_OPENAI_PORT: '0' },
+    stdio: ['ignore', 'inherit', 'inherit', 'ipc'], windowsHide: true
+  });
+  kids.push(fake);
+  const [apiPort] = await once(fake, 'message', { signal: AbortSignal.timeout(10000) });
+  const [inspectPort, debugPort] = await Promise.all([cdp.freePort(), cdp.freePort()]);
   const electron = require(path.join(root, 'node_modules', 'electron'));
-  kids.push(spawn(electron, ['.', '--inspect=9229', '--remote-debugging-port=9333', '--user-data-dir=' + profile], {
-    cwd: root, env: Object.assign({}, process.env, { OPENAI_BASE_URL: 'http://127.0.0.1:8765/v1' }), stdio: 'ignore'
+  kids.push(spawn(electron, ['.', '--inspect=' + inspectPort, '--remote-debugging-port=' + debugPort, '--user-data-dir=' + profile], {
+    cwd: root, env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:' + apiPort + '/v1' }, stdio: 'ignore', windowsHide: true
   }));
-  const main = await cdp.connect(9229, (t) => t.type === 'node');
+  const main = await cdp.connect(inspectPort, (t) => t.type === 'node');
   const ud = await main.ev(`process.mainModule.require('electron').app.getPath('userData')`);
   if (path.resolve(ud) !== path.resolve(profile)) throw new Error('Not the test profile: ' + ud);
-  const page = await cdp.connect(9333, (t) => t.type === 'page' && /index\.html/.test(t.url));
+  const page = await cdp.connect(debugPort, (t) => t.type === 'page' && /index\.html/.test(t.url));
   const boxes = await scenario({ main, page, shot: cdp.shotter(page, raw, 'webp'), demo: path.join(__dirname, 'demo', 'урок — озвучка.mp4') });
   for (const name of Object.keys(boxes)) {
     // Chromium produces WebP directly; no external converter is needed for still screenshots.

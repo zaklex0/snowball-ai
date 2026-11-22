@@ -32,10 +32,14 @@ process.on('exit', () => kids.forEach((k) => { try { k.kill(); } catch (e) { /* 
   await writeZip(skill, [{ name: 'covers/SKILL.md', data: MD }]);
   const brokenSkill = path.join(src, 'broken.skill');
   fs.writeFileSync(brokenSkill, 'not an archive');
-  kids.push(spawn(process.execPath, [path.join(__dirname, 'guide-shots', 'fake-openai.js')], { stdio: 'ignore' }));
+  const fake = spawn(process.execPath, [path.join(__dirname, 'guide-shots', 'fake-openai.js')], {
+    env: { ...process.env, SNOWBALL_FAKE_OPENAI_PORT: '0' }, stdio: ['ignore', 'ignore', 'inherit', 'ipc']
+  });
+  kids.push(fake);
+  const [port] = await require('node:events').once(fake, 'message', { signal: AbortSignal.timeout(10000) });
   const electron = require(path.join(root, 'node_modules', 'electron'));
   kids.push(spawn(electron, ['.', '--inspect=9232', '--remote-debugging-port=9335', '--user-data-dir=' + profile], {
-    cwd: root, env: Object.assign({}, process.env, { OPENAI_BASE_URL: 'http://127.0.0.1:8765/v1' }), stdio: 'ignore' }));
+    cwd: root, env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:' + port + '/v1' }, stdio: 'ignore' }));
   const main = await cdp.connect(9232, (t) => t.type === 'node');
   const ud = await main.ev(`process.mainModule.require('electron').app.getPath('userData')`);
   assert.equal(path.resolve(ud), path.resolve(profile), 'not the test profile');

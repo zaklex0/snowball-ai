@@ -18,6 +18,7 @@ const { connect, freePort } = require('./guide-shots/cdp');
   const store = await new Store(data).init();
   await store.saveTranscript({ id: 'tr1', name: 'Тест.wav', text: 'Текст для итогов.', duration: 2, cues: [{ start: 0, end: 2, text: 'Текст для итогов.' }] });
   let requests = 0;
+  let finishPendingRecap;
   const server = http.createServer((req, res) => {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
@@ -31,7 +32,8 @@ const { connect, freePort } = require('./guide-shots/cdp');
       const response = JSON.stringify({ id: 'r1', object: 'response', status: 'completed', output: [{ type: 'message', id: 'm1', role: 'assistant', status: 'completed',
         content: [{ type: 'output_text', text: JSON.stringify(output), annotations: [] }] }],
         usage: { input_tokens: 10, input_tokens_details: { cached_tokens: 0 }, output_tokens: 10, total_tokens: 20 } });
-      if (body.includes('УДЕРЖАТЬ')) setTimeout(() => res.end(response), 700); else res.end(response);
+      if (body.includes('УДЕРЖАТЬ')) finishPendingRecap = () => res.end(response);
+      else res.end(response);
     });
   });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -60,12 +62,12 @@ const { connect, freePort } = require('./guide-shots/cdp');
     const events = (await page.ev('vsApi.load()')).events;
     assert.equal(events.length, 1);
     assert.equal(events[0].recap.brief, 'Обсудили задачу.');
-    const beforeDelayed = requests;
     await page.ev(`window.snowRecapPending=vsApi.recapMake({eventId:${JSON.stringify(events[0].id)},text:'УДЕРЖАТЬ'}); true`);
-    for (let i = 0; i < 30 && requests === beforeDelayed; i++) await page.sleep(30);
-    assert.ok(requests > beforeDelayed);
+    for (let i = 0; i < 100 && !finishPendingRecap; i++) await page.sleep(50);
+    assert.equal(typeof finishPendingRecap, 'function', 'the test API received the pending recap request');
     const changed = await page.ev(`vsApi.recapUpdate(${JSON.stringify(events[0].id)},${JSON.stringify({ ...events[0].recap, brief: 'Новая версия' })},${JSON.stringify(events[0].recapRevision)})`);
     assert.equal(changed.ok, true);
+    finishPendingRecap();
     const conflict = await page.ev('window.snowRecapPending');
     assert.equal(conflict.ok, false);
     assert.ok(conflict.recovery && conflict.recovery.text.includes('Обсудили задачу.'));

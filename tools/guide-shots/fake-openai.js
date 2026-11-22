@@ -41,7 +41,7 @@ function skillRecheckStream(body, res) {
   if (!item) res.write('data: ' + JSON.stringify({ type: 'response.output_text.delta', delta: 'Проверил содержимое: это скилл для музыки и песен. Категорию лучше сменить на «Аудио».' }) + '\n\n');
   res.end('data: ' + JSON.stringify({ type: 'response.completed', response }) + '\n\ndata: [DONE]\n\n');
 }
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   const chunks = [];
   req.on('data', (c) => chunks.push(c));
   req.on('end', () => {
@@ -109,4 +109,8 @@ http.createServer((req, res) => {
     const text = pieceText(body.length);
     setTimeout(() => res.end(JSON.stringify({ text, usage: { type: 'tokens', input_tokens: 40, output_tokens: 8, total_tokens: 48 } })), Number(process.env.FAKE_DELAY) || 0);
   });
-}).listen(8765, '127.0.0.1', () => console.log('fake openai on 8765'));
+}).listen(Number(process.env.SNOWBALL_FAKE_OPENAI_PORT ?? 8765), '127.0.0.1', () => {
+  const port = server.address().port;
+  console.log('fake openai on ' + port);
+  if (process.send) process.send(port);
+});

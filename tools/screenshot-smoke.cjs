@@ -48,8 +48,7 @@ async function draw(page, tool, from, to) {
   brush = await preview();
   assert.equal(brush.visible, true);
   assert.ok(Math.abs(brush.diameter - 5 * brush.scale) < 1 && Math.abs(brush.x - brush.center) < 1);
-  await page.sleep(1150);
-  assert.equal((await preview()).visible, false);
+  await page.until("document.querySelector('.shot-brush-preview').hidden", 5000);
   const brushCanvas = await page.ev("(()=>{const r=document.querySelector('.shot-stage canvas').getBoundingClientRect();return {x:r.x,y:r.y,w:r.width,h:r.height}})()");
   await mouse(page, 'mouseMoved', brushCanvas.x + brushCanvas.w * .7, brushCanvas.y + brushCanvas.h * .3);
   brush = await preview(); assert.ok(Math.abs(brush.x - (brushCanvas.x + brushCanvas.w * .7)) < 1);
@@ -64,12 +63,10 @@ async function draw(page, tool, from, to) {
   // The pointer leaves the picture: the circle goes; the size slider brings it back to the middle for a second.
   await page.ev("document.querySelector('[data-tool=marker]').click()");
   await mouse(page, 'mouseMoved', 5, 5);
-  await page.sleep(1150);
-  assert.equal((await preview()).visible, false);
+  await page.until("document.querySelector('.shot-brush-preview').hidden", 5000);
   await page.ev("document.querySelector('.shot-width').value=8;document.querySelector('.shot-width').dispatchEvent(new Event('input',{bubbles:true}))");
   brush = await preview(); assert.equal(brush.visible, true); assert.ok(Math.abs(brush.x - brush.center) < 1);
-  await page.sleep(1150);
-  assert.equal((await preview()).visible, false);
+  await page.until("document.querySelector('.shot-brush-preview').hidden", 5000);
   await page.ev("document.querySelector('.shot-width').value=5;document.querySelector('.shot-width').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('.shot-pressure').value=35;document.querySelector('.shot-pressure').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('[data-tool=pen]').click()");
   await draw(page, 'marker', [.1, .2], [.5, .2]);
   await draw(page, 'rect', [.05, .1], [.45, .6]);
