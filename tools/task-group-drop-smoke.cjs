@@ -24,6 +24,12 @@ const { connect, freePort } = require('./guide-shots/cdp');
     await page.until('!!window.vsApi && document.readyState==="complete"');
     await page.ev('document.querySelectorAll("dialog[open]").forEach(d=>d.close());document.querySelector("[data-page=tasks]").click();true');
     await page.until('document.querySelectorAll(".task").length===3');
+    await page.ev(`document.querySelector('.tc-todo .task-group[data-group="${a.id}"] .task-group-name').click();true`);
+    assert.equal(await page.ev(`document.querySelector('.tc-todo .task-group[data-group="${a.id}"] .task-group-fold').getAttribute('aria-expanded')`), 'false');
+    await page.ev(`document.querySelector('.tc-todo .task-group[data-group="${a.id}"] .task-group-name').click();true`);
+    await page.until(`document.querySelector('.tc-todo .task-group[data-group="${a.id}"] .task-group-empty')`);
+    const feedback = await page.ev(`(()=>{const source=document.querySelector('.task[data-id="${legacy.id}"]'),group=document.querySelector('.tc-todo .task-group[data-group="${a.id}"]'),dt=new DataTransfer();source.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));group.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));const text=getComputedStyle(group.querySelector('.task-group-empty'),'::after').content;source.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}));return text})()`);
+    assert.match(feedback, /Переместить в эту подгруппу/);
     const drag = async selector => {
       await page.ev(`(()=>{const source=document.querySelector('.task[data-id="${legacy.id}"]'),target=document.querySelector(${JSON.stringify(selector)}),r=target.getBoundingClientRect(),dt=new DataTransfer();source.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));target.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:r.top+20}));target.dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:r.top+20}));source.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}));return true})()`);
     };
@@ -41,6 +47,8 @@ const { connect, freePort } = require('./guide-shots/cdp');
     // Dropping on a card in a different group changes the category, not nesting.
     await drag(`.task[data-id="${target.id}"]`); await placed('todo', b.id);
     saved = (await page.ev('vsApi.load()')).tasks.find(t => t.id === legacy.id); assert.equal(saved.parentId, '');
+    const zones = await page.ev(`(()=>{const source=document.querySelector('.task[data-id="${legacy.id}"]'),card=document.querySelector('.task[data-id="${target.id}"]'),r=card.getBoundingClientRect(),dt=new DataTransfer();source.dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));card.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:r.top+15}));const before=card.classList.contains('before-target');card.dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:r.top+r.height/2}));const nest=card.classList.contains('nest-target');source.dispatchEvent(new DragEvent('dragend',{bubbles:true,dataTransfer:dt}));return {before,nest}})()`);
+    assert.deepEqual(zones, { before: true, nest: true });
     // A drop on empty column space still preserves the category and creates it there.
     await drag('.tc-doing'); await placed('doing', b.id);
     saved = (await page.ev('vsApi.load()')).tasks.find(t => t.id === legacy.id); assert.equal(saved.groupId, b.id);

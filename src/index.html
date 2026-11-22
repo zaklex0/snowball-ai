@@ -465,7 +465,11 @@
             <button type="button" class="fchip" id="tf-done" aria-pressed="false">Скрыть выполненные</button>
             <button type="button" class="link-btn" id="tf-reset" hidden>Сбросить фильтры</button>
           </div>
-          <div class="board" id="board"></div>
+          <div class="task-board-wrap">
+            <div class="board" id="board"></div>
+            <span class="task-drag-edge task-drag-edge-left" aria-hidden="true">‹</span>
+            <span class="task-drag-edge task-drag-edge-right" aria-hidden="true">›</span>
+          </div>
           <div class="task-board-nav" id="task-board-nav" aria-label="Прокрутка столбцов">
             <button type="button" class="btn-mini" id="task-board-prev" aria-label="Прокрутить столбцы влево">← Влево</button>
             <span id="task-board-range"></span>

@@ -437,7 +437,6 @@
 :where(html[data-theme="macos"]) .task:hover { border-color: transparent; box-shadow: 0 0 0 .5px var(--line), 0 6px 18px rgba(0, 0, 0, .1); }
 :where(html[data-theme="macos"]) .task.sel { border-color: transparent; box-shadow: 0 0 0 2px var(--accent), 0 6px 18px rgba(0, 0, 0, .1); }
 :where(html[data-theme="macos"]) .task.nest-target { border-color: var(--accent-strong); box-shadow: 0 0 0 2px var(--accent-strong); }
-:where(html[data-theme="macos"]) .task.before-target { border-top: 3px solid var(--accent-strong); }
 :where(html[data-theme="macos"]) .tchk.on { background: #34C759; border-color: #34C759; }
 :where(html[data-theme="macos"]) .tmark.p2 { background: #FF3B30; color: #fff; }
 :where(html[data-theme="macos"]) .tmark.p1 { background: color-mix(in srgb, #FF9500 18%, var(--surface)); color: color-mix(in srgb, #FF9500 70%, var(--ink)); }

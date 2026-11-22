@@ -4343,16 +4343,25 @@
   // colMenu: the column whose «⋯» menu is open; renaming: the column being renamed; newCol: the «+ Столбец» field is open.
   var tb = { adding: null, addingGroup: "", groupForm: null, folded: new Set(), dragId: null, focus: false, open: null, fresh: [], focusSub: false, colMenu: null, renaming: null, newCol: false, pending: new Set() };
   var taskBoardEdge = 0, taskBoardFrame = null;
-  function stopTaskBoardScroll() { taskBoardEdge = 0; cancelAnimationFrame(taskBoardFrame); taskBoardFrame = null; }
+  function stopTaskBoardScroll() {
+    taskBoardEdge = 0; cancelAnimationFrame(taskBoardFrame); taskBoardFrame = null;
+    els.board.parentElement.removeAttribute("data-drag-edge");
+    els.board.parentElement.classList.remove("edge-moving");
+  }
   function tickTaskBoardScroll() {
     if (!tb.dragId || !taskBoardEdge) { taskBoardFrame = null; return; }
     els.board.scrollLeft += taskBoardEdge;
+    var atEnd = taskBoardEdge < 0 ? els.board.scrollLeft <= 0 : els.board.scrollLeft >= els.board.scrollWidth - els.board.clientWidth - 1;
+    els.board.parentElement.classList.toggle("edge-moving", !atEnd);
     taskBoardFrame = requestAnimationFrame(tickTaskBoardScroll);
   }
   els.board.addEventListener("dragover", function (e) {
     if (!tb.dragId) return;
     var r = els.board.getBoundingClientRect();
-    taskBoardEdge = e.clientX < r.left + 40 ? -8 : e.clientX > r.right - 40 ? 8 : 0;
+    taskBoardEdge = e.clientX < r.left + 40 && els.board.scrollLeft > 0 ? -8
+      : e.clientX > r.right - 40 && els.board.scrollLeft < els.board.scrollWidth - els.board.clientWidth - 1 ? 8 : 0;
+    if (taskBoardEdge) els.board.parentElement.dataset.dragEdge = taskBoardEdge < 0 ? "left" : "right";
+    else { els.board.parentElement.removeAttribute("data-drag-edge"); els.board.parentElement.classList.remove("edge-moving"); }
     if (taskBoardEdge && taskBoardFrame === null) taskBoardFrame = requestAnimationFrame(tickTaskBoardScroll);
   }, true);
   els.board.addEventListener("dragleave", function (e) { if (!els.board.contains(e.relatedTarget)) stopTaskBoardScroll(); });
@@ -4392,6 +4401,7 @@
   function openTaskCtx(t, x, y, targets) {
     ctxMenu.hidden = true; setMenu(false); setTabMenu(false);
     taskCtxId = t.id;
+    taskCtx.dataset.level = targets ? "columns" : "actions";
     var items = [h("p", { class: "menu-label", text: targets ? "Переместить в столбец" : t.title })];
     if (targets) {
       items.push(h("button", { type: "button", role: "menuitem", text: "← Назад", onclick: function () { openTaskCtx(t, x, y, false); } }));
@@ -4426,6 +4436,8 @@
     e.stopPropagation();
     var buttons = Array.from(taskCtx.querySelectorAll("button:not(:disabled)")), i = buttons.indexOf(document.activeElement);
     if (e.key === "Escape") { e.preventDefault(); var id = taskCtxId; closeTaskCtx(); var card = Array.from(document.querySelectorAll(".task[data-id], .trow[data-id]")).find(function (n) { return n.dataset.id === id; }); if (card) card.focus(); }
+    else if (e.key === "ArrowLeft" && taskCtx.dataset.level === "columns") { e.preventDefault(); taskCtx.querySelector("button").click(); }
+    else if (e.key === "Tab") { setTimeout(function () { if (!taskCtx.hidden && !taskCtx.contains(document.activeElement)) closeTaskCtx(); }, 0); }
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); buttons[(i + (e.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length].focus(); }
   });
   document.addEventListener("mousedown", function (e) { if (!taskCtx.hidden && !taskCtx.contains(e.target)) closeTaskCtx(); });
@@ -4609,7 +4621,7 @@
     function toggleGroup(e) {
       collapsed = !collapsed;
       if (collapsed) tb.folded.add(key); else tb.folded.delete(key);
-      fold.textContent = collapsed ? "▸" : "▾";
+      fold.querySelector(".task-group-arrow").textContent = collapsed ? "▸" : "▾";
       fold.setAttribute("aria-expanded", String(!collapsed));
       fold.setAttribute("aria-label", (collapsed ? "Развернуть " : "Свернуть ") + g.name);
 
@@ -4636,13 +4648,15 @@
       body.classList.remove("folding");
       if (collapsed) { body.remove(); body = null; }
     }
-    var fold = h("button", { type: "button", class: "task-group-fold", "aria-expanded": String(!collapsed), "aria-label": (collapsed ? "Развернуть " : "Свернуть ") + g.name, onclick: toggleGroup }, collapsed ? "▸" : "▾");
+    var fold = h("button", { type: "button", class: "task-group-fold", "aria-expanded": String(!collapsed), "aria-label": (collapsed ? "Развернуть " : "Свернуть ") + g.name, onclick: toggleGroup },
+      h("span", { class: "task-group-arrow", "aria-hidden": "true", text: collapsed ? "▸" : "▾" }),
+      h("span", { class: "task-group-name", text: g.name }));
     var head = h("div", { class: "task-group-head" },
       fold,
-      h("span", { class: "task-group-name", text: g.name }), h("span", { class: "task-group-count", text: String(list.length) }),
+      h("span", { class: "task-group-count", text: String(list.length) }),
       g.id && state.taskGroups.some(function (x) { return x.id === g.id; }) ? h("button", { type: "button", class: "task-group-rename", title: "Переименовать подгруппу во всех столбцах", "aria-label": "Переименовать " + g.name, onclick: function () { tb.groupForm = { id: g.id, name: g.name, expectedName: g.name }; renderTasks(); } }, "⋯") : null,
       h("button", { type: "button", class: "task-group-plus", title: "Новая задача в «" + g.name + "»", "aria-label": "Новая задача в «" + g.name + "»", onclick: function () { tb.folded.delete(key); tb.adding = status; tb.addingGroup = g.id; tb.focus = true; renderTasks(); } }, icon("plus")));
-    var box = h("section", { class: "task-group", "data-group": g.id }, head);
+    var box = h("section", { class: "task-group" + (!list.length ? " empty-group" : ""), "data-group": g.id }, head);
     if (!collapsed) { body = groupBody(); box.append(body); }
     box.addEventListener("dragover", function (e) {
       if (!tb.dragId) return;
@@ -4692,6 +4706,10 @@
   function taskNumberMark(t) {
     return null; // The task number is drawn inside its completion circle.
   }
+  function taskDropNests(e, el, dragged, target) {
+    var threshold = Math.min(24, el.getBoundingClientRect().height * 0.4);
+    return e.clientY - el.getBoundingClientRect().top > threshold && dragged && dragged.status === target.status && dragged.groupId === target.groupId;
+  }
   function taskItem(t) {
     var cls = "task" + (t.status === "done" ? " is-done" : "") + (tb.open === t.id ? " sel" : "") + (tb.fresh.indexOf(t.id) !== -1 ? " fresh" : "");
     var el = h("div", { class: cls, draggable: "true", "data-id": t.id, tabindex: "0", title: "Перетащите на середину другой задачи, чтобы вложить её; на верхний край — поставить перед ней",
@@ -4711,7 +4729,7 @@
       e.stopPropagation();
       els.board.querySelectorAll(".nest-target, .before-target").forEach(function (c) { if (c !== el) c.classList.remove("nest-target", "before-target"); });
       var dragged = findTask(tb.dragId);
-      var nest = e.clientY - el.getBoundingClientRect().top > 10 && dragged && dragged.status === t.status && dragged.groupId === t.groupId;
+      var nest = taskDropNests(e, el, dragged, t);
       var allowed = tb.dragId !== t.id && (!nest || taskCanNest(tb.dragId, t));
       el.classList.toggle("nest-target", allowed && nest);
       el.classList.toggle("before-target", allowed && !nest);
@@ -4724,7 +4742,7 @@
       if (!tb.dragId) return;
       e.preventDefault(); e.stopPropagation();
       var dragged = findTask(tb.dragId);
-      var nest = e.clientY - el.getBoundingClientRect().top > 10 && dragged && dragged.status === t.status && dragged.groupId === t.groupId;
+      var nest = taskDropNests(e, el, dragged, t);
       el.classList.remove("nest-target", "before-target");
       dropTask(t.status, el, state.tasks.filter(function (x) { return x.status === t.status; }), nest, t.groupId || "");
     });
@@ -5428,19 +5446,25 @@
     if (old) old.parentNode.replaceWith(taskTimeline(t));
   }, 60 * 1000);
   function openTask(id) { tb.open = id; renderTasks(); renderTaskPanel(true); }
-  function closeTask() {
+  function closeTask(restoreFocus) {
+    restoreFocus = restoreFocus === true;
     var a = document.activeElement;
     if (a && els.tpanel.contains(a)) a.blur();   // the field being typed in saves itself on blur
     if (tb.pending.size) {
       var id = tb.open;
       Promise.all(Array.from(tb.pending)).then(function (results) {
-        if (tb.open === id && results.every(Boolean)) closeTask();
+        if (tb.open === id && results.every(Boolean)) closeTask(restoreFocus);
       });
       return;
     }
+    var closedId = tb.open;
     tb.open = null;
     renderTaskPanel(true);
     if (state.page === "tasks") renderTasks();
+    if (restoreFocus) {
+      var card = Array.from(document.querySelectorAll(".task[data-id], .trow[data-id]")).find(function (n) { return n.dataset.id === closedId; });
+      if (card) card.focus({ preventScroll: true });
+    }
   }
   function savePanelChecked(id, fields, original) {
     var expected = {};
@@ -5548,7 +5572,7 @@
       h("div", { class: "tp-head" },
         taskNumberMark(t),
         h("span", { class: "tp-col " + colClass(t.status) }, h("i", { "aria-hidden": "true" }), colName(t.status)),
-        h("button", { type: "button", class: "tp-close", html: ICONS.x, title: "Закрыть (Esc)", "aria-label": "Закрыть задачу", onclick: closeTask })),
+        h("button", { type: "button", class: "tp-close", html: ICONS.x, title: "Закрыть (Esc)", "aria-label": "Закрыть задачу", onclick: function () { closeTask(true); } })),
       h("div", { class: "tp-body" },
         taskParent(t) ? h("button", { type: "button", class: "btn-mini", onclick: function () { openTask(t.parentId); } }, "В задаче: " + taskParent(t).title) : null,
         t.parentId ? h("button", { type: "button", class: "btn-mini", onclick: function () { savePanel(t.id, { parentId: "" }); } }, "Сделать отдельной задачей") : null,
@@ -5597,7 +5621,7 @@
     if (tb.focusSub) { tb.focusSub = false; var si = p.querySelector(".tp-sub-in"); if (si) si.focus(); }
   }
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !els.tpanel.hidden && !document.querySelector("dialog[open]") && els.qa.hidden) { e.preventDefault(); closeTask(); }
+    if (e.key === "Escape" && !els.tpanel.hidden && !document.querySelector("dialog[open]") && els.qa.hidden) { e.preventDefault(); closeTask(true); }
   });
   // A click anywhere in the work area closes the panel too. Not a click on another task (that opens it instead),
   // on the panel itself, on notifications, menus, dialogs or the small assistant window.

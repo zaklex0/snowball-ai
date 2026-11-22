@@ -1409,7 +1409,19 @@ h1 .brand { color: var(--accent-strong); }
 
 /* The tasks board (alpha): three columns, cards move by drag and drop */
 /* Columns side by side; with the user's own columns the board scrolls sideways */
+.task-board-wrap { position: relative; min-width: 0; }
 .board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding: 4px 2px 8px; }
+.task-drag-edge {
+  position: absolute; top: 18px; bottom: 18px; z-index: 10; width: 30px; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--accent) 35%, var(--surface)); color: var(--ink);
+  border-radius: 10px; font-size: 27px; opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+.task-drag-edge-left { left: 0; }
+.task-drag-edge-right { right: 0; }
+.task-board-wrap[data-drag-edge="left"] .task-drag-edge-left,
+.task-board-wrap[data-drag-edge="right"] .task-drag-edge-right { opacity: .65; }
+.task-board-wrap.edge-moving[data-drag-edge="left"] .task-drag-edge-left,
+.task-board-wrap.edge-moving[data-drag-edge="right"] .task-drag-edge-right { opacity: 1; }
 .board[hidden], .tlist[hidden] { display: none; }
 .board > .tcol { flex: 1 0 250px; min-width: 250px; }
 .task-board-nav { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px; }
@@ -1471,7 +1483,10 @@ h1 .brand { color: var(--accent-strong); }
 .task.dragging { opacity: .4; }
 .task.nest-target { border-color: var(--accent-strong); box-shadow: 0 0 0 2px var(--accent-strong); }
 .task.nest-target::after { content: "Отпустите — станет подзадачей"; grid-column: 1 / -1; color: var(--accent-strong); font-size: 12px; }
-.task.before-target { border-top: 3px solid var(--accent-strong); }
+.task.before-target::before {
+  content: ""; position: absolute; top: -5px; left: 0; right: 0; height: 3px;
+  background: var(--accent-strong); border-radius: 3px; pointer-events: none;
+}
 .task-child-open { border: 0; background: none; color: var(--ink); text-align: left; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
 .task-child-open:hover { color: var(--accent-strong); }
 .task.fresh { animation: task-fresh 1.6s ease-out; }
@@ -1485,6 +1500,8 @@ h1 .brand { color: var(--accent-strong); }
 .tchk.numbered canvas { display: block; }
 .task-group { margin-top: 12px; }
 .task-group.drop-group { outline: 2px dashed var(--accent-strong); outline-offset: 4px; border-radius: 6px; }
+.task-group.empty-group.drop-group .task-group-empty { color: var(--accent-strong); font-size: 0; }
+.task-group.empty-group.drop-group .task-group-empty::after { content: "Переместить в эту подгруппу"; font-size: 12px; }
 .task-group-body { display: flow-root; }
 .task-group-body.folding { overflow: clip; }
 .task-group-body > .task { margin-top: 7px; }
@@ -1493,7 +1510,8 @@ h1 .brand { color: var(--accent-strong); }
 .task-group-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .task-group-count { font-size: 11px; color: var(--ink-soft); }
 .task-group-fold, .task-group-plus, .task-group-rename { border: 0; background: transparent; color: var(--ink-soft); padding: 3px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; }
-.task-group-fold { font-size: 10px; width: 14px; }
+.task-group-fold { gap: 6px; text-align: left; font: inherit; }
+.task-group-arrow { width: 8px; flex: none; font-size: 10px; }
 .task-group-rename { margin-left: auto; }
 .task-group-plus { margin-left: auto; color: var(--accent-strong); }
 .task-group-rename + .task-group-plus { margin-left: 0; }

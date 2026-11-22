@@ -18,7 +18,7 @@ module.exports = async function ({ main, page, shot }) {
   async function reload() {
     await page.send('Page.reload');
     await until('document.querySelector("#side-name")?.textContent === "Гость"');
-    await ev('document.querySelectorAll("dialog[open]").forEach(d=>d.close());document.querySelector("[data-page=tasks]").click();true');
+    await ev('document.querySelectorAll("dialog[open]").forEach(d=>d.close());document.querySelector("#capture-shortcut-notice").remove();document.querySelector("[data-page=tasks]").click();true');
     await until('document.querySelectorAll(".task-group").length>=4'); await sleep(180);
   }
   await reload();
