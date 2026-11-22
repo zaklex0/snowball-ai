@@ -1871,14 +1871,24 @@
       || list.querySelector("button:not(.profile-sub-back)");
     if (f) f.focus();
   }
-  function openSub(name, focusFirst) {
+  function openSub(name, focusFirst, fromPointer) {
     clearTimeout(subTimer);
     var target = subWrap(name), compact = els.menu.classList.contains("profile-menu-compact");
     els.menu.querySelectorAll(".sub-wrap").forEach(function (w) {
       var btn = w.querySelector(".has-sub"), on = !!target && w.contains(target), was = w.classList.contains("open");
+      var animateEntry = fromPointer && w === target && on && !was;
+      if (animateEntry) w.setAttribute("data-pointer-open", "");
       w.classList.toggle("open", on);
       btn.setAttribute("aria-expanded", String(on));
-      if (!compact && on && !was) fitSubmenu(w.querySelector(".submenu"));
+      if (!on) w.removeAttribute("data-pointer-open");
+      if (on && !was) {
+        var list = w.querySelector(".submenu");
+        if (!compact) fitSubmenu(list);
+        if (animateEntry && !compact) {
+          var anchor = btn.getBoundingClientRect();
+          list.style.setProperty("--submenu-anchor", Math.min(list.offsetHeight - 10, Math.max(10, anchor.top + anchor.height / 2 - submenuTop(list))) + "px");
+        }
+      }
     });
     if (compact) els.menu.scrollTop = 0;
     if (target && focusFirst) focusSubItem(target);
@@ -1889,13 +1899,17 @@
   }
   // The profile menu sits at the bottom of the window, so a list opened downwards could go under the Windows
   // taskbar. After opening, a list that does not fit moves up (or down) just enough to be fully visible.
+  function submenuTop(list) {
+    var parent = list.offsetParent;
+    return parent ? parent.getBoundingClientRect().top + parent.clientTop + list.offsetTop : list.getBoundingClientRect().top;
+  }
   function fitSubmenu(list) {
     if (!list) return;
     list.style.top = "";
     list.style.bottom = "";
-    var r = list.getBoundingClientRect(), gap = 8;
-    var over = r.bottom - (window.innerHeight - gap);
-    var move = over > 0 ? -over : r.top < gap ? gap - r.top : 0;
+    var top = submenuTop(list), gap = 8;
+    var over = top + list.offsetHeight - (window.innerHeight - gap);
+    var move = over > 0 ? -over : top < gap ? gap - top : 0;
     if (!move) return;
     list.style.top = (list.offsetTop + move) + "px";
     list.style.bottom = "auto";   // the effort list is pinned by its bottom edge in styles.css
@@ -1914,14 +1928,14 @@
       if (PROFILE_MENU_COMPACT.matches || els.menu.hidden) return;
       var open = openSubWrap();
       // A list inside the open one (or the open one itself) opens at once; a list elsewhere waits a moment.
-      if (!open || open === w || open.contains(w)) openSub(name);
-      else subLater(function () { openSub(name); }, 260);
+      if (!open || open === w || open.contains(w)) openSub(name, false, true);
+      else subLater(function () { openSub(name, false, true); }, 260);
     });
     // Leaving a list goes back to the list it sits in (or closes all for a top one).
     w.addEventListener("mouseleave", function () {
       if (!PROFILE_MENU_COMPACT.matches && !els.menu.hidden) subLater(function () { if (!w.contains(document.activeElement)) openSub(parentSub(w)); }, 350);
     });
-    button.addEventListener("click", function () { openSub(name, true); });
+    button.addEventListener("click", function (e) { openSub(name, true, e.detail > 0); });
   });
   // Plain items of a list close the lists opened from it.
   [els.menu].concat(Array.prototype.slice.call(els.menu.querySelectorAll(".submenu"))).forEach(function (list) {
@@ -1991,7 +2005,7 @@
     setMenu(false);
     var a = b.dataset.action;
     if (a === "edit-profile") openProfile(false);
-    else if (a === "settings") openSettings();
+    else if (a === "settings") openSettings(undefined, e.detail > 0);
     else if (a === "open-dir") call(api.openDataDir());
     else if (a === "change-dir") changeDir();
     else if (a === "export") exportPrompts(null);
@@ -2100,11 +2114,15 @@
     });
     els.settingsMain.scrollTop = 0;
   }
-  function openSettings(sec) {
+  function openSettings(sec, fromPointer) {
     setMenu(false);
     showSettingsSection(sec || settingsSec);
     els.setBackupMsg.textContent = "";
-    if (!els.settingsDlg.open) { els.settingsDlg.showModal(); els.settingsDlg.focus(); }
+    if (!els.settingsDlg.open) {
+      els.settingsDlg.toggleAttribute("data-pointer-open", !!fromPointer);
+      els.settingsDlg.showModal();
+      els.settingsDlg.focus();
+    }
   }
   els.settingsDlg.querySelectorAll(".sd-item").forEach(function (b) {
     b.addEventListener("click", function () { showSettingsSection(b.dataset.sec); });
@@ -3182,7 +3200,9 @@
   // What a card ends with once it is answered; "Отменить" while main.js still remembers how to undo it.
   function cardFooter(msg, a, doneText, offText, openPage) {
     if (a.status === "done") {
-      return h("div", { class: "act-done" }, icon("check"), h("span", { text: doneText }),
+      var check = icon("check");
+      check.classList.add("act-done-mark");
+      return h("div", { class: "act-done" }, check, h("span", { text: doneText }),
         openPage ? h("button", { type: "button", class: "link-btn", onclick: openPage }, "Открыть") : null,
         a.undoable ? h("button", { type: "button", class: "link-btn", onclick: function () { undoAction(msg, a); } }, "Отменить") : null);
     }
@@ -3283,8 +3303,12 @@
     }
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
-  function renderActions(msg) {
-    msg.extra.replaceChildren.apply(msg.extra, msg.actions.map(function (a) { return actionCard(msg, a); }));
+  function renderActions(msg, completedAction) {
+    msg.extra.replaceChildren.apply(msg.extra, msg.actions.map(function (a) {
+      var card = actionCard(msg, a);
+      if (a === completedAction) card.classList.add("act-just-completed");
+      return card;
+    }));
   }
   var DONE_TOASTS = {
     "calendar-add": "Дело «%» добавлено в календарь", "calendar-update": "Дело «%» изменено", "calendar-delete": "Дело «%» удалено",
@@ -3701,9 +3725,10 @@
     follow(se, function () {
       if (e.kind === "delta") { msg.text += e.text || ""; renderBody(msg); }
       else if (e.kind === "action" && e.action) {
-        msg.actions.push(Object.assign({ status: null }, e.action));
+        var action = Object.assign({ status: null }, e.action);
+        msg.actions.push(action);
         if (e.data) { applyData(e.data); render(); }
-        renderActions(msg);
+        renderActions(msg, e.data && action.status === "done" ? action : null);
       }
       else if (e.kind === "done") { msg.cost = e.cost || 0; finish(msg); }
       else if (e.kind === "error") { msg.cost = e.cost || 0; finish(msg, e.error || "Ассистент не ответил. Попробуйте ещё раз.", true); }
@@ -4574,17 +4599,51 @@
   }
   function taskGroupSection(status, g, list) {
     var key = status + ":" + g.id, collapsed = tb.folded.has(key);
+    var body = null, foldMotion = null;
+    function groupBody() {
+      var content = h("div", { class: "task-group-body" }, list.map(taskItem));
+      if (tb.adding === status && tb.addingGroup === g.id) content.append(addRow(status, g.id));
+      else if (!list.length) content.append(h("p", { class: "task-group-empty", text: "Пока нет задач" }));
+      return content;
+    }
+    function toggleGroup(e) {
+      collapsed = !collapsed;
+      if (collapsed) tb.folded.add(key); else tb.folded.delete(key);
+      fold.textContent = collapsed ? "▸" : "▾";
+      fold.setAttribute("aria-expanded", String(!collapsed));
+      fold.setAttribute("aria-label", (collapsed ? "Развернуть " : "Свернуть ") + g.name);
+
+      var startHeight = body ? body.getBoundingClientRect().height : 0;
+      var startOpacity = body ? getComputedStyle(body).opacity : 0;
+      if (foldMotion) { foldMotion.cancel(); foldMotion = null; }
+      if (!body) { body = groupBody(); box.append(body); }
+      body.classList.remove("folding");
+      body.inert = collapsed;
+      var height = body.getBoundingClientRect().height;
+      var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (e.detail > 0 && height <= 240 && (!reduce || !collapsed)) {
+        var frames = reduce ? [{ opacity: 0 }, { opacity: 1 }] : [
+          { height: startHeight + "px", opacity: startOpacity },
+          { height: (collapsed ? 0 : height) + "px", opacity: collapsed ? 0 : 1 }
+        ];
+        body.classList.toggle("folding", !reduce);
+        foldMotion = body.animate(frames, { duration: reduce ? 90 : 160, easing: getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() });
+        foldMotion.onfinish = function (event) { if (event.target === foldMotion) settleGroup(); };
+      } else settleGroup();
+    }
+    function settleGroup() {
+      foldMotion = null;
+      body.classList.remove("folding");
+      if (collapsed) { body.remove(); body = null; }
+    }
+    var fold = h("button", { type: "button", class: "task-group-fold", "aria-expanded": String(!collapsed), "aria-label": (collapsed ? "Развернуть " : "Свернуть ") + g.name, onclick: toggleGroup }, collapsed ? "▸" : "▾");
     var head = h("div", { class: "task-group-head" },
-      h("button", { type: "button", class: "task-group-fold", "aria-expanded": String(!collapsed), "aria-label": (collapsed ? "Развернуть " : "Свернуть ") + g.name, onclick: function () { collapsed ? tb.folded.delete(key) : tb.folded.add(key); renderTasks(); } }, collapsed ? "▸" : "▾"),
+      fold,
       h("span", { class: "task-group-name", text: g.name }), h("span", { class: "task-group-count", text: String(list.length) }),
       g.id && state.taskGroups.some(function (x) { return x.id === g.id; }) ? h("button", { type: "button", class: "task-group-rename", title: "Переименовать подгруппу во всех столбцах", "aria-label": "Переименовать " + g.name, onclick: function () { tb.groupForm = { id: g.id, name: g.name, expectedName: g.name }; renderTasks(); } }, "⋯") : null,
       h("button", { type: "button", class: "task-group-plus", title: "Новая задача в «" + g.name + "»", "aria-label": "Новая задача в «" + g.name + "»", onclick: function () { tb.folded.delete(key); tb.adding = status; tb.addingGroup = g.id; tb.focus = true; renderTasks(); } }, icon("plus")));
     var box = h("section", { class: "task-group", "data-group": g.id }, head);
-    if (!collapsed) {
-      list.forEach(function (t) { box.append(taskItem(t)); });
-      if (tb.adding === status && tb.addingGroup === g.id) box.append(addRow(status, g.id));
-      else if (!list.length) box.append(h("p", { class: "task-group-empty", text: "Пока нет задач" }));
-    }
+    if (!collapsed) { body = groupBody(); box.append(body); }
     box.addEventListener("dragover", function (e) {
       if (!tb.dragId) return;
       e.preventDefault(); e.stopPropagation();
@@ -6599,17 +6658,24 @@
     renderGuide();
     if (!gd.dlg.open) gd.dlg.showModal();
   }
-  function guideGo(d) {
+  function guideGo(d, fromPointer) {
     var g = gd.guide, step = g.steps[gd.step], s = gd.step, f = gd.frame + d;
     if (f < 0) { s--; f = s >= 0 ? g.steps[s].frames.length - 1 : 0; }
     else if (f >= step.frames.length) { s++; f = 0; }
     if (s < 0 || s >= g.steps.length) return;
-    gd.step = s; gd.frame = f; renderGuide();
+    gd.step = s; gd.frame = f; renderGuide(fromPointer);
   }
-  function renderGuide() {
+  function renderGuide(fromPointer) {
     var g = gd.guide, step = g.steps[gd.step], frame = step.frames[gd.frame], n0 = guideStart(step, gd.frame);
     var last = gd.step === g.steps.length - 1 && gd.frame === step.frames.length - 1, first = gd.step === 0 && gd.frame === 0;
-    var pic = h("div", { class: "gd-pic" }, guideShot(g, frame, null, n0));
+    var shot = guideShot(g, frame, null, n0);
+    var pic = h("div", { class: "gd-pic" }, shot);
+    if (fromPointer) {
+      shot.classList.add("gd-shot-pending");
+      shot.querySelector("img").decode().then(function () {
+        shot.classList.replace("gd-shot-pending", "gd-shot-entering");
+      }, function () { shot.classList.remove("gd-shot-pending"); });
+    }
     var hover = function (n) { pic.replaceChildren(guideShot(g, frame, n, n0)); };
     gd.dlg.replaceChildren(
       h("div", { class: "gd-head-row" }, h("h2", { text: "Как пользоваться: " + g.title }), h("span", { class: "gd-ver", text: guideVer(g) }),
@@ -6617,23 +6683,23 @@
       h("div", { class: "gd-body" }, pic,
         h("div", { class: "gd-side" }, h("h3", { text: (gd.step + 1) + ". " + step.title }), h("p", { class: "gd-lead", text: step.lead }),
           step.frames.length > 1 ? h("div", { class: "gd-frames" }, step.frames.map(function (f, i) {
-            return h("button", { type: "button", "aria-pressed": String(i === gd.frame), onclick: function () { gd.frame = i; renderGuide(); } }, f.name);
+            return h("button", { type: "button", "aria-pressed": String(i === gd.frame), onclick: function (e) { if (i !== gd.frame) { gd.frame = i; renderGuide(e.detail > 0); } } }, f.name);
           })) : null,
           guidePoints(frame, n0, hover))),
       h("div", { class: "gd-foot" },
         h("div", { class: "gd-dots" }, g.steps.map(function (x, i) {
           return h("button", { type: "button", class: i === gd.step ? "on" : "", title: (i + 1) + ". " + x.title, "aria-label": "Шаг " + (i + 1) + ": " + x.title,
-            onclick: function () { gd.step = i; gd.frame = 0; renderGuide(); } });
+            onclick: function (e) { if (i !== gd.step || gd.frame !== 0) { gd.step = i; gd.frame = 0; renderGuide(e.detail > 0); } } });
         })),
         h("span", { class: "gd-count", text: "Шаг " + (gd.step + 1) + " из " + g.steps.length }),
-        h("button", { type: "button", class: "btn btn-ghost", disabled: first ? "disabled" : null, onclick: function () { guideGo(-1); } }, "Назад"),
+        h("button", { type: "button", class: "btn btn-ghost", disabled: first ? "disabled" : null, onclick: function (e) { guideGo(-1, e.detail > 0); } }, "Назад"),
         // The guide of the macOS theme has no section of its own: its last button opens «Тема» in the profile menu;
         // the guide of the folded sidebar just closes; «Скиллы» open on the «Промты» page.
         last ? h("button", { type: "button", class: "btn btn-primary", onclick: function () {
           gd.dlg.close(); if (els.settingsDlg.open) els.settingsDlg.close();
           if (g.section === "cloud") openSettings("cloud"); else if (g.section === "theme") { setMenu(true); openSub("theme", true); } else if (g.section === "skills") openSkills(); else if (g.section !== "sidebar") setPage(g.section);
         } }, g.section === "theme" ? "Открыть меню «Тема»" : g.section === "sidebar" ? "Понятно" : g.section === "skills" ? "Открыть «Скиллы»" : g.section === "assistant" ? "Открыть LLM" : "Открыть раздел «" + g.title + "»")
-          : h("button", { type: "button", class: "btn btn-primary", onclick: function () { guideGo(1); } }, "Дальше")));
+          : h("button", { type: "button", class: "btn btn-primary", onclick: function (e) { guideGo(1, e.detail > 0); } }, "Дальше")));
   }
   // Delegation also covers guide buttons in sections mounted after the app starts.
   document.addEventListener('click', function (event) {

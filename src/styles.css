@@ -478,6 +478,14 @@ h1 .brand { color: var(--accent-strong); }
 .sub-wrap.open > .has-sub { background: var(--surface-2); }
 .menu.submenu { display: none; left: calc(100% + 4px); bottom: auto; top: -6px; min-width: 250px; }
 .sub-wrap.open > .submenu { display: grid; }
+#menu .sub-wrap.open[data-pointer-open] > .submenu {
+  transform-origin: left var(--submenu-anchor, 18px);
+  transition: opacity 140ms var(--ease-out), scale 140ms var(--ease-out);
+}
+@starting-style {
+  #menu .sub-wrap.open[data-pointer-open] > .submenu { opacity: 0; scale: .97; }
+  #menu.profile-menu-compact .sub-wrap.open[data-pointer-open] > .submenu { scale: 1; }
+}
 /* An invisible bridge over the gap between the menu and its list, so the mouse does not "leave" on the way */
 .menu.submenu::before { content: ""; position: absolute; top: 0; bottom: 0; left: -14px; width: 14px; }
 .menu .profile-sub-back { display: none; }
@@ -890,6 +898,8 @@ h1 .brand { color: var(--accent-strong); }
 .btn-ghost:disabled { opacity: .6; cursor: default; }
 .act-done { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; background: var(--ok-bg); color: var(--ok-ink); border-radius: 10px; padding: 7px 12px; font-size: 14px; }
 .act-done svg { width: 16px; height: 16px; }
+.act-just-completed .act-done-mark { animation: action-confirmed 140ms var(--ease-out); }
+@keyframes action-confirmed { from { opacity: 0; scale: .95; } }
 .act-done .link-btn { color: inherit; text-decoration-color: currentColor; }
 .act-done.off { background: var(--surface-2); color: var(--ink-soft); }
 
@@ -1024,6 +1034,10 @@ h1 .brand { color: var(--accent-strong); }
   background: var(--surface); color: var(--ink); box-shadow: var(--pop-shadow);
 }
 .settings-dlg[open] { display: flex; flex-direction: column; }
+.settings-dlg[data-pointer-open][open] { transition: opacity 220ms var(--ease-out), scale 220ms var(--ease-out); }
+@starting-style {
+  .settings-dlg[data-pointer-open][open] { opacity: 0; scale: .97; }
+}
 .settings-dlg::backdrop { background: rgba(30, 18, 12, .55); }
 .settings-dlg:focus { outline: none; }
 .sd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px 14px 22px; border-bottom: 1px solid var(--line); }
@@ -1385,6 +1399,8 @@ h1 .brand { color: var(--accent-strong); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
   .timer-pop[data-pointer-open]:not([hidden]),
+  #menu .sub-wrap.open[data-pointer-open] > .submenu,
+  .settings-dlg[data-pointer-open][open],
   .utoast:not([hidden]),
   .cloud-help[data-pointer-open][open]::details-content {
     transition: opacity 90ms var(--ease-out) !important;
@@ -1469,7 +1485,10 @@ h1 .brand { color: var(--accent-strong); }
 .tchk.numbered canvas { display: block; }
 .task-group { margin-top: 12px; }
 .task-group.drop-group { outline: 2px dashed var(--accent-strong); outline-offset: 4px; border-radius: 6px; }
-.task-group > .task { margin-top: 7px; }
+.task-group-body { display: flow-root; }
+.task-group-body.folding { overflow: clip; }
+.task-group-body > .task { margin-top: 7px; }
+.task-group-body > .task:first-child { margin-top: 2px; }
 .task-group-head { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-bottom: 5px; }
 .task-group-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .task-group-count { font-size: 11px; color: var(--ink-soft); }
@@ -2034,6 +2053,16 @@ h1 .brand { color: var(--accent-strong); }
 /* The screenshot is as big as fits both the width and the height of its area (cqw/cqh of .gd-pic). */
 .gd-pic { display: grid; place-items: center; padding: 18px; background: var(--surface-2); overflow: hidden; min-height: 0; container-type: size; }
 .gd-pic > .gd-shot { width: min(100cqw, 100cqh * 1280 / 820); }
+.gd-shot-pending { opacity: .45; }
+.gd-shot-entering { animation: guide-frame-in 150ms var(--ease-out); }
+@keyframes guide-frame-in { from { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) {
+  @starting-style {
+    #menu .sub-wrap.open[data-pointer-open] > .submenu,
+    .settings-dlg[data-pointer-open][open] { scale: 1; }
+  }
+  .act-just-completed .act-done-mark, .gd-shot-entering { animation: guide-frame-in 90ms var(--ease-out); }
+}
 .gd-side { padding: 20px 22px; overflow: auto; border-left: 1px solid var(--line); }
 .gd-side h3 { margin: 0 0 4px; font-size: 18px; }
 .gd-side .gd-lead, .gd-side .gd-pts li { font-size: 14.5px; }
