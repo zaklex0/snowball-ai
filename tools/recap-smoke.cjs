@@ -35,19 +35,26 @@ const fake = http.createServer((req, res) => {
       content: [{ type: 'output_text', text: JSON.stringify(RECAP), annotations: [] }] }],
       usage: { input_tokens: 900, input_tokens_details: { cached_tokens: 0 }, output_tokens: 300, total_tokens: 1200 } }));
   });
-}).listen(8766, '127.0.0.1');
+});
 
 const kids = [];
 const stop = () => { kids.forEach((k) => { try { k.kill(); } catch (e) { /* gone */ } }); fake.close(); };
 process.on('exit', stop);
 (async () => {
+  await new Promise((resolve, reject) => {
+    fake.once('error', reject);
+    fake.listen(0, '127.0.0.1', resolve);
+  });
+  const [inspectPort, debugPort] = await Promise.all([cdp.freePort(), cdp.freePort()]);
   const electron = require(path.join(root, 'node_modules', 'electron'));
-  kids.push(spawn(electron, ['.', '--inspect=9231', '--remote-debugging-port=9334', '--user-data-dir=' + profile], {
-    cwd: root, env: Object.assign({}, process.env, { OPENAI_BASE_URL: 'http://127.0.0.1:8766/v1' }), stdio: 'ignore' }));
-  const main = await cdp.connect(9231, (t) => t.type === 'node');
+  kids.push(spawn(electron, ['.', '--inspect=' + inspectPort, '--remote-debugging-port=' + debugPort, '--user-data-dir=' + profile], {
+    cwd: root, env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:' + fake.address().port + '/v1' },
+    stdio: 'ignore', windowsHide: true
+  }));
+  const main = await cdp.connect(inspectPort, (t) => t.type === 'node');
   const ud = await main.ev(`process.mainModule.require('electron').app.getPath('userData')`);
   assert.equal(path.resolve(ud), path.resolve(profile), 'not the test profile');
-  const page = await cdp.connect(9334, (t) => t.type === 'page' && /index\.html/.test(t.url));
+  const page = await cdp.connect(debugPort, (t) => t.type === 'page' && /index\.html/.test(t.url));
   await page.until(`!!window.vsApi && document.readyState === 'complete'`);
   const key = await page.ev(`vsApi.assistantCheckKey('openai', 'sk-test-recap-0000000000')`);
   assert.ok(key && key.ok, 'key: ' + JSON.stringify(key));

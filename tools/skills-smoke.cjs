@@ -37,13 +37,16 @@ process.on('exit', () => kids.forEach((k) => { try { k.kill(); } catch (e) { /* 
   });
   kids.push(fake);
   const [port] = await require('node:events').once(fake, 'message', { signal: AbortSignal.timeout(10000) });
+  const [inspectPort, debugPort] = await Promise.all([cdp.freePort(), cdp.freePort()]);
   const electron = require(path.join(root, 'node_modules', 'electron'));
-  kids.push(spawn(electron, ['.', '--inspect=9232', '--remote-debugging-port=9335', '--user-data-dir=' + profile], {
-    cwd: root, env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:' + port + '/v1' }, stdio: 'ignore' }));
-  const main = await cdp.connect(9232, (t) => t.type === 'node');
+  kids.push(spawn(electron, ['.', '--inspect=' + inspectPort, '--remote-debugging-port=' + debugPort, '--user-data-dir=' + profile], {
+    cwd: root, env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:' + port + '/v1' },
+    stdio: 'ignore', windowsHide: true
+  }));
+  const main = await cdp.connect(inspectPort, (t) => t.type === 'node');
   const ud = await main.ev(`process.mainModule.require('electron').app.getPath('userData')`);
   assert.equal(path.resolve(ud), path.resolve(profile), 'not the test profile');
-  const page = await cdp.connect(9335, (t) => t.type === 'page' && /index\.html/.test(t.url));
+  const page = await cdp.connect(debugPort, (t) => t.type === 'page' && /index\.html/.test(t.url));
   await page.until(`!!window.vsApi && document.readyState === 'complete'`);
   await page.ev(`(() => { const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Пропустить' && x.offsetParent); if (b) b.click(); return 1; })()`);
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 820, deviceScaleFactor: 1, mobile: false });
