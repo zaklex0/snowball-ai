@@ -4443,7 +4443,7 @@
   document.addEventListener("mousedown", function (e) { if (!taskCtx.hidden && !taskCtx.contains(e.target)) closeTaskCtx(); });
   window.addEventListener("blur", closeTaskCtx);
   // What is shown: board or list, search, tag, importance (1 — important and urgent, 2 — urgent only), done tasks hidden.
-  var tf = { view: "board", q: "", tag: "", prio: 0, hideDone: false, doneOpen: false };
+  var tf = { view: "board", q: "", tag: "", prio: 0, hideDone: false, doneOpen: true };
   try {
     if (["list", "archive"].indexOf(localStorage.getItem("tasksView")) !== -1) tf.view = localStorage.getItem("tasksView");
     tf.hideDone = localStorage.getItem("tasksHideDone") === "1";
@@ -4527,7 +4527,15 @@
       type: "button", class: "tchk numbered" + (done ? " on" : "") + (big ? " big" : ""), "data-task-number": String(t.number || ""),
       title: "Задача " + t.number + " · " + colName(t.status) + " · " + (done ? "Снять галочку" : "Отметить сделанной"), "aria-pressed": done ? "true" : "false",
       "aria-label": (done ? "Снять галочку с задачи «" : "Отметить сделанной задачу «") + t.title + "»",
-      onclick: function (e) { e.stopPropagation(); saveTaskNow({ id: t.id, status: done ? t.doneFrom || "todo" : "done", expectedFields: { status: JSON.stringify(t.status) } }); }
+      onclick: function (e) {
+        e.stopPropagation();
+        if (!done && tf.view === "list") tf.doneOpen = true;
+        saveTaskNow({ id: t.id, status: done ? t.doneFrom || "todo" : "done", expectedFields: { status: JSON.stringify(t.status) } }).then(function (r) {
+          if (!r || done) return;
+          if (tf.hideDone) toast("Задача выполнена. Чтобы увидеть её, выключите «Скрыть выполненные».", true);
+          else if (tf.view === "board") toast("Задача выполнена и находится в столбце «Готово».", true);
+        });
+      }
     });
   }
   function renderTasks() {

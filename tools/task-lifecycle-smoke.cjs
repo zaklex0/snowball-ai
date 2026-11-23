@@ -63,12 +63,23 @@ const { connect, freePort } = require('./guide-shots/cdp');
     assert.equal(await hasGroup('doing'), false);
     assert.equal(await hasGroup('done'), true);
     assert.equal(await hasGroup('todo', empty.id), true);
+    // Done tasks are visible in the list, including after completing one while its group was folded.
+    await page.ev('document.querySelector("#tview [data-v=list]").click();true');
+    assert.equal(await page.ev(`!!document.querySelector('.trow[data-id="${a.id}"]')`), true);
+    await page.ev(`document.querySelector('.trow[data-id="${a.id}"] .tchk').click();true`);
+    await page.until(`!!document.querySelector('.trow[data-id="${a.id}"]:not(.is-done)')`);
+    await page.ev('document.querySelector(".tgroup-fold").click();true');
+    await page.ev(`document.querySelector('.trow[data-id="${a.id}"] .tchk').click();true`);
+    await page.until(`!!document.querySelector('.trow.is-done[data-id="${a.id}"]') && document.querySelector('.tgroup-fold').getAttribute('aria-expanded') === 'true'`);
+    const restartedAt = (await loadTask(a.id)).startedAt;
+    assert.ok(restartedAt >= saved.startedAt);
+    await page.ev('document.querySelector("#tview [data-v=board]").click();true');
     await page.ev('document.querySelector(".tarch-btn").click();true');
     await page.until('!document.querySelector(".tc-done .task")');
     assert.equal(await hasGroup('todo'), false);
     await page.send('Page.reload'); await open();
     assert.equal(await hasGroup('todo'), false);
-    assert.equal((await loadTask(a.id)).startedAt, saved.startedAt);
+    assert.equal((await loadTask(a.id)).startedAt, restartedAt);
     // Returning an archived task restores its original group without creating a duplicate.
     await page.ev(`vsApi.taskSave({id:${JSON.stringify(a.id)},status:'todo'})`);
     await page.send('Page.reload'); await open();
