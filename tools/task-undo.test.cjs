@@ -29,6 +29,40 @@ test('undo restores a deleted group and active and archived tasks, and refuses c
   await assert.rejects(history.undo(s), /undo conflict/);
   assert.deepEqual(s.groupsView(), [later]);
 });
+test('undo removes a created group with its own task changes and protects later assignments', async t => {
+  const store = await setup(t), history = new TaskUndoHistory(), changes = [];
+  const task = await store.saveTask({ title: 'Черновик' });
+  const group = await store.addTaskGroup('Монтаж', changes);
+  await store.moveTasks([task.id], { groupId: group.id }, changes);
+  const duplicate = [];
+  assert.deepEqual(await store.addTaskGroup('монтаж', duplicate), group);
+  assert.deepEqual(duplicate, []);
+  history.record(changes, 'Создание подгруппы и перенос задачи', store);
+  const later = await store.saveTask({ title: 'Новая задача', groupId: group.id });
+  await assert.rejects(history.undo(store), /undo conflict/);
+  assert.equal(store.findTask(later.id).groupId, group.id);
+  await store.saveTask({ id: later.id, groupId: '' });
+  await history.undo(store);
+  assert.deepEqual(store.groupsView(), []);
+  assert.equal(store.findTask(task.id).groupId, '');
+  assert.ok(store.findTask(later.id));
+});
+test('saving a task in a new named group only publishes both after a successful write', async t => {
+  const store = await setup(t), changes = [];
+  const writeTasks = store.writeTasks;
+  store.writeTasks = async () => { throw new Error('disk full'); };
+  try {
+    await assert.rejects(store.saveTask({ title: 'Урок' }, changes, { groupName: 'Курс' }), /disk full/);
+    assert.deepEqual(store.groupsView(), []);
+    assert.deepEqual(store.tasksView(), []);
+    assert.deepEqual(changes, []);
+  } finally { store.writeTasks = writeTasks; }
+  const saved = await store.saveTask({ title: 'Урок' }, changes, { groupName: 'Курс' });
+  assert.equal(store.groupsView()[0].id, saved.groupId);
+  await store.restoreTaskChanges([changes]);
+  assert.deepEqual(store.groupsView(), []);
+  assert.deepEqual(store.tasksView(), []);
+});
 test('history restores creation, nested category moves and deletion in reverse order', async t => {
   const s = await setup(t), h = new TaskUndoHistory(), group = await s.addTaskGroup('YouTube Reels');
   const parent = await s.saveTask({ title: 'Родитель' }), child = await s.saveTask({ title: 'Ребёнок', note: 'Сохранить' }); await s.saveTask({ id: child.id, parentId: parent.id });

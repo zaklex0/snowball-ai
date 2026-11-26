@@ -422,6 +422,7 @@ function normalizeAction(a) {
   // Task cards carry the task, and for a change also how it was before.
   if (a.task && typeof a.task === 'object') out.task = normalizeTask(a.task);
   if (a.prevTask && typeof a.prevTask === 'object') out.prevTask = normalizeTask(a.prevTask);
+  if (a.kind === 'task-add' && typeof a.groupName === 'string') out.groupName = str(a.groupName, 60);
   if (a.kind === 'skill-set-type') {
     out.skillId = ID_RE.test(str(a.skillId)) ? a.skillId : '';
     out.prevCategory = str(a.prevCategory, 60);
@@ -943,15 +944,23 @@ class Store {
     return numberedTasks(this.tasks, this.columnsView(), this.taskGroups);
   }
   groupsView() { return structuredClone(this.taskGroups); }
-  addTaskGroup(name) {
+  ensureTaskGroup(name) {
+    name = str(name, 60).trim();
+    if (!name) throw Object.assign(new Error('bad task group'), { userMessage: 'Напишите название подгруппы.' });
+    const existing = this.taskGroups.find(g => g.name.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'));
+    if (existing) return { group: existing, created: false };
+    if (this.taskGroups.length >= 200) throw Object.assign(new Error('too many groups'), { userMessage: 'На доске уже 200 подгрупп.' });
+    const group = { id: newId('grp'), name };
+    this.taskGroups.push(group);
+    return { group, created: true };
+  }
+  addTaskGroup(name, undoLog) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
-      name = str(name, 60).trim();
-      if (!name) throw Object.assign(new Error('bad task group'), { userMessage: 'Напишите название подгруппы.' });
-      const existing = this.taskGroups.find(g => g.name.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'));
-      if (existing) return existing;
-      if (this.taskGroups.length >= 200) throw Object.assign(new Error('too many groups'), { userMessage: 'На доске уже 200 подгрупп.' });
-      const group = { id: newId('grp'), name };
-      this.taskGroups.push(group); await this.writeTasks(); return group;
+      const { group, created } = this.ensureTaskGroup(name);
+      if (!created) return group;
+      await this.writeTasks();
+      if (undoLog) undoLog.push({ id: 'group:' + group.id, before: null, after: { ...group } });
+      return group;
     });
   }
   renameTaskGroup(id, name, expectedName) {
@@ -1081,9 +1090,11 @@ class Store {
   // Moving to another column without an order puts it at the bottom there.
   // Statistics: a new task, a move to another column, every new subtask and every subtask ticked off count as actions.
   // Edits, deleting, a move inside the column and taking a tick back (out of «Готово» too) do not.
-  saveTask(input, undoLog) {
+  saveTask(input, undoLog, { groupName } = {}) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
       const beforeTasks = undoLog && new Map(this.tasks.map(t => [t.id, t]));
+      const grouping = groupName === undefined ? null : this.ensureTaskGroup(groupName);
+      if (grouping) input = { ...input, groupId: grouping.group.id };
       if (input && input.status && !this.hasColumn(input.status)) input = Object.assign({}, input, { status: 'todo' });
       const prev = input && input.id ? this.findTask(input.id) : null;
       if (input && typeof input.expectedAction === 'string' && (!prev || JSON.stringify(prev) !== input.expectedAction)) throw staleAssistantAction();
@@ -1134,6 +1145,7 @@ class Store {
         else if (s.done && !was.done) n += 1;
       });
       await this.bump('tasks', n);
+      if (undoLog && grouping?.created) undoLog.push({ id: 'group:' + grouping.group.id, before: null, after: { ...grouping.group } });
       if (beforeTasks) this.tasks.forEach(t => recordUndoChange(undoLog, beforeTasks.get(t.id) || null, t));
       return task;
     });
@@ -1150,6 +1162,11 @@ class Store {
         }
         const removedIds = new Set(taskChanges.filter(change => !change.before).map(change => change.id));
         const changedIds = new Set(taskChanges.map(change => change.id));
+        const removedGroups = new Set(groups.filter(change => !change.before).map(change => change.after.id));
+        if (removedGroups.size && (
+          this.tasks.some(t => removedGroups.has(t.groupId) && !changedIds.has(t.id)) ||
+          taskChanges.some(change => removedGroups.has(change.before?.groupId))
+        )) throw undoConflict();
         if (removedIds.size && (
           this.tasks.some(t => removedIds.has(t.parentId) && !changedIds.has(t.id)) ||
           taskChanges.some(change => removedIds.has(change.before?.parentId))
@@ -1157,6 +1174,7 @@ class Store {
         for (const { id, before, after } of taskChanges) {
           if (!isDeepStrictEqual(this.findTask(id), after) || (before && !this.hasColumn(before.status))) throw undoConflict();
         }
+        this.taskGroups = this.taskGroups.filter(g => !removedGroups.has(g.id));
         for (const change of groups) if (change.before) this.taskGroups.splice(Math.min(change.before.index, this.taskGroups.length), 0, { id: change.before.id, name: change.before.name });
         for (const change of taskChanges) {
           this.tasks = this.tasks.filter(t => t.id !== change.id);

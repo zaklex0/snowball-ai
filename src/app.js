@@ -3253,6 +3253,7 @@
       kids.push(h("div", { class: "act-when was", text: "Было: «" + a.prevTask.title + "», " + taskSummary(a.prevTask) }),
         h("div", { class: "act-when", text: "Станет: «" + t.title + "», " + taskSummary(t) }));
     } else kids.push(h("div", { class: "act-when", text: "Столбец «" + colName(t.status) + "»" + (taskSummary(t, true) ? " · " + taskSummary(t, true) : "") + (t.note ? " · " + t.note : "") }));
+    if (kind === "add" && a.groupName) kids.push(h("div", { class: "act-when", text: "Подгруппа «" + a.groupName + "»" }));
     if (kind === "add" && t.subtasks && t.subtasks.length) kids.push(h("div", { class: "act-when", text: "Шаги: " + t.subtasks.map(function (s) { return s.title; }).join(", ") }));
     var done = { add: "Задача добавлена", update: "Задача изменена", delete: "Задача удалена" }[kind];
     var foot = cardFooter(msg, a, done, "Отменено, задачи не изменились", kind === "delete" ? null : function () { setPage("tasks"); });
@@ -3284,6 +3285,11 @@
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
   function actionCard(msg, a) {
+    if (a.kind === "group-add") {
+      var head = h("div", { class: "act-head" }, icon("plus"), h("span", { text: "Создать подгруппу «" + a.title + "»?" }));
+      var foot = cardFooter(msg, a, "Подгруппа создана", "Создание отменено", function () { setPage("tasks"); });
+      return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, head, foot || cardButtons(msg, a, "Создать"));
+    }
     if (a.kind === "group-delete") {
       var kids = [h("div", { class: "act-head" }, icon("trash"), h("span", { text: "Удалить подгруппу «" + a.title + "»?" })), h("div", { class: "act-when", text: "Подгруппа исчезнет во всех столбцах. Задачи и архив сохранятся без подгруппы." })];
       kids.push(cardFooter(msg, a, "Подгруппа удалена", "Отменено, подгруппа сохранена") || cardButtons(msg, a, "Удалить", true));
@@ -3318,7 +3324,7 @@
   }
   var DONE_TOASTS = {
     "calendar-add": "Дело «%» добавлено в календарь", "calendar-update": "Дело «%» изменено", "calendar-delete": "Дело «%» удалено",
-    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "group-delete": "Подгруппа «%» удалена", "create-prompt": "Промт «%» добавлен",
+    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "group-add": "Подгруппа «%» создана", "group-delete": "Подгруппа «%» удалена", "create-prompt": "Промт «%» добавлен",
     "skill-add": "Скилл «%» сохранён во вкладку «Скиллы»", "skill-set-type": "Категория скилла «%» изменена"
   };
   function decide(msg, a, accept) {
@@ -3414,9 +3420,10 @@
     var what = a.kind === "calendar-add" ? "Добавить в календарь «" + e.title + "» " + e.date + " " + timeRange(e)
       : a.kind === "calendar-update" ? "Изменить дело «" + e.title + "»: теперь " + e.date + " " + timeRange(e)
       : a.kind === "calendar-delete" ? "Удалить из календаря «" + e.title + "» " + e.date + " " + timeRange(e)
-      : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + colName(t.status) + "»"
+      : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + colName(t.status) + "»" + (a.groupName ? ", подгруппа «" + a.groupName + "»" : "")
       : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + colName(t.status) + "»"
       : a.kind === "task-delete" ? "Удалить задачу «" + t.title + "»"
+      : a.kind === "group-add" ? "Создать подгруппу «" + a.title + "»"
       : a.kind === "group-delete" ? "Удалить подгруппу «" + a.title + "», задачи сохранятся"
       : a.kind === "skill-add" ? "Сохранить скилл «" + a.title + "» во вкладку «Скиллы»"
       : a.kind === "skill-set-type" ? "Изменить категорию скилла «" + a.title + "» на «" + (skillType(a.category) || {}).label + "»"
@@ -3506,7 +3513,7 @@
       if (m.cost) out.cost = m.cost;
       if (m.actions && m.actions.length) out.actions = m.actions.map(function (a) {
         return { id: a.id, kind: a.kind, title: a.title, category: a.category, text: a.text, skillId: a.skillId, prevCategory: a.prevCategory,
-          status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev, task: a.task, prevTask: a.prevTask };
+          status: a.status === "busy" ? null : a.status, event: a.event, prev: a.prev, task: a.task, prevTask: a.prevTask, groupName: a.groupName };
       });
       return out;
     });

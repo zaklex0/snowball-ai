@@ -33,6 +33,8 @@ module.exports = async function ({ main, page, shot }) {
   await shot('04-move',{group:`.tc-doing .task-group[data-group="${ids.course}"]`,number:`.task[data-id="${ids.lesson}"] .tchk`});
   await ev('const t=document.querySelector("#tbar-input");t.value="Перенеси задачу 1 из В процессе в Готово";t.dispatchEvent(new Event("input",{bubbles:true}));true');
   await shot('05-assistant',{input:'#tbar-input',source:'.tc-doing .task .tchk',send:'#tbar-send'});
+  await ev(`(() => { const t = document.querySelector("#tbar-input"); t.value = 'Добавь задачу «Проверить материалы» в подгруппу «Обучение»'; t.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+  await shot('05b-group-and-task',{input:'#tbar-input'});
   await ev('document.querySelector("#tbar-input").value="";true');
   await ev(`document.querySelector('.task[data-id="${ids.lesson}"]').click();true`);
   await shot('06-details',{group:'.task-group-select',column:'#tpanel .tp-field',number:'#tpanel .tchk.numbered'});

@@ -22,7 +22,7 @@ function taskReferenceSelection(text) {
   return { numbers: [...new Set(Array.from(text.matchAll(pattern), m => m[1].includes('.') ? m[1] : Number(m[1])))] };
 }
 function taskColumnReferences(text, columns) {
-  let low = String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/[«»"“”]/g, '').replace(/\s+/g, ' ');
+  let low = String(text || '').toLowerCase().replace(/ё/g, 'е').replace(/[«»"„“”]/g, '').replace(/\s+/g, ' ');
   const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = c => c.id === 'doing' ? '(?:в процессе|процесс[а-я]*|работ[а-я]*)' : c.id === 'todo' ? '(?:предстоит|предстоящ[а-я]*)' : c.id === 'done' ? '(?:готово|готовых)' : escape(c.name.toLowerCase().replace(/ё/g, 'е'));
   let source = null, target = null;
@@ -46,13 +46,13 @@ function taskTargetGroup(text, groups) {
   const match = /(?:^|\s)в\s+(?:подгрупп[уы]|категори[юи])\s+/iu.exec(String(text));
   if (!match) return { mentioned: false, text };
   const start = match.index + match[0].length;
-  const rest = String(text).slice(start), norm = s => s.toLowerCase().replace(/ё/g, 'е').replace(/[«»"“”]/g, '').replace(/\s+/g, ' ').trim();
+  const rest = String(text).slice(start), norm = s => s.toLowerCase().replace(/ё/g, 'е').replace(/[«»"„“”]/g, '').replace(/\s+/g, ' ').trim();
   const tail = norm(rest).replace(/[.!?]+$/, '').trim();
   const candidates = groups.concat([{ id: '', name: 'Без подгруппы' }]).slice().sort((a, b) => b.name.length - a.name.length);
   const group = candidates.find(g => tail === norm(g.name) || tail.startsWith(norm(g.name) + ' из ') || tail.startsWith(norm(g.name) + ' в столбец ') || tail.startsWith(norm(g.name) + ' во вкладку '));
-  if (!group) return { mentioned: true, error: 'Подгруппа «' + rest.trim().replace(/^[«"“]|[»"”]$/g, '') + '» не найдена. Проверьте название подгруппы.' };
+  if (!group) return { mentioned: true, error: 'Подгруппа «' + rest.trim().replace(/^[«"„“]|[»"“”]$/g, '') + '» не найдена. Проверьте название подгруппы.' };
   const escaped = group.name.trim().split(/\s+/).map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
-  const removeLength = new RegExp('^[«"“]?\\s*' + escaped + '\\s*[»"”]?', 'iu').exec(rest)?.[0].length || group.name.length;
+  const removeLength = new RegExp('^[«"„“]?\\s*' + escaped + '\\s*[»"“”]?', 'iu').exec(rest)?.[0].length || group.name.length;
   return { mentioned: true, groupId: group.id, text: String(text).slice(0, match.index) + ' ' + rest.slice(removeLength) };
 }
 function resolveTaskSelection(numbers, tasks, source) {

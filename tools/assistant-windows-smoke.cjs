@@ -57,8 +57,45 @@ const { connect, freePort } = require('./guide-shots/cdp');
     await first.ev(`Array.from(document.querySelectorAll('.act-card')).at(-1).querySelector('.btn-danger').click(); true`);
     await first.until(`document.querySelector('#toast').textContent.includes('уже изменили')`);
     assert.equal((await first.ev('vsApi.load()')).events.find((e) => e.id === event.id).from, '16:00');
+    await first.ev(`document.querySelector('#chat-input').value='Создай подгруппу «Монтаж»'; document.querySelector('#chat-send').click(); true`);
+    await first.until(`Array.from(document.querySelectorAll('.act-card')).at(-1).textContent.includes('Создать подгруппу «Монтаж»?')`);
+    assert.deepEqual((await first.ev('vsApi.load()')).taskGroups, []);
+    await first.ev(`Array.from(document.querySelectorAll('.act-card')).at(-1).querySelector('.btn-primary').click(); true`);
+    await first.until(`Array.from(document.querySelectorAll('.act-card')).at(-1).textContent.includes('Подгруппа создана')`);
+    assert.equal((await second.ev('vsApi.load()')).taskGroups[0].name, 'Монтаж');
+    await first.until(`!document.querySelector('#chat-send').disabled`);
+    assert.equal((await first.ev('vsApi.setConfirm(false)')).ok, true);
+    await first.ev(`document.querySelector('#chat-input').value='Добавь подгруппу Съёмки'; document.querySelector('#chat-send').click(); true`);
+    await first.until(`Array.from(document.querySelectorAll('.act-card')).at(-1).textContent.includes('Подгруппа создана') && Array.from(document.querySelectorAll('.act-card')).at(-1).querySelectorAll('.link-btn').length === 2`);
+    assert.deepEqual((await first.ev('vsApi.load()')).taskGroups.map(g => g.name), ['Монтаж', 'Съёмки']);
+    await first.ev(`Array.from(document.querySelectorAll('.act-card')).at(-1).querySelectorAll('.link-btn')[1].click(); true`);
+    await first.until(`Array.from(document.querySelectorAll('.act-card')).at(-1).textContent.includes('всё вернул как было')`);
+    assert.deepEqual((await first.ev('vsApi.load()')).taskGroups.map(g => g.name), ['Монтаж']);
+    assert.equal((await first.ev('vsApi.setConfirm(true)')).ok, true);
+    async function taskCard(text, label, before) {
+      const count = await first.ev("document.querySelectorAll('.act-card').length");
+      const card = "Array.from(document.querySelectorAll('.act-card')).at(-1)";
+      await first.ev(`document.querySelector('#chat-input').value=${JSON.stringify(text)}; document.querySelector('#chat-send').click(); true`);
+      await first.until(`document.querySelectorAll('.act-card').length === ${count + 1} && ${card}.textContent.includes(${JSON.stringify(label)})`);
+      if (before) await before();
+      await first.ev(`${card}.querySelector('.btn-primary').click(); true`);
+      await first.until(`!!${card}.querySelector('.act-done') && !document.querySelector('#chat-send').disabled`);
+      return first.ev('vsApi.load()');
+    }
+    let taskState = await taskCard('добавь задачу новую "привет как дела", положи ее в подгруппу "салам алейкум"', 'Подгруппа «салам алейкум»', async () => {
+      assert.deepEqual((await first.ev('vsApi.load()')).tasks, []);
+    });
+    const greeting = taskState.tasks.find(t => t.title === 'привет как дела');
+    assert.ok(greeting);
+    assert.equal(taskState.taskGroups.find(g => g.id === greeting.groupId).name, 'салам алейкум');
+    taskState = await taskCard('Перемести задачу «привет как дела» во вкладку «В процессе»', 'Станет: «привет как дела», В процессе');
+    assert.equal(taskState.tasks.find(t => t.id === greeting.id).status, 'doing');
+    taskState = await taskCard('Закрой задачу «привет как дела»', 'Станет: «привет как дела», Готово');
+    const closed = taskState.tasks.find(t => t.id === greeting.id);
+    assert.equal(closed.status, 'done');
+    assert.equal(closed.groupId, greeting.groupId);
     first.close(); second.close(); main.close();
-    console.log('OK: actions retry safely; newer conversations and events survive changes in another window');
+    console.log('OK: action retries, parallel conversations, calendar conflicts, group and task creation, moves, closing, confirmation and undo');
   } finally {
     child.kill();
     await new Promise((resolve) => child.exitCode !== null ? resolve() : child.once('exit', resolve));
