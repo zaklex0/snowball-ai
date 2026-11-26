@@ -963,6 +963,21 @@ class Store {
       group.name = name; await this.writeTasks(); return group;
     });
   }
+  deleteTaskGroup(id, expectedName, undoLog) {
+    return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
+      const group = this.taskGroups.find(g => g.id === id);
+      if (!group || expectedName !== undefined && group.name !== expectedName) throw Object.assign(new Error('group changed'), { userMessage: 'Подгруппа изменилась в другом окне. Обновите доску.' });
+      const index = this.taskGroups.findIndex(g => g.id === id);
+      const changed = this.tasks.filter(t => t.groupId === id).map(t => structuredClone(t));
+      this.taskGroups = this.taskGroups.filter(g => g.id !== id);
+      this.tasks.forEach(t => { if (t.groupId === id) t.groupId = ''; });
+      await this.writeTasks();
+      if (undoLog) {
+        undoLog.push({ id: 'group:' + id, before: { ...group, index }, after: null });
+        changed.forEach(t => recordUndoChange(undoLog, t, this.findTask(t.id)));
+      }
+    });
+  }
   taskNumber(id) { return this.tasksView().find(t => t.id === id)?.number ?? null; }
   findTasksByNumber(number, status, archived = false) {
     return this.tasksView().filter(t => String(t.number) === String(number) && !!t.archivedAt === archived && (!status || t.status === status));
@@ -1125,16 +1140,23 @@ class Store {
   restoreTaskChanges(batches) {
     return this.runLists(['tasks'], async function () {
       for (const changes of batches) {
-        const removedIds = new Set(changes.filter(change => !change.before).map(change => change.id));
-        const changedIds = new Set(changes.map(change => change.id));
+        const groups = changes.filter(change => change.id.startsWith('group:'));
+        const taskChanges = changes.filter(change => !change.id.startsWith('group:'));
+        for (const { before, after } of groups) {
+          const current = this.taskGroups.find(g => g.id === (before || after).id) || null;
+          if (!isDeepStrictEqual(current, after) || (before && this.taskGroups.some(g => g.name.toLocaleLowerCase('ru') === before.name.toLocaleLowerCase('ru')))) throw undoConflict();
+        }
+        const removedIds = new Set(taskChanges.filter(change => !change.before).map(change => change.id));
+        const changedIds = new Set(taskChanges.map(change => change.id));
         if (removedIds.size && (
           this.tasks.some(t => removedIds.has(t.parentId) && !changedIds.has(t.id)) ||
-          changes.some(change => removedIds.has(change.before?.parentId))
+          taskChanges.some(change => removedIds.has(change.before?.parentId))
         )) throw undoConflict();
-        for (const { id, before, after } of changes) {
+        for (const { id, before, after } of taskChanges) {
           if (!isDeepStrictEqual(this.findTask(id), after) || (before && !this.hasColumn(before.status))) throw undoConflict();
         }
-        for (const change of changes) {
+        for (const change of groups) if (change.before) this.taskGroups.splice(Math.min(change.before.index, this.taskGroups.length), 0, { id: change.before.id, name: change.before.name });
+        for (const change of taskChanges) {
           this.tasks = this.tasks.filter(t => t.id !== change.id);
           if (change.before) this.tasks.push(structuredClone(change.before));
         }
@@ -1500,7 +1522,8 @@ class Store {
         records[kind + ':' + item.id] = value;
       }
     }
-    if (this.columns.length || this.taskGroups.length || this.archiveMode !== 'day') records['config:tasks'] = { columns: this.columns, groups: this.taskGroups, archiveMode: this.archiveMode };
+    // Keep an explicit empty group list: a missing record cannot communicate deletion of the last group.
+    records['config:tasks'] = { columns: this.columns, groups: this.taskGroups, archiveMode: this.archiveMode };
     if (this.profile.name || this.profile.avatarAt) records['config:profile'] = this.profile;
     for (const [day, counts] of Object.entries(this.activity.days)) records['activity:' + day] = counts;
     return structuredClone(records);

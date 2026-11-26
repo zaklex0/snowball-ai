@@ -75,6 +75,21 @@ test('archive numbers are separate from active done tasks', async t => {
   assert.equal(s.findTaskByNumber(1, 'done').id, b.id); assert.equal(s.findTaskByNumber(1, 'done', true).id, a.id);
   await s.unarchive([a.id]); assert.deepEqual(s.tasksView().map(t => t.number), [1, 2]);
 });
+test('deleting a group preserves active, nested and archived tasks across restart', async t => {
+  const s = await setup(t), g = await s.addTaskGroup('Проект');
+  const parent = await s.saveTask({ title: 'Проект', groupId: g.id });
+  const child = await s.saveTask({ title: 'Часть', groupId: g.id });
+  await s.saveTask({ id: child.id, parentId: parent.id });
+  const archived = await s.saveTask({ title: 'Готово', status: 'done', groupId: g.id });
+  await s.archiveDone([archived.id]);
+  await assert.rejects(s.deleteTaskGroup(g.id, 'Другое название'));
+  await s.deleteTaskGroup(g.id, g.name);
+  const reloaded = await new Store(s.dir).init();
+  assert.deepEqual(reloaded.groupsView(), []);
+  for (const task of [parent, child, archived]) assert.equal(reloaded.findTask(task.id).groupId, '');
+  assert.equal(reloaded.findTask(child.id).parentId, parent.id);
+  assert.ok(reloaded.findTask(archived.id).archivedAt);
+});
 test('moving an ungrouped parent into a category keeps nested tasks and their details with it', async t => {
   const s = await setup(t), g = await s.addTaskGroup('YouTube');
   const parent = await s.saveTask({ title: 'Проект' }), child = await s.saveTask({ title: 'Монтаж', note: 'Не потерять', subtasks: [{ title: 'Черновик', done: true }] });

@@ -1498,7 +1498,7 @@ h1 .brand { color: var(--accent-strong); }
 .tchk.numbered.on { color: var(--surface); }
 .tchk.numbered.big { width: 24px; height: 24px; }
 .tchk.numbered canvas { display: block; }
-.task-group { margin-top: 12px; }
+.task-group { margin-top: 12px; padding: 8px; border: 1px solid color-mix(in srgb, var(--c) 28%, var(--line)); border-radius: 10px; background: color-mix(in srgb, var(--c) 7%, var(--surface)); }
 .task-group.drop-group { outline: 2px dashed var(--accent-strong); outline-offset: 4px; border-radius: 6px; }
 .task-group.empty-group.drop-group .task-group-empty { color: var(--accent-strong); font-size: 0; }
 .task-group.empty-group.drop-group .task-group-empty::after { content: "Переместить в эту подгруппу"; font-size: 12px; }
@@ -1506,15 +1506,18 @@ h1 .brand { color: var(--accent-strong); }
 .task-group-body.folding { overflow: clip; }
 .task-group-body > .task { margin-top: 7px; }
 .task-group-body > .task:first-child { margin-top: 2px; }
-.task-group-head { display: flex; align-items: center; gap: 6px; min-height: 26px; margin-bottom: 5px; }
-.task-group-name { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.task-group-head { display: flex; align-items: center; gap: 6px; min-height: 30px; margin-bottom: 5px; }
+.task-group-name { color: var(--ink); font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
 .task-group-count { font-size: 11px; color: var(--ink-soft); }
 .task-group-fold, .task-group-plus, .task-group-rename { border: 0; background: transparent; color: var(--ink-soft); padding: 3px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 4px; }
 .task-group-fold { gap: 6px; text-align: left; font: inherit; }
 .task-group-arrow { width: 8px; flex: none; font-size: 10px; }
-.task-group-rename { margin-left: auto; }
+.task-group-menu { position: relative; margin-left: auto; }
+.task-group-pop { z-index: 20; min-width: 220px; }
+.task-group-pop[hidden] { display: none; }
+.task-group-confirm { margin: 6px 10px; color: var(--ink); font-size: 12px; line-height: 1.4; }
 .task-group-plus { margin-left: auto; color: var(--accent-strong); }
-.task-group-rename + .task-group-plus { margin-left: 0; }
+.task-group-menu + .task-group-plus { margin-left: 0; }
 .task-group-plus .ico { width: 15px; height: 15px; }
 .task-group-plus svg, .task-group-add svg { width: 15px; height: 15px; flex: none; }
 .task-group-plus:hover, .task-group-rename:hover { background: var(--surface); }

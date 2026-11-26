@@ -1,5 +1,5 @@
 'use strict';
-// Isolated profile: completion hides empty groups, resuming work restarts the timeline.
+// Isolated profile: completion keeps groups, resuming work restarts the timeline.
 const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises'), os = require('node:os'), path = require('node:path'), assert = require('node:assert/strict');
 const { Store } = require('../storage');
@@ -42,7 +42,7 @@ const { connect, freePort } = require('./guide-shots/cdp');
     };
     await open();
     assert.equal(await hasGroup('todo', empty.id), true);
-    assert.equal(await hasGroup('todo', archived.id), false);
+    assert.equal(await hasGroup('todo', archived.id), true);
     await drag('doing');
     let saved = await loadTask(a.id);
     assert.ok(saved.startedAt > oldStart);
@@ -58,7 +58,7 @@ const { connect, freePort } = require('./guide-shots/cdp');
     for (const id of [a.id, b.id]) {
       await page.ev(`document.querySelector('.task[data-id="${id}"] .tchk').click();true`);
       await page.until(`!!document.querySelector('.tc-done .task[data-id="${id}"]')`);
-      assert.equal(await hasGroup('todo'), id === a.id);
+      assert.equal(await hasGroup('todo'), true);
     }
     assert.equal(await hasGroup('doing'), false);
     assert.equal(await hasGroup('done'), true);
@@ -76,9 +76,9 @@ const { connect, freePort } = require('./guide-shots/cdp');
     await page.ev('document.querySelector("#tview [data-v=board]").click();true');
     await page.ev('document.querySelector(".tarch-btn").click();true');
     await page.until('!document.querySelector(".tc-done .task")');
-    assert.equal(await hasGroup('todo'), false);
+    assert.equal(await hasGroup('todo'), true);
     await page.send('Page.reload'); await open();
-    assert.equal(await hasGroup('todo'), false);
+    assert.equal(await hasGroup('todo'), true);
     assert.equal((await loadTask(a.id)).startedAt, restartedAt);
     // Returning an archived task restores its original group without creating a duplicate.
     await page.ev(`vsApi.taskSave({id:${JSON.stringify(a.id)},status:'todo'})`);
@@ -86,7 +86,13 @@ const { connect, freePort } = require('./guide-shots/cdp');
     assert.equal(await hasGroup('todo'), true);
     assert.equal((await loadTask(a.id)).groupId, group.id);
     assert.equal(await page.ev(`document.querySelectorAll(${JSON.stringify(groupSelector('todo'))}).length`), 1);
-    console.log('PASS: resumed timeline, completion hides groups, new empty groups remain, archive/reload preserve visibility, reopening restores group identity.');
+    await page.ev(`document.querySelector(${JSON.stringify(groupSelector('todo'))} + ' .task-group-rename').click();true`);
+    await page.ev(`Array.from(document.querySelectorAll(${JSON.stringify(groupSelector('todo'))} + ' .task-group-pop button')).find(b=>b.textContent.includes('Удалить подгруппу')).click();true`);
+    await page.ev(`Array.from(document.querySelectorAll(${JSON.stringify(groupSelector('todo'))} + ' .task-group-pop button')).find(b=>b.textContent==='Удалить').click();true`);
+    await page.until(`!document.querySelector(${JSON.stringify(groupSelector('todo'))})`);
+    assert.equal((await loadTask(a.id)).groupId, '');
+    assert.equal((await loadTask(b.id)).groupId, '');
+    console.log('PASS: completion and archive keep groups; deletion preserves active and archived tasks.');
   } finally {
     if (page) page.close(); if (main) main.close(); child.kill();
     await new Promise(r => child.exitCode !== null || child.signalCode !== null ? r() : child.once('exit', r));

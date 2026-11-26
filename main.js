@@ -1160,8 +1160,22 @@ function stubTasks(text, t) {
   }).join('\n') };
 }
 
+function stubGroupDelete(text) {
+  if (!/удал|убер/i.test(text) || !/подгрупп/i.test(text)) return null;
+  const match = /(?:удали(?:ть)?|убери(?:те)?)\s+подгрупп(?:у|ы)\s+[«"']?(.+?)[»"']?[.!?]*\s*$/i.exec(text);
+  if (!match) return { error: 'Укажите точное название: «удали подгруппу YouTube».' };
+  const name = match[1].replace(/[»"']+$/, '').trim();
+  const group = store.groupsView().find(g => g.name.toLocaleLowerCase('ru') === name.toLocaleLowerCase('ru'));
+  return group ? { group } : { error: 'Подгруппа с таким названием не найдена. Укажите точное название.' };
+}
 function stubAnswer(last) {
   const t = last.toLowerCase();
+  const deletion = stubGroupDelete(last);
+  if (deletion) {
+    if (deletion.error) return { text: deletion.error };
+    const r = runTool('task_group_delete', deletion.group);
+    return { text: r.output, action: r.action };
+  }
   if (/таймер|фокус/.test(t)) {
     if (/останов|выключ|стоп|отмени|сбрось|убери/.test(t)) {
       const was = timer.state;
@@ -1290,6 +1304,7 @@ const SYSTEM_PROMPT = [
   'Напоминание: если пользователь о нём не сказал, ставь remind 60 (за час) и одной короткой фразой сообщи, что напомнишь за час, а время напоминания можно поменять. Если просит другое — ставь как просит, «без напоминания» — 0. Даты считай от текущего момента из строки «Сейчас».',
   'Ещё у пользователя есть доска «Задачи». Столбцы: todo — «Предстоит», doing — «В процессе», done — «Готово» и, может быть, свои столбцы пользователя (их id и названия — в tasks_list). tasks_list показывает столбцы и все задачи, task_add добавляет, task_update меняет задачу или переносит в другой столбец, task_delete удаляет. Как и с календарём, изменения показываются карточкой, если результат так говорит. Название задачи — коротко, суть в нескольких словах, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали. Важность priority: 2 — срочно, 1 — важно, 0 — обычно, если об этом не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач. number — порядковый номер внутри своего столбца. В каждом столбце нумерация начинается с 1 и меняется после переносов и удаления. Идентичность задачи — её id, а не номер. При обращении по номеру учитывай исходный столбец (status); если номер встречается в нескольких столбцах, а исходный столбец не указан, обязательно уточни и ничего не меняй. Например: «перенеси задачу 2 из Предстоит в В процессе» — искать number=2, status=todo; doing здесь только назначение. Подзадачи могут иметь номера 1.1, 1.2. groups в tasks_list — подгруппы; groupId сохраняется при смене столбца, если пользователь не попросил поменять подгруппу. «Задача 3», «задача № 3», «задача номер 3», «№3», «#3» означают number=3, а не третью строку списка. Чтобы изменить или удалить задачу, сначала найди её id по number через tasks_list; для архивной задачи — tasks_archive_search с запросом «№ 3». Если номера нет, сообщи об этом, не выбирай похожую задачу.',
   'Есть таймер для фокуса: timer_start сразу запускает его на нужное число минут (от 1 до 240), timer_stop останавливает. Он не привязан к задачам и делам. Запустив, коротко скажи, во сколько он закончится.',
+  'По просьбе удалить подгруппу найди её точные id и название в groups через tasks_list и вызови task_group_delete. Удаляется подгруппа во всех столбцах, задачи и архив сохраняются без неё. Если название неоднозначно, уточни. Не удаляй задачи вместо подгруппы.',
   'Программа устроена как браузер: вверху вкладки. open_tabs сразу открывает нужные вкладки: home — «Главная», prompts — «Промты», calendar — «Календарь», tasks — «Задачи», llm — новый разговор в отдельной вкладке, transcribe — «Транскрибация» (текст, тайминги и субтитры из аудио и видео), generator — «Генератор» (картинки и видео, пока в разработке), stats — «Статистика». Если просят открыть, вызови open_tabs и коротко скажи, что открыл.',
   'На странице «Промты» есть вкладка «Скиллы»: там пользователь хранит скиллы — инструкции для ИИ-ассистентов (файл .md или архив .zip либо .skill). skills_list показывает их id, название и текущий тип; skill_read даёт сохранённый текст главного файла, состав архива и revision. Если пользователь просит перепроверить или изменить категорию уже сохранённого скилла, найди его через skills_list, прочитай через skill_read и только после этого вызови skill_set_type с тем же revision, подходящим типом и короткой причиной. Типы: static — картинки, video — видео, audio — звук, музыка и речь, text — тексты и сценарии, code — программирование и технические задачи. Если пользователь приложил новый файл скилла (в сообщении есть строка «ссылка для skill_add: …») и просит сохранить его («закинь в хранилище», «сохрани скилл»), прочитай файл и вызови skill_add: название — из name в файле или коротко по смыслу, тип — один из пяти перечисленных, описание — 5–6 простых предложений по-русски: что это за скилл, для чего, как работает и что внутри.',
   'Промты пользователя ты пока не видишь и сохранять не умеешь. Если об этом просят, скажи, что это появится позже, а пока промт можно скопировать кнопкой «Копировать» и добавить через «Добавить промт» в разделе «Промты».'
@@ -1393,6 +1408,11 @@ const TOOLS = [
     parameters: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', description: 'id задачи из tasks_list' } } }
   },
   {
+    name: 'task_group_delete',
+    description: 'Удаляет подгруппу во всех столбцах; задачи, в том числе архивные, сохраняются без подгруппы. Сначала найди её в groups через tasks_list.',
+    parameters: { type: 'object', additionalProperties: false, required: ['id', 'name'], properties: { id: { type: 'string', description: 'id подгруппы из tasks_list' }, name: { type: 'string', description: 'Точное название подгруппы из tasks_list' } } }
+  },
+  {
     name: 'open_tabs',
     description: 'Сразу открывает вкладки программы вверху окна. Если такая вкладка уже открыта, переключается на неё; llm каждый раз открывает новый разговор.',
     parameters: {
@@ -1490,6 +1510,11 @@ function runTool(name, input) {
     return { output: after('Удалить из календаря: ' + eventLine(event)), action: { kind: 'calendar-delete', title: event.title, event } };
   }
   if (name === 'tasks_list') return { output: tasksForModel() };
+  if (name === 'task_group_delete') {
+    const group = store.groupsView().find(g => g.id === a.id && g.name === a.name);
+    if (!group) return { output: 'Подгруппа не найдена или изменилась. Получи свежий список через tasks_list.', error: true };
+    return { output: after('Удалить подгруппу «' + group.name + '» во всех столбцах; задачи останутся без подгруппы'), action: { kind: 'group-delete', title: group.name, group } };
+  }
   if (name === 'skills_list') {
     const list = store.skillsView().map((s) => ({ id: s.id, title: s.title, type: s.type, file: s.file.name, desc: s.desc.slice(0, 300) }));
     return { output: list.length ? JSON.stringify(list) : 'Скиллов пока нет.' };
@@ -2217,6 +2242,7 @@ handle('task-delete', async (id) => { await store.deleteTask(id); return ok(); }
 handle('task-restore', async (t) => { await store.putTask(t); return ok(); });
 handle('task-group-add', async (name) => { const group = await store.addTaskGroup(name); return ok({ groupId: group.id }); });
 handle('task-group-rename', async (id, name, expectedName) => { await store.renameTaskGroup(id, name, expectedName); return ok(); });
+handle('task-group-delete', async (id, expectedName) => { await store.deleteTaskGroup(id, expectedName); return ok(); });
 // The user's own columns between «В процессе» and «Готово».
 handle('column-add', async (name) => { const col = await store.addColumn(name); return ok({ columnId: col.id }); });
 handle('column-rename', async (id, name) => { await store.renameColumn(id, name); return ok(); });
@@ -2253,6 +2279,7 @@ const TASKS_PROMPT = [
   'Название — суть в 2–6 словах, с большой буквы, без слов про срок и срочность. Срок (due, YYYY-MM-DD) и время (time, HH:MM) ставь, только если их назвали; даты считай от строки «Сейчас». Важность priority: 2 — срочно (срочно, горит, asap), 1 — важно, 0 — обычно, если ничего такого не сказано. Теги — 1–2 коротких слова по смыслу, лучше из тех, что уже есть у задач в tasks_list: «смонтировать рилс» → «Монтаж», «начать вёрстку сайта» → «Сайт».',
   'number — порядковый номер внутри своего столбца. В каждом столбце нумерация начинается с 1 и меняется после переносов и удаления. Идентичность задачи — её id, а не номер. При обращении по номеру учитывай исходный столбец (status); если номер встречается в нескольких столбцах, а исходный столбец не указан, обязательно уточни и ничего не меняй. Например: «перенеси задачу 2 из Предстоит в В процессе» — искать number=2, status=todo; doing здесь только назначение. Подзадачи могут иметь номера 1.1, 1.2. groups в tasks_list — подгруппы; groupId сохраняется при смене столбца, если пользователь не попросил поменять подгруппу. «Задача 3», «задача № 3», «задача номер 3», «№3», «#3» означают number=3, а не третью строку списка. Чтобы изменить, перенести, отметить или удалить задачу, сначала найди её id по number через tasks_list; если её нет на доске, проверь tasks_archive_search с запросом «№ 3». Если такого номера нет, сообщи об этом и ничего не меняй. Всегда получай свежий список перед действиями: номер меняется после переноса и удаления. «Сделал …», «готово …» — перенеси задачу в done. subtasks_add добавляет шаги внутри задачи («разбей … на шаги» — 3–6 конкретных шагов), subtask_done отмечает шаг, subtask_delete удаляет шаги (id шагов — в tasks_list).',
   'Выполненные задачи уходят в архив: tasks_list его не показывает. «Найди в архиве …», «что я делал на прошлой неделе» — tasks_archive_search. «Убери выполненные в архив», «очисти готово» — tasks_archive_done.',
+  'По просьбе удалить подгруппу найди её id и точное название в groups через tasks_list и вызови task_group_delete. Подгруппа исчезает во всех столбцах, задачи и архив сохраняются. При неоднозначном названии уточни. Не удаляй задачи вместо подгруппы.',
   'Если просят не про задачи (календарь, промты, вкладки), коротко скажи, что это умеет маленькое окно ассистента (звёздочка внизу слева) или раздел LLM.',
   'Ответ — одна-две короткие фразы по-русски без разметки: что сделано. Например: «Добавил 2 задачи: «Смонтировать рилс» на завтра, срочная; «Позвонить Диме» на пятницу.»'
 ].join('\n\n');
@@ -2260,6 +2287,7 @@ const sameTool = (name, description) => Object.assign({}, TOOLS.find((t) => t.na
 const TASK_TOOLS = [
   { name: 'tasks_move', description: 'Переносит выбранные задачи одним действием. Все id заранее возьми из одного tasks_list. null сохраняет столбец или подгруппу; пустой groupId убирает подгруппу.', parameters: { type: 'object', additionalProperties: false, required: ['ids', 'status', 'groupId'], properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 500 }, status: { type: ['string', 'null'] }, groupId: { type: ['string', 'null'] } } } },
   sameTool('tasks_list'),
+  sameTool('task_group_delete'),
   sameTool('tasks_archive_search'),
   { name: 'tasks_archive_done', description: 'Убирает все задачи из «Готово» в архив.', parameters: { type: 'object', additionalProperties: false, required: [], properties: {} } },
   sameTool('task_add', 'Добавляет задачу на доску (сразу, без подтверждения).'),
@@ -2292,6 +2320,12 @@ async function runTaskTool(name, input, log) {
     return 'Перемещено задач: ' + result.tasks.length + '.';
   }
   if (name === 'tasks_list') return tasksForModel();
+  if (name === 'task_group_delete') {
+    const group = store.groupsView().find(g => g.id === a.id && g.name === a.name);
+    if (!group) return 'Подгруппа не найдена или изменилась. Получи свежий список через tasks_list.';
+    await store.deleteTaskGroup(group.id, group.name, log);
+    return 'Подгруппа «' + group.name + '» удалена во всех столбцах. Задачи и архив сохранены без подгруппы.';
+  }
   if (name === 'tasks_archive_search') return archiveForModel(a.query);
   if (name === 'tasks_archive_done') {
     const ids = await store.archiveDone(null, log);
@@ -2514,6 +2548,8 @@ async function numericTaskMove(text, log) {
 }
 async function stubTasksAssistant(text, log) {
   const low = ' ' + text.toLowerCase().replace(/ё/g, 'е') + ' ';
+  const deletion = stubGroupDelete(text);
+  if (deletion) return deletion.error || await runTaskTool('task_group_delete', deletion.group, log);
   let t;
   const refs = taskReferences(text);
   if (refs.length) {
@@ -3198,6 +3234,10 @@ async function applyAction(action) {
   if (action.kind === 'task-delete') {
     const gone = await store.deleteTask(action.task.id, JSON.stringify(action.task), changes);
     if (!gone) throw userError('Этой задачи уже нет на доске.');
+    return { undo: { tasks: changes }, extra: {} };
+  }
+  if (action.kind === 'group-delete') {
+    await store.deleteTaskGroup(action.group.id, action.group.name, changes);
     return { undo: { tasks: changes }, extra: {} };
   }
   if (action.kind === 'skill-add') {

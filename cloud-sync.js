@@ -14,9 +14,9 @@ function mergeTaskConfig(local, remote, base) {
   if (!local?.value || !remote?.value || local.assets?.length || remote.assets?.length) return null;
   const a = local.value, b = remote.value, previous = base?.value;
   const same = (x, y) => stable(x) === stable(y);
-  const choose = (x, y, old) => same(x, y) ? x : previous && same(x, old) ? y : previous && same(y, old) ? x : undefined;
-  const columns = choose(a.columns || [], b.columns || [], previous?.columns || []);
-  const archiveMode = choose(a.archiveMode || 'day', b.archiveMode || 'day', previous?.archiveMode || 'day');
+  const choose = (x, y, old, fallback) => same(x, y) ? x : previous && same(x, old) ? y : previous && same(y, old) ? x : !previous && same(x, fallback) ? y : !previous && same(y, fallback) ? x : undefined;
+  const columns = choose(a.columns || [], b.columns || [], previous?.columns || [], []);
+  const archiveMode = choose(a.archiveMode || 'day', b.archiveMode || 'day', previous?.archiveMode || 'day', 'day');
   if (columns === undefined || archiveMode === undefined) return null;
   // An older app that does not know groups cannot delete them by omitting the field.
   if ((a.groups !== undefined && !Array.isArray(a.groups)) || (b.groups !== undefined && !Array.isArray(b.groups))) return null;

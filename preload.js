@@ -111,6 +111,7 @@ contextBridge.exposeInMainWorld('vsApi', {
   taskRestore: (t) => ipcRenderer.invoke('task-restore', t),
   taskGroupAdd: (name) => ipcRenderer.invoke('task-group-add', name),
   taskGroupRename: (id, name, expectedName) => ipcRenderer.invoke('task-group-rename', id, name, expectedName),
+  taskGroupDelete: (id, expectedName) => ipcRenderer.invoke('task-group-delete', id, expectedName),
   columnAdd: (name) => ipcRenderer.invoke('column-add', name),
   columnRename: (id, name) => ipcRenderer.invoke('column-rename', id, name),
   columnMove: (id, dir) => ipcRenderer.invoke('column-move', id, dir),

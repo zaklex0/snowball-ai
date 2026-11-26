@@ -43,6 +43,48 @@ test('two devices exchange independent tasks and offline edits without replacing
   assert.deepEqual(a.state.conflicts, {}); assert.deepEqual(b.state.conflicts, {});
 });
 
+test('deleting the last group propagates as explicit empty settings across devices and reloads', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const group = await a.store.addTaskGroup('Старая');
+  const task = await a.store.saveTask({ title: 'Сохранить', groupId: group.id });
+  await a.engine.sync(); await b.engine.sync();
+  await a.store.deleteTaskGroup(group.id, group.name);
+  await a.engine.sync(); await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(remote.records['config:tasks'].payload.value.groups, []);
+  assert.deepEqual(b.store.groupsView(), []);
+  assert.equal(b.store.findTask(task.id).groupId, '');
+  const reloaded = await new Store(b.dir).init();
+  assert.deepEqual(reloaded.groupsView(), []);
+  assert.deepEqual(reloaded.cloudRecords()['config:tasks'].groups, []);
+  assert.deepEqual(b.state.conflicts, {});
+});
+
+test('first sync adopts non-default columns and group catalog from another device', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const col = await a.store.addColumn('Монтаж'), group = await a.store.addTaskGroup('Видео');
+  await a.store.setArchiveMode('manual');
+  await a.engine.sync(); await b.engine.sync(); await a.engine.sync();
+  assert.deepEqual(b.store.groupsView(), [group]);
+  assert.equal(b.store.columns[0].id, col.id);
+  assert.equal(b.store.archiveMode, 'manual');
+  assert.deepEqual(b.state.conflicts, {});
+});
+
+test('offline deletion of the last group merges with an independently added group', async t => {
+  const remote = server(), a = await device(t, remote), b = await device(t, remote);
+  const old = await a.store.addTaskGroup('Старая');
+  const task = await a.store.saveTask({ title: 'Задача', groupId: old.id });
+  await a.engine.sync(); await b.engine.sync();
+  await a.store.deleteTaskGroup(old.id, old.name);
+  const next = await b.store.addTaskGroup('Новая');
+  await a.engine.sync(); await b.engine.sync(); await a.engine.sync();
+  for (const d of [a, b]) {
+    assert.deepEqual(d.store.groupsView(), [next]);
+    assert.equal(d.store.findTask(task.id).groupId, '');
+    assert.deepEqual(d.state.conflicts, {});
+  }
+});
+
 test('groups, nested tasks, checklist and column numbers survive two-device sync and restart', async t => {
   const remote = server(), a = await device(t, remote), b = await device(t, remote);
   const youtube = await a.store.addTaskGroup('YouTube'), course = await a.store.addTaskGroup('Курс');

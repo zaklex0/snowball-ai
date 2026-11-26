@@ -10,6 +10,25 @@ test('undo phrases distinguish history from task commands', () => {
   assert.equal(taskUndoRequest('Отмени последние 2 действия'), 2);
   for (const s of ['перемести задачи 6-10', 'отмени задачу 2', 'верни задачу 1 в Предстоит']) assert.equal(taskUndoRequest(s), null);
 });
+test('undo restores a deleted group and active and archived tasks, and refuses conflicting edits', async t => {
+  const s = await setup(t), history = new TaskUndoHistory();
+  const g = await s.addTaskGroup('Проект'), later = await s.addTaskGroup('Другая');
+  const a = await s.saveTask({ title: 'Активная', groupId: g.id });
+  const b = await s.saveTask({ title: 'Архивная', status: 'done', groupId: g.id });
+  await s.archiveDone([b.id]);
+  const changes = []; await s.deleteTaskGroup(g.id, g.name, changes);
+  history.record(changes, 'Удалить подгруппу', s);
+  await history.undo(s);
+  assert.deepEqual(s.groupsView(), [g, later]);
+  assert.equal(s.findTask(a.id).groupId, g.id);
+  assert.equal(s.findTask(b.id).groupId, g.id);
+  assert.ok(s.findTask(b.id).archivedAt);
+  const again = []; await s.deleteTaskGroup(g.id, g.name, again);
+  history.record(again, 'Удалить подгруппу', s);
+  await s.saveTask({ id: a.id, note: 'Новая заметка' });
+  await assert.rejects(history.undo(s), /undo conflict/);
+  assert.deepEqual(s.groupsView(), [later]);
+});
 test('history restores creation, nested category moves and deletion in reverse order', async t => {
   const s = await setup(t), h = new TaskUndoHistory(), group = await s.addTaskGroup('YouTube Reels');
   const parent = await s.saveTask({ title: 'Родитель' }), child = await s.saveTask({ title: 'Ребёнок', note: 'Сохранить' }); await s.saveTask({ id: child.id, parentId: parent.id });

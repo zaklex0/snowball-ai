@@ -1428,6 +1428,7 @@
     else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus(); }
   });
   document.addEventListener("mousedown", function (e) {
+    if (!e.target.closest(".task-group-menu")) document.querySelectorAll(".task-group-pop:not([hidden])").forEach(function (menu) { menu.hidden = true; menu.parentElement.querySelector(".task-group-rename").setAttribute("aria-expanded", "false"); });
     if (!els.tabMenu.hidden && !els.tabMenu.contains(e.target) && !els.tabPlus.contains(e.target)) setTabMenu(false);
   });
   // The assistant asked to open tabs ("открой календарь и генератор"): all open, the first one is shown.
@@ -3283,6 +3284,11 @@
     return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
   }
   function actionCard(msg, a) {
+    if (a.kind === "group-delete") {
+      var kids = [h("div", { class: "act-head" }, icon("trash"), h("span", { text: "Удалить подгруппу «" + a.title + "»?" })), h("div", { class: "act-when", text: "Подгруппа исчезнет во всех столбцах. Задачи и архив сохранятся без подгруппы." })];
+      kids.push(cardFooter(msg, a, "Подгруппа удалена", "Отменено, подгруппа сохранена") || cardButtons(msg, a, "Удалить", true));
+      return h("div", { class: "act-card" + (a.status && a.status !== "busy" ? " settled" : "") }, kids);
+    }
     if (/^calendar-/.test(a.kind)) return calendarCard(msg, a);
     if (/^task-/.test(a.kind)) return taskCard(msg, a);
     if (a.kind === "skill-add") return skillCard(msg, a);
@@ -3312,7 +3318,7 @@
   }
   var DONE_TOASTS = {
     "calendar-add": "Дело «%» добавлено в календарь", "calendar-update": "Дело «%» изменено", "calendar-delete": "Дело «%» удалено",
-    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "create-prompt": "Промт «%» добавлен",
+    "task-add": "Задача «%» добавлена", "task-update": "Задача «%» изменена", "task-delete": "Задача «%» удалена", "group-delete": "Подгруппа «%» удалена", "create-prompt": "Промт «%» добавлен",
     "skill-add": "Скилл «%» сохранён во вкладку «Скиллы»", "skill-set-type": "Категория скилла «%» изменена"
   };
   function decide(msg, a, accept) {
@@ -3411,6 +3417,7 @@
       : a.kind === "task-add" ? "Добавить задачу «" + t.title + "» в «" + colName(t.status) + "»"
       : a.kind === "task-update" ? "Изменить задачу «" + t.title + "»: столбец «" + colName(t.status) + "»"
       : a.kind === "task-delete" ? "Удалить задачу «" + t.title + "»"
+      : a.kind === "group-delete" ? "Удалить подгруппу «" + a.title + "», задачи сохранятся"
       : a.kind === "skill-add" ? "Сохранить скилл «" + a.title + "» во вкладку «Скиллы»"
       : a.kind === "skill-set-type" ? "Изменить категорию скилла «" + a.title + "» на «" + (skillType(a.category) || {}).label + "»"
       : "Создать промт «" + a.title + "»";
@@ -4593,11 +4600,7 @@
   function taskColumnGroups(status, all) {
     var groups = state.taskGroups.filter(function (g) {
       if (all.some(function (t) { return t.status === status && t.groupId === g.id; })) return true;
-      if (status !== "todo") return false;
-      // Keep new empty groups available, but hide finished groups from «Предстоит».
-      // Include archived tasks so archiving the last done task cannot bring an empty group back.
-      var tasks = state.tasks.filter(function (t) { return t.groupId === g.id; });
-      return !tasks.length || tasks.some(function (t) { return t.status !== "done"; });
+      return status === "todo";
     });
     all.forEach(function (t) { if (t.status === status && t.groupId && !groups.some(function (g) { return g.id === t.groupId; })) groups = groups.concat([{ id: t.groupId, name: "Подгруппа" }]); });
     if (!state.taskGroups.length || all.some(function (t) { return t.status === status && !t.groupId; })) groups = groups.concat([{ id: "", name: "Без подгруппы" }]);
@@ -4659,10 +4662,23 @@
     var fold = h("button", { type: "button", class: "task-group-fold", "aria-expanded": String(!collapsed), "aria-label": (collapsed ? "Развернуть " : "Свернуть ") + g.name, onclick: toggleGroup },
       h("span", { class: "task-group-arrow", "aria-hidden": "true", text: collapsed ? "▸" : "▾" }),
       h("span", { class: "task-group-name", text: g.name }));
+    var groupMenu = null;
+    if (g.id && state.taskGroups.some(function (x) { return x.id === g.id; })) {
+      var menu = h("div", { class: "tcol-pop task-group-pop", role: "menu", hidden: true });
+      var more = h("button", { type: "button", class: "task-group-rename", title: "Действия с подгруппой", "aria-label": "Действия с подгруппой «" + g.name + "»", "aria-haspopup": "menu", "aria-expanded": "false", onclick: function (e) { e.stopPropagation(); menu.hidden = !menu.hidden; more.setAttribute("aria-expanded", String(!menu.hidden)); } }, "⋯");
+      var rename = h("button", { type: "button", role: "menuitem", onclick: function () { tb.groupForm = { id: g.id, name: g.name, expectedName: g.name }; renderTasks(); } }, icon("pencil"), "Переименовать");
+      var remove = h("button", { type: "button", role: "menuitem", class: "danger", onclick: function () {
+        menu.replaceChildren(h("p", { class: "task-group-confirm", text: "Удалить подгруппу во всех столбцах? Задачи останутся без подгруппы, в том числе в архиве." }),
+          h("button", { type: "button", class: "danger", onclick: function () { call(api.taskGroupDelete(g.id, g.name)).then(function (r) { if (r) { render(); toast("Подгруппа удалена, задачи сохранены"); } }); } }, "Удалить"),
+          h("button", { type: "button", onclick: function () { menu.hidden = true; more.setAttribute("aria-expanded", "false"); menu.replaceChildren(rename, remove); } }, "Отмена"));
+      } }, icon("trash"), "Удалить подгруппу");
+      menu.append(rename, remove);
+      groupMenu = h("div", { class: "task-group-menu" }, more, menu);
+    }
     var head = h("div", { class: "task-group-head" },
       fold,
       h("span", { class: "task-group-count", text: String(list.length) }),
-      g.id && state.taskGroups.some(function (x) { return x.id === g.id; }) ? h("button", { type: "button", class: "task-group-rename", title: "Переименовать подгруппу во всех столбцах", "aria-label": "Переименовать " + g.name, onclick: function () { tb.groupForm = { id: g.id, name: g.name, expectedName: g.name }; renderTasks(); } }, "⋯") : null,
+      groupMenu,
       h("button", { type: "button", class: "task-group-plus", title: "Новая задача в «" + g.name + "»", "aria-label": "Новая задача в «" + g.name + "»", onclick: function () { tb.folded.delete(key); tb.adding = status; tb.addingGroup = g.id; tb.focus = true; renderTasks(); } }, icon("plus")));
     var box = h("section", { class: "task-group" + (!list.length ? " empty-group" : ""), "data-group": g.id }, head);
     if (!collapsed) { body = groupBody(); box.append(body); }
