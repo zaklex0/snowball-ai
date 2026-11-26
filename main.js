@@ -2,7 +2,7 @@
 const { taskReferences, taskReferenceSelection, taskColumnReferences, taskTargetGroup, resolveTaskSelection } = require('./task-reference');
 const { TaskUndoHistory, taskUndoRequest } = require('./task-undo');
 const taskHistory = new TaskUndoHistory();
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage, Notification, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeTheme, nativeImage, Menu, screen, safeStorage, Notification, net, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = fs.promises;
@@ -2254,15 +2254,16 @@ handle('column-restore', async (r) => { await store.restoreColumn(r); return ok(
 handle('tasks-archive', async (ids) => { const archived = await store.archiveDone(Array.isArray(ids) ? ids : null); return ok({ archived }); });
 handle('tasks-unarchive', async (ids) => { await store.unarchive(Array.isArray(ids) ? ids : []); return ok(); });
 handle('tasks-archive-mode', async (mode) => { await store.setArchiveMode(mode); const archived = await store.autoArchive(); return ok({ archived }); });
-// Done tasks leave by themselves (store.archiveMode): a few seconds after the start and then every 5 minutes,
-// so it also happens after midnight while the program stays open. The windows get the fresh board and a hint.
+// Catch up before the first render, after sleep, and while the app is open.
 async function autoArchiveTasks() {
-  if (!store) return;
   try {
-    const ids = await store.autoArchive();
-    if (!ids.length || !liveWins().length) return;
-    syncOthers(ok(), null);
-    broadcast('tasks-archived', ids.length);
+    await withMaintenance(async () => {
+      if (!store) return;
+      const ids = await store.autoArchive();
+      if (!ids.length || !liveWins().length) return;
+      syncOthers(ok(), null);
+      broadcast('tasks-archived', ids.length);
+    });
   } catch (e) { console.error('auto archive', e); }
 }
 
@@ -3439,6 +3440,7 @@ if (!app.requestSingleInstanceLock()) {
       app.quit();
       return;
     }
+    await autoArchiveTasks();
     pendingArchive = archiveFromArgs(process.argv);
     // The editor window gets "macos:<accent>" for the macOS theme (src/screenshots.js splits it).
     captures = setupScreenshots({ dir: () => store.dir, main: () => (win && !win.isDestroyed() ? win : null), theme: () => (currentTheme() === 'macos' ? 'macos:' + macAccent() : currentTheme()), key: () => settings.captureShortcut,
@@ -3448,7 +3450,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     setupCloud();
     setupUpdates();
-    setTimeout(autoArchiveTasks, 5000);
+    powerMonitor.on('resume', autoArchiveTasks);
     setInterval(autoArchiveTasks, 5 * 60 * 1000);
     setInterval(checkReminders, 20 * 1000);
     setTimeout(checkReminders, 3000);

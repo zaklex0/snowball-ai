@@ -1065,7 +1065,7 @@ class Store {
       while (added) {
         added = false;
         this.tasks.forEach((child, index) => {
-          if (moved.has(child.id) || !moved.has(child.parentId) || child[field] !== prev[field]) return;
+          if (moved.has(child.id) || !moved.has(child.parentId) || child[field] !== prev[field] || (field === 'status' && child.archivedAt)) return;
           const merged = { ...child, [field]: task[field], updatedAt: now };
           if (field === 'status') {
             merged.archivedAt = 0;
@@ -1091,7 +1091,9 @@ class Store {
         const fields = Object.keys(input.expectedFields);
         if (!prev || fields.some((key) => JSON.stringify(prev[key]) !== input.expectedFields[key])) {
           const e = new Error('task changed while editing');
-          e.userMessage = 'Эту часть задачи изменили в другом окне. Ваш текст остался в панели: скопируйте его, затем откройте задачу заново.';
+          e.userMessage = prev && fields.length === 1 && fields[0] === 'subtasks'
+            ? 'Список подзадач изменился. Проверьте список и повторите действие.'
+            : 'Эту часть задачи изменили в другом окне. Ваш текст остался в панели: скопируйте его, затем откройте задачу заново.';
           throw e;
         }
       }
@@ -1198,11 +1200,12 @@ class Store {
   // Done tasks leave the board for the archive: by the «Убрать в архив» button, by the assistant, or by themselves
   // (archiveMode 'day' — everything done before today; 'week' — done more than 7 days ago; 'manual' — never by itself).
   // They stay in tasks.json with archivedAt. Not an action on the statistics page. Returns the ids that moved.
-  archiveDone(ids, undoLog) {
+  archiveDone(ids, undoLog, { automatic = false } = {}) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {
+      const before = automatic ? this.archiveBefore() : Infinity;
       const now = Date.now(), moved = [], archived = [];
       this.tasks.forEach((t, index) => {
-        if (t.status !== 'done' || t.archivedAt || (ids && !ids.includes(t.id))) return;
+        if (t.status !== 'done' || t.archivedAt || t.doneAt >= before || (ids && !ids.includes(t.id))) return;
         const next = { ...t, archivedAt: now };
         this.tasks[index] = next;
         recordUndoChange(undoLog && archived, t, next);
@@ -1231,10 +1234,7 @@ class Store {
     return d.getTime();
   }
   autoArchive() {
-    const before = this.archiveBefore();
-    if (!before) return Promise.resolve([]);
-    const ids = this.tasks.filter((t) => t.status === 'done' && !t.archivedAt && t.doneAt < before).map((t) => t.id);
-    return ids.length ? this.archiveDone(ids) : Promise.resolve([]);
+    return this.archiveDone(null, null, { automatic: true });
   }
   setArchiveMode(mode) {
     return this.runLists(['tasks', 'columns', 'archiveMode'], async function () {

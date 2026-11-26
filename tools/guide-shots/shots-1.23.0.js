@@ -42,7 +42,15 @@ module.exports = async function ({ main, page, shot }) {
   await ev('document.querySelector(".task-ctx").dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",bubbles:true}));true');
   await ev(`vsApi.taskSave({id:${JSON.stringify(ids.child)},parentId:${JSON.stringify(ids.parent)}})`);await reload();
   await ev(`document.querySelector('.task[data-id="${ids.parent}"]').click();true`);
-  await shot('08-nested',{children:'.tp-subs .tp-sub[data-task-id]',counter:'.task .task-marks'});
+  await ev(`(() => {
+    const input = document.querySelector('.tp-sub-in');
+    input.focus();
+    input.value = 'Проверить сценарий';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  })()`);
+  await until(`!!document.querySelector('button[aria-label="Отметить: Проверить сценарий"]')`);
+  await ev('document.activeElement.blur();document.querySelector(".tp-sub-in").scrollIntoView({block:"nearest"});true');
+  await shot('08-nested',{children:'.tp-subs .tp-sub[data-task-id]',counter:'.task .task-marks',step:'.tp-sub-in'});
   await ev('document.querySelector(".task-child-open").click();true');
   await shot('09-detach',{detach:{sel:'#tpanel button',text:'Сделать отдельной задачей'}});
   await ev('document.querySelector(".tp-close").click();const input=document.querySelector("#tbar-input");input.value="Перемести задачу 1 из В процессе в подгруппу Курс";input.dispatchEvent(new Event("input",{bubbles:true}));document.querySelector("#tbar").requestSubmit();true');

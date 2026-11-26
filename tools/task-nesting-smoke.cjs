@@ -90,13 +90,37 @@ const { Store } = require('../storage');
     await page.ev('document.querySelector(".task-child-open").click();true');
     assert.equal(await page.ev('document.querySelector(".tp-note").value'), 'Сохранить заметку');
     assert.match(await page.ev('document.querySelector("#tpanel").textContent'), /Черновик/);
+    const enterStep = title => page.ev(`(() => {
+      const input = document.querySelector('.tp-sub-in');
+      input.focus();
+      input.value = ${JSON.stringify(title)};
+      for (let i = 0; i < 2; i++) input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    })()`);
+    const submitStep = async title => {
+      await enterStep(title);
+      await page.until(`!document.querySelector('.tp-sub-in').value && document.activeElement === document.querySelector('.tp-sub-in') && !!document.querySelector(${JSON.stringify('button[aria-label="Отметить: ' + title + '"]')})`);
+    };
+    await submitStep('480p');
+    await submitStep('Проверка звука');
+    await page.ev(`document.querySelector('.tp-sub-in').value = 'Следующий шаг'; document.querySelector('button[aria-label="Отметить: 480p"]').click(); true`);
+    await page.until(`document.querySelector('button[aria-label="Снять отметку: 480p"]')?.getAttribute('aria-pressed') === 'true'`);
+    assert.equal(await page.ev('document.querySelector(".tp-sub-in").value'), 'Следующий шаг');
+    const checklist = (await page.ev('vsApi.load()')).tasks.find(t => t.id === ids.child).subtasks;
+    assert.deepEqual(checklist.map(({ title, done }) => [title, done]), [['Черновик', false], ['480p', true], ['Проверка звука', false]]);
+    const externalEdit = await page.ev(`vsApi.taskSave({ id: nestingIds.child, subtasks: ${JSON.stringify(checklist.concat({ title: 'Проверка цвета' }))} })`);
+    assert.equal(externalEdit.ok, true);
+    await enterStep('Следующий шаг');
+    await page.until(`!!document.querySelector('button[aria-label="Отметить: Проверка цвета"]')`);
+    assert.match(await page.ev('document.querySelector("#toast").textContent'), /Список подзадач изменился/);
+    assert.equal(await page.ev('document.querySelector(".tp-sub-in").value'), 'Следующий шаг');
+    await submitStep('Следующий шаг');
     await page.ev('Array.from(document.querySelectorAll("#tpanel button")).find(b=>b.textContent==="Сделать отдельной задачей").click();true');
     await page.until(`(async()=>{const r=await vsApi.load();return r.tasks.find(t=>t.id===${JSON.stringify(ids.child)}).parentId==='';})()`);
     assert.equal((await page.ev('vsApi.load()')).tasks.find(t=>t.id===ids.child).parentId, '');
     await page.ev('document.querySelector("#tview [data-v=board]").click();true');
     await page.until(`!!document.querySelector('.tc-done .task[data-id="${ids.child}"]')`);
     assert.equal(await page.ev('document.querySelectorAll(".task .task").length'), 0);
-    console.log('OK: compact parent cards; deep nesting kept inside; progress counter; descendant search; list; preserved details; detach');
+    console.log('OK: compact nesting, progress, search, list, adding and checking multiple steps, preserving drafts, and detaching');
   } catch (e) {
     console.error('Test app:', child.exitCode, output);
     throw e;
