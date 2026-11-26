@@ -1087,6 +1087,25 @@ class Store {
       }
     }
   }
+
+  // Check parents again as their nested tasks finish. All changes share the caller's save and undo record.
+  finishTasksFromSubtasks(ids, now) {
+    if (!ids.length) return 0;
+    let order = this.tasks.reduce((last, task) => task.status === 'done' ? Math.max(last, task.order) : last, now);
+    let count = 0;
+    for (const id of ids) {
+      const task = this.findTask(id);
+      if (!task || task.status === 'done' || task.subtasks.some(step => !step.done) ||
+          this.tasks.some(child => child.parentId === id && child.status !== 'done')) continue;
+      this.tasks[this.tasks.indexOf(task)] = normalizeTask({
+        ...task, status: 'done', doneFrom: task.status, doneAt: now, updatedAt: now, order: ++order
+      });
+      count++;
+      if (task.parentId) ids.push(task.parentId);
+    }
+    return count;
+  }
+
   // Moving to another column without an order puts it at the bottom there.
   // Statistics: a new task, a move to another column, every new subtask and every subtask ticked off count as actions.
   // Edits, deleting, a move inside the column and taking a tick back (out of «Готово» too) do not.
@@ -1136,18 +1155,26 @@ class Store {
       else { if (this.findTask(task.id)) task.id = newId('t'); this.tasks.push(task); }
       // Keep the nested tree together when moving columns or categories.
       this.moveTaskChildren(task, prev, now);
-      await this.writeTasks();
       let n = !prev || (moved && prev.status !== 'done') ? 1 : 0;
       const before = new Map((prev ? prev.subtasks : []).map((s) => [s.id, s]));
+      const completionCandidates = [];
+      let checkedStep = false;
       task.subtasks.forEach((s) => {
         const was = before.get(s.id);
         if (!was) n += s.done ? 2 : 1;
-        else if (s.done && !was.done) n += 1;
+        else if (s.done && !was.done) {
+          n += 1;
+          checkedStep = true;
+        }
       });
+      if (task.status === 'done' && prev && prev.status !== 'done' && task.parentId) completionCandidates.push(task.parentId);
+      if (task.status !== 'done' && checkedStep) completionCandidates.push(task.id);
+      n += this.finishTasksFromSubtasks(completionCandidates, now);
+      await this.writeTasks();
       await this.bump('tasks', n);
       if (undoLog && grouping?.created) undoLog.push({ id: 'group:' + grouping.group.id, before: null, after: { ...grouping.group } });
       if (beforeTasks) this.tasks.forEach(t => recordUndoChange(undoLog, beforeTasks.get(t.id) || null, t));
-      return task;
+      return this.findTask(task.id);
     });
   }
 
@@ -1192,7 +1219,9 @@ class Store {
       if (status !== null && !this.hasColumn(status)) throw Object.assign(new Error('missing column'), { userMessage: 'Столбец не найден.' });
       if (groupId !== null && groupId !== '' && !this.taskGroups.some(g => g.id === groupId)) throw Object.assign(new Error('missing group'), { userMessage: 'Подгруппа не найдена.' });
       const before = structuredClone(this.tasks), now = Date.now(); let count = 0;
-      const tasks = [...new Set(ids)].map(id => {
+      const completionCandidates = [];
+      const selected = [...new Set(ids)];
+      for (const id of selected) {
         const prev = this.findTask(id), merged = { ...prev, updatedAt: now };
         if (groupId !== null) merged.groupId = groupId;
         if (status !== null && status !== prev.status) {
@@ -1205,12 +1234,13 @@ class Store {
         const task = this.fitColumn(normalizeTask(merged));
         this.tasks[this.tasks.indexOf(prev)] = task;
         this.moveTaskChildren(task, prev, now);
-        return task;
-      });
+        if (task.status === 'done' && prev.status !== 'done' && task.parentId) completionCandidates.push(task.parentId);
+      }
+      count += this.finishTasksFromSubtasks(completionCandidates, now);
       await this.writeTasks(); await this.bump('tasks', count);
       const previous = before.filter(t => !isDeepStrictEqual(t, this.findTask(t.id)));
       if (undoLog) previous.forEach(t => recordUndoChange(undoLog, t, this.findTask(t.id)));
-      return { tasks, before: previous };
+      return { tasks: selected.map(id => this.findTask(id)), before: previous };
     });
   }
 

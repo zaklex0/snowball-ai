@@ -2351,7 +2351,7 @@ const TASK_TOOLS = [
   },
   {
     name: 'subtask_done',
-    description: 'Отмечает шаг задачи сделанным или снимает отметку.',
+    description: 'Отмечает шаг задачи сделанным или снимает отметку. Когда все подзадачи выполнены, основная задача переходит в «Готово».',
     parameters: { type: 'object', additionalProperties: false, required: ['id', 'subtask_id', 'done'], properties: { id: { type: 'string', description: 'id задачи' }, subtask_id: { type: 'string' }, done: { type: 'boolean' } } }
   },
   {
@@ -2423,7 +2423,8 @@ async function runTaskTool(name, input, log) {
   }
   if (name === 'subtask_done') {
     if (!prev.subtasks.some((s) => s.id === a.subtask_id)) return 'Такого шага нет: возьми subtask_id из tasks_list.';
-    await editAssistantTask(prev, { subtasks: prev.subtasks.map(s => s.id === a.subtask_id ? { ...s, done: !!a.done } : s) }, log);
+    const saved = await editAssistantTask(prev, { subtasks: prev.subtasks.map(s => s.id === a.subtask_id ? { ...s, done: !!a.done } : s) }, log);
+    if (prev.status !== 'done' && saved.status === 'done') return 'Все подзадачи выполнены. Задача «' + saved.title + '» в «Готово».';
     return 'Отмечено.';
   }
   if (name === 'subtask_delete') {

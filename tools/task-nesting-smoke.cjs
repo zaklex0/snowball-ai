@@ -87,6 +87,7 @@ const { Store } = require('../storage');
     // Completion updates the parent's counter. Opening a child retains its full details.
     await page.ev(`document.querySelector('.tp-sub[data-task-id="${ids.child}"] .tchk').click();true`);
     await page.until('document.querySelector("#tpanel .tp-block-h").textContent.includes("1 из 1")');
+    assert.ok((await page.ev('vsApi.load()')).tasks.every(t => t.status === 'done'));
     await page.ev('document.querySelector(".task-child-open").click();true');
     assert.equal(await page.ev('document.querySelector(".tp-note").value'), 'Сохранить заметку');
     assert.match(await page.ev('document.querySelector("#tpanel").textContent'), /Черновик/);
@@ -120,7 +121,15 @@ const { Store } = require('../storage');
     await page.ev('document.querySelector("#tview [data-v=board]").click();true');
     await page.until(`!!document.querySelector('.tc-done .task[data-id="${ids.child}"]')`);
     assert.equal(await page.ev('document.querySelectorAll(".task .task").length'), 0);
-    console.log('OK: compact nesting, progress, search, list, adding and checking multiple steps, preserving drafts, and detaching');
+    await page.ev(`document.querySelector('.tc-done .task[data-id="${ids.child}"]').click();document.querySelector("#tpanel .tchk.big").click();true`);
+    await page.until('document.querySelector(\'#tpanel select[aria-label="Столбец"]\').value === "doing"');
+    const unchecked = (await page.ev('vsApi.load()')).tasks.find(t => t.id === ids.child).subtasks.filter(s => !s.done);
+    for (const step of unchecked) {
+      await page.ev(`document.querySelector(${JSON.stringify('button[aria-label="Отметить: ' + step.title + '"]')}).click();true`);
+      await page.until(`!!document.querySelector(${JSON.stringify('button[aria-label="Снять отметку: ' + step.title + '"]')})`);
+    }
+    await page.until(`!!document.querySelector('.tc-done .task[data-id="${ids.child}"]')`);
+    console.log('OK: nesting, task progress, automatic completion by steps and nested cards, drafts and detaching');
   } catch (e) {
     console.error('Test app:', child.exitCode, output);
     throw e;
